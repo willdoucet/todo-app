@@ -20,11 +20,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Create the enum type first
-    assignedto_enum = sa.Enum('WILL', 'CELINE', 'ALL', name='assignedto')
-    assignedto_enum.create(op.get_bind(), checkfirst=True)
+    # Create the enum type using raw SQL with IF NOT EXISTS (works reliably with asyncpg)
+    op.execute("CREATE TYPE assignedto AS ENUM ('WILL', 'CELINE', 'ALL')")
     
     # Add columns with server_default for existing rows
+    assignedto_enum = sa.Enum('WILL', 'CELINE', 'ALL', name='assignedto', create_type=False)
     op.add_column('todos', sa.Column('assigned_to', assignedto_enum, nullable=False, server_default='ALL'))
     op.add_column('todos', sa.Column('important', sa.Boolean(), nullable=False, server_default='false'))
 

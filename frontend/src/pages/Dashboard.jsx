@@ -11,9 +11,9 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Todo App Card */}
+          {/* Tasks Card */}
           <Link
-            to="/todo"
+            to="/tasks"
             className="
               group relative bg-white dark:bg-gray-800 rounded-xl 
               border border-gray-200 dark:border-gray-700
@@ -32,10 +32,10 @@ export default function Dashboard() {
               </svg>
             </div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-              Todo App
+              Tasks
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Manage your tasks and stay organized with our todo application.
+              Manage your tasks and stay organized with our task manager.
             </p>
           </Link>
 

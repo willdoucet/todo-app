@@ -1,12 +1,14 @@
 import { Routes, Route } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
-import TodoPage from './pages/TodoPage'
+import TaskPage from './pages/TaskPage'
+import FamilyMembersPage from './pages/FamilyMembersPage'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
-      <Route path="/todo" element={<TodoPage />} />
+      <Route path="/tasks" element={<TaskPage />} />
+      <Route path="/settings" element={<FamilyMembersPage />} />
     </Routes>
   )
 }
