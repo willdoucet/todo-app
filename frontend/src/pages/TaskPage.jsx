@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import axios from 'axios'
-import TodoItem from '../components/TodoItem'
-import TodoForm from '../components/TodoForm'
+import TaskItem from '../components/TaskItem'
+import TaskForm from '../components/TaskForm'
 import FilterMenu from '../components/FilterMenu'
 import AddButton from '../components/AddButton'
 import Header from '../components/Header'
@@ -11,72 +11,72 @@ import Sidebar from '../components/Sidebar'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-export default function TodoPage() {
+export default function TaskPage() {
  
-  const [todos, setTodos] = useState([])
+  const [tasks, setTasks] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [editingTodo, setEditingTodo] = useState(null)
+  const [editingTask, setEditingTask] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
  
   useEffect(() => {
-    const loadTodos = async () => {
+    const loadTasks = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const response = await axios.get(`${API_BASE}/todos`);
-        setTodos(response.data);
+        const response = await axios.get(`${API_BASE}/tasks`);
+        setTasks(response.data);
       } catch (err) {
-        console.error('Error loading todos:', err);
+        console.error('Error loading tasks:', err);
         setError(
-          err.response?.data?.detail || 'Failed to load todos, is the backend running?'
+          err.response?.data?.detail || 'Failed to load tasks, is the backend running?'
         )
       } finally {
         setIsLoading(false);
       }
     };
-    loadTodos();
+    loadTasks();
   }, []);
 
-  const fetchTodos = async () => {
-    const response = await fetch(`${API_BASE}/todos`);
+  const fetchTasks = async () => {
+    const response = await fetch(`${API_BASE}/tasks`);
     const data = await response.json();
     console.log(data);
-    setTodos(data);
+    setTasks(data);
   }
 
 
 
-  const addTodo = async (newTodo) => {
+  const addTask = async (newTask) => {
     setIsSubmitting(true);
     setError(null);
-    console.log('Adding todo:', newTodo);
+    console.log('Adding task:', newTask);
     try {
-      const response = await axios.post(`${API_BASE}/todos`, newTodo);
-      setTodos([...todos, response.data]);
+      const response = await axios.post(`${API_BASE}/tasks`, newTask);
+      setTasks([...tasks, response.data]);
       setIsOpen(false);
     } catch (err) {
-      console.error('Error adding todo:', err);
-      setError(err.response?.data?.detail || 'Failed to add todo');
+      console.error('Error adding task:', err);
+      setError(err.response?.data?.detail || 'Failed to add task');
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  const updateTodo = (updated) => {
-    setTodos(todos.map(t => t.id === updated.id ? updated : t))
-    setEditingTodo(null)
+  const updateTask = (updated) => {
+    setTasks(tasks.map(t => t.id === updated.id ? updated : t))
+    setEditingTask(null)
     setIsOpen(false)
   }
 
-  const deleteTodo = (id) => {
-    setTodos(todos.filter(t => t.id !== id))
+  const deleteTask = (id) => {
+    setTasks(tasks.filter(t => t.id !== id))
   }
 
   const toggleComplete = (id) => {
-    setTodos(todos.map(t =>
+    setTasks(tasks.map(t =>
       t.id === id ? { ...t, completed: !t.completed } : t
     ))
   }
@@ -86,7 +86,7 @@ export default function TodoPage() {
       <Sidebar />
       <Header />
 
-      {/* Todo list */}
+      {/* Task list */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Title and Filter */}
         <div className="flex justify-between items-center mb-6 sm:mb-8">
@@ -97,20 +97,20 @@ export default function TodoPage() {
         </div>
 
         <div className="space-y-3 sm:space-y-4">
-          {todos.map(todo => (
-            <TodoItem
-              key={todo.id}
-              todo={todo}
+          {tasks.map(task => (
+            <TaskItem
+              key={task.id}
+              task={task}
               onToggle={toggleComplete}
               onEdit={() => {
-                setEditingTodo(todo)
+                setEditingTask(task)
                 setIsOpen(true)
               }}
-              onDelete={deleteTodo}
+              onDelete={deleteTask}
             />
           ))}
 
-          {todos.length === 0 && (
+          {tasks.length === 0 && (
             <div className="text-center py-16 sm:py-20">
               <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
                 <svg className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -126,7 +126,7 @@ export default function TodoPage() {
 
       {/* Floating Action Button */}
       <AddButton onClick={() => {
-        setEditingTodo(null)
+        setEditingTask(null)
         setIsOpen(true)
       }} />
 
@@ -162,7 +162,7 @@ export default function TodoPage() {
               ">
                 <div className="flex justify-between items-center mb-5 sm:mb-6">
                   <Dialog.Title className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">
-                    {editingTodo ? 'Edit Task' : 'New Task'}
+                    {editingTask ? 'Edit Task' : 'New Task'}
                   </Dialog.Title>
                   <button
                     onClick={() => setIsOpen(false)}
@@ -173,9 +173,9 @@ export default function TodoPage() {
                   </button>
                 </div>
 
-                <TodoForm
-                  initial={editingTodo}
-                  onSubmit={editingTodo ? updateTodo : addTodo}
+                <TaskForm
+                  initial={editingTask}
+                  onSubmit={editingTask ? updateTask : addTask}
                   onCancel={() => setIsOpen(false)}
                 />
               </Dialog.Panel>

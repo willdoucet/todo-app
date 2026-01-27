@@ -1,12 +1,37 @@
-// components/TodoForm.jsx
-import { useState } from 'react'
+// components/TaskForm.jsx
+import { useState, useEffect } from 'react'
+import axios from 'axios'
 
-export default function TodoForm({ initial = null, onSubmit, onCancel }) {
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
+
+export default function TaskForm({ initial = null, onSubmit, onCancel }) {
   const [title, setTitle] = useState(initial?.title || '')
   const [description, setDescription] = useState(initial?.description || '')
-  const [dueDate, setDueDate] = useState(initial?.dueDate || '')
+  const [dueDate, setDueDate] = useState(initial?.due_date?.split('T')[0] || '')
   const [important, setImportant] = useState(initial?.important || false)
-  const [assignedTo, setAssignedTo] = useState(initial?.assigned_to || 'ALL')
+  const [assignedTo, setAssignedTo] = useState(initial?.assigned_to || null)
+  const [familyMembers, setFamilyMembers] = useState([])
+  const [isLoadingFamilyMembers, setIsLoadingFamilyMembers] = useState(true)
+
+  useEffect(() => {
+    const loadFamilyMembers = async () => {
+      try {
+        const response = await axios.get(`${API_BASE}/family-members`)
+        setFamilyMembers(response.data)
+
+        if (!initial?.assigned_to && response.data.length > 0) {
+          setAssignedTo(response.data[0].id)
+        }
+      } catch (err) {
+        console.error('Error loading family members:', err)
+        
+      }finally {
+        setIsLoadingFamilyMembers(false)
+      }
+    }
+    loadFamilyMembers()
+  }, [initial?.assigned_to])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -84,8 +109,9 @@ export default function TodoForm({ initial = null, onSubmit, onCancel }) {
           Assigned To
         </label>
         <select
-          value={assignedTo}
-          onChange={e => setAssignedTo(e.target.value)}
+          value={assignedTo || ''}
+          onChange={e => setAssignedTo(parseInt(e.target.value))}
+          disabled={isLoadingFamilyMembers}
           className="
             w-full px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 
             rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
@@ -93,9 +119,15 @@ export default function TodoForm({ initial = null, onSubmit, onCancel }) {
             outline-none transition text-sm sm:text-base
           "
         >
-          <option value="ALL">Everyone</option>
-          <option value="WILL">Will</option>
-          <option value="CELINE">Celine</option>
+          {isLoadingFamilyMembers ? (
+            <option>Loading...</option>
+         ) : (
+            familyMembers.map(member => (
+              <option key={member.id} value={member.id}>
+                {member.name}
+              </option>
+            ))
+          )} 
         </select>
       </div>
 

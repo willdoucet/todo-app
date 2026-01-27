@@ -2,9 +2,9 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
-from .routes import todos
+from .routes import tasks, family_members
 
-app = FastAPI(title="To-Do & Recipe API")
+app = FastAPI(title="Task & Recipe API")
 
 # Configure CORS
 app.add_middleware(
@@ -18,15 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(todos.router)
+app.include_router(tasks.router)
+app.include_router(family_members.router)
 
 
 @app.get("/")
 async def root():
     return {"message": "To-Do + Recipe API is running!"}
-
-
-# Later: include routers
-# from .routes import todos, recipes
-# app.include_router(todos.router, prefix="/todos")
-# app.include_router(recipes.router, prefix="/recipes")

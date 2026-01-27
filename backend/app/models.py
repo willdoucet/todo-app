@@ -4,44 +4,92 @@ from sqlalchemy import (
     String,
     Boolean,
     DateTime,
+    Date,
     ForeignKey,
     ARRAY,
-    Enum as SQLEnum,
     func,
+    UniqueConstraint,
 )
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import relationship, declarative_base
-import enum
+from enum import Enum as PyEnum
 
 Base = declarative_base()
 
 
-class AssignedTo(str, enum.Enum):
-    WILL = "WILL"
-    CELINE = "CELINE"
-    ALL = "ALL"
+class ResponsibilityCategory(PyEnum):
+    MORNING = "morning"
+    AFTERNOON = "afternoon"
+    EVENING = "evening"
+    CHORE = "chore"
 
 
-class Todo(Base):
-    __tablename__ = "todos"
+class FamilyMember(Base):
+    __tablename__ = "family_members"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    is_system = Column(Boolean, default=False)
+
+    tasks = relationship("Task", back_populates="family_member")
+    responsibilities = relationship("Responsibility", back_populates="family_member")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+
+class Task(Base):
+    __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     due_date = Column(DateTime, nullable=True)
     completed = Column(Boolean, default=False)
-    assigned_to = Column(SQLEnum(AssignedTo), default=AssignedTo.ALL, nullable=False)
+    assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=False)
+    family_member = relationship("FamilyMember", back_populates="tasks")
     important = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
 
-# class Todo(Base):
-#     __tablename__ = "todos"
-#     id = Column(Integer, primary_key=True, index=True)
-#     title = Column(String, index=True)
-#     description = Column(String, nullable=True)
-#     due_date = Column(DateTime, nullable=True)
-#     completed = Column(Boolean, default=False)
+class Responsibility(Base):
+    __tablename__ = "responsibilities"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True, nullable=False)
+    category = Column(SQLEnum(ResponsibilityCategory), nullable=False)
+    assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=False)
+    frequency = Column(ARRAY(String), nullable=False)
+    family_member = relationship("FamilyMember", back_populates="responsibilities")
+    completions = relationship(
+        "ResponsibilityCompletion",
+        back_populates="responsibility",
+        cascade="all, delete-orphan",
+    )
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+
+class ResponsibilityCompletion(Base):
+    __tablename__ = "responsibility_completions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    responsibility_id = Column(
+        Integer, ForeignKey("responsibilities.id"), nullable=False
+    )
+    family_member_id = Column(Integer, ForeignKey("family_members.id"), nullable=False)
+    completion_date = Column(Date, nullable=False)
+
+    responsibility = relationship("Responsibility", back_populates="completions")
+    family_member = relationship("FamilyMember")
+
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "responsibility_id",
+            "completion_date",
+            name="uq_responsibility_completion_date",
+        ),
+    )
 
 
 class Recipe(Base):
