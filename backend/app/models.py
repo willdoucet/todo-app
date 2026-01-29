@@ -18,17 +18,17 @@ Base = declarative_base()
 
 
 class ResponsibilityCategory(PyEnum):
-    MORNING = "morning"
-    AFTERNOON = "afternoon"
-    EVENING = "evening"
-    CHORE = "chore"
+    MORNING = "MORNING"
+    AFTERNOON = "AFTERNOON"
+    EVENING = "EVENING"
+    CHORE = "CHORE"
 
 
 class FamilyMember(Base):
     __tablename__ = "family_members"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
-    is_system = Column(Boolean, default=False)
+    is_system = Column(Boolean, default=False, nullable=False)
 
     tasks = relationship("Task", back_populates="family_member")
     responsibilities = relationship("Responsibility", back_populates="family_member")

@@ -1,11 +1,9 @@
-// components/TaskForm.jsx
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-
-export default function TaskForm({ initial = null, onSubmit, onCancel }) {
+export default function TodoForm({ initial = null, onSubmit, onCancel }) {
   const [title, setTitle] = useState(initial?.title || '')
   const [description, setDescription] = useState(initial?.description || '')
   const [dueDate, setDueDate] = useState(initial?.due_date?.split('T')[0] || '')
@@ -25,8 +23,7 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
         }
       } catch (err) {
         console.error('Error loading family members:', err)
-        
-      }finally {
+      } finally {
         setIsLoadingFamilyMembers(false)
       }
     }
@@ -36,6 +33,7 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!title.trim()) return
+
     onSubmit({
       ...(initial || {}),
       title,
@@ -48,6 +46,7 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
+      {/* Title */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
           Title <span className="text-red-500 dark:text-red-400">*</span>
@@ -68,6 +67,7 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
         />
       </div>
 
+      {/* Description */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
           Description
@@ -87,6 +87,7 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
         />
       </div>
 
+      {/* Due Date */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
           Due Date
@@ -104,6 +105,7 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
         />
       </div>
 
+      {/* Assigned To */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
           Assigned To
@@ -121,16 +123,17 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
         >
           {isLoadingFamilyMembers ? (
             <option>Loading...</option>
-         ) : (
+          ) : (
             familyMembers.map(member => (
               <option key={member.id} value={member.id}>
                 {member.name}
               </option>
             ))
-          )} 
+          )}
         </select>
       </div>
 
+      {/* Important Toggle */}
       <div className="flex items-center justify-between">
         <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">
           Mark as Important
@@ -155,6 +158,7 @@ export default function TaskForm({ initial = null, onSubmit, onCancel }) {
         </button>
       </div>
 
+      {/* Action Buttons */}
       <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 sm:pt-3">
         <button
           type="button"

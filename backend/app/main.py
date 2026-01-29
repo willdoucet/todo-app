@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
-from .routes import tasks, family_members
+from .routes import tasks, family_members, responsibilities
 
 app = FastAPI(title="Task & Recipe API")
 
@@ -20,6 +20,7 @@ app.add_middleware(
 
 app.include_router(tasks.router)
 app.include_router(family_members.router)
+app.include_router(responsibilities.router)
 
 
 @app.get("/")
