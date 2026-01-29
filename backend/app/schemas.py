@@ -1,6 +1,14 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, date
+from typing import Optional, List
+from enum import Enum
+
+
+class ResponsibilityCategory(str, Enum):
+    MORNING = "MORNING"
+    AFTERNOON = "AFTERNOON"
+    EVENING = "EVENING"
+    CHORE = "CHORE"
 
 
 class FamilyMemberBase(BaseModel):
@@ -55,6 +63,58 @@ class Task(TaskBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     family_member: FamilyMember
+
+    class Config:
+        from_attributes = True
+
+
+class ResponsibilityBase(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100)
+    category: ResponsibilityCategory
+    assigned_to: int = Field(..., ge=1)
+    frequency: List[str] = Field(..., min_length=1)
+
+    class Config:
+        from_attributes = True
+
+
+class ResponsibilityCreate(ResponsibilityBase):
+    pass
+
+
+class ResponsibilityUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=100)
+    category: Optional[ResponsibilityCategory] = None
+    assigned_to: Optional[int] = Field(None, ge=1)
+    frequency: Optional[List[str]] = None
+
+
+class Responsibility(ResponsibilityBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    family_member: FamilyMember
+
+    class Config:
+        from_attributes = True
+
+
+class ResponsibilityCompletionBase(BaseModel):
+    responsibility_id: int = Field(..., ge=1)
+    family_member_id: int = Field(..., ge=1)
+    completion_date: date
+
+    class Config:
+        from_attributes = True
+
+
+class ResponsibilityCompletionCreate(BaseModel):
+    completion_date: date
+
+
+class ResponsibilityCompletion(ResponsibilityCompletionBase):
+    id: int
+    created_at: datetime
 
     class Config:
         from_attributes = True
