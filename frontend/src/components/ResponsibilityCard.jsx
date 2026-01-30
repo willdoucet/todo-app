@@ -9,9 +9,9 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
     <div
       onClick={onToggle}
       className={`
-        group flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200
+        group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200
         ${isCompleted
-          ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+          ? 'bg-green-200 dark:bg-green-800 border border-green-200 dark:border-green-800'
           : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
         }
       `}
@@ -24,23 +24,6 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
           className={`w-10 h-10 rounded object-cover flex-shrink-0 ${isCompleted ? 'opacity-60' : ''}`}
         />
       )}
-
-      {/* Checkbox */}
-      <div
-        className={`
-          w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors mt-0.5
-          ${isCompleted
-            ? 'bg-green-500 border-green-500'
-            : 'border-gray-300 dark:border-gray-500'
-          }
-        `}
-      >
-        {isCompleted && (
-          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-      </div>
 
       {/* Title and Description */}
       <div className="flex-1 min-w-0">

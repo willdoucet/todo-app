@@ -92,23 +92,23 @@ export default function ScheduleView({
       >
         {/* Member Header */}
         <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MemberAvatar name={member.name} photoUrl={member.photo_url} size="md" />
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-                {member.name}
-              </h3>
+          <div className="flex items-center gap-3 mb-3">
+            <MemberAvatar name={member.name} photoUrl={member.photo_url} size="xl" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {member.name}
+            </h3>
+          </div>
+          {/* Progress bar with stats */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 transition-all duration-300"
+                style={{ width: stats.total > 0 ? `${(stats.completed / stats.total) * 100}%` : '0%' }}
+              />
             </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
+            <span className="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0">
               {stats.completed}/{stats.total}
             </span>
-          </div>
-          {/* Progress bar */}
-          <div className="mt-2 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-green-500 transition-all duration-300"
-              style={{ width: stats.total > 0 ? `${(stats.completed / stats.total) * 100}%` : '0%' }}
-            />
           </div>
         </div>
 
@@ -270,6 +270,7 @@ function MemberAvatar({ name, photoUrl, size = 'md', className = '' }) {
     sm: 'w-6 h-6 text-xs',
     md: 'w-8 h-8 text-sm',
     lg: 'w-10 h-10 text-base',
+    xl: 'w-16 h-16 text-xl',
   }
 
   // If there's a photo URL, show the image
