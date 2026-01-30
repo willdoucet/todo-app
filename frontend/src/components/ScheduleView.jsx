@@ -237,9 +237,9 @@ export default function ScheduleView({
         )}
       </div>
 
-      {/* Desktop/Tablet View - Responsive grid */}
-      <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {familyMembers.map(member => renderMemberCard(member))}
+      {/* Desktop/Tablet View - Responsive flex grid */}
+      <div className="hidden sm:flex sm:flex-wrap sm:justify-center gap-4">
+        {familyMembers.map(member => renderMemberCard(member, 'w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.67rem)] xl:w-[calc(25%-0.75rem)]'))}
       </div>
 
       {familyMembers.length === 0 && (

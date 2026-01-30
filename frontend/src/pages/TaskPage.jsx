@@ -255,22 +255,22 @@ export default function TaskPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 pb-24 sm:pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 pb-24 sm:pb-20 sm:pl-20">
       <Sidebar />
       <Header />
 
       {/* Task list */}
-      <main className={`ml-20 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 ${activeTab === 'schedule' ? '' : 'max-w-4xl'}`}>
+      <main className={`px-4 sm:px-6 lg:px-8 py-6 sm:py-8 mx-auto ${activeTab === 'schedule' ? 'max-w-7xl' : 'max-w-4xl'}`}>
         {/* Title and Filter */}
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+        <div className="flex flex-col items-center mb-4">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight mb-2">
             My Tasks
           </h1>
           <FilterMenu />
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex justify-center gap-2 mb-6">
           <button
             onClick={() => setActiveTab('todo')}
             className={`
