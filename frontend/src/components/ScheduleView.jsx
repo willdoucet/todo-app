@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import ResponsibilityCard from './ResponsibilityCard'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
 // Category definitions with icons
 const CATEGORIES = [
   { id: 'MORNING', label: 'Morning', icon: '🌅' },
@@ -91,9 +93,12 @@ export default function ScheduleView({
         {/* Member Header */}
         <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">
-              {member.name}
-            </h3>
+            <div className="flex items-center gap-2">
+              <MemberAvatar name={member.name} photoUrl={member.photo_url} size="md" />
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                {member.name}
+              </h3>
+            </div>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {stats.completed}/{stats.total}
             </span>
@@ -206,14 +211,21 @@ export default function ScheduleView({
                 key={member.id}
                 onClick={() => setSelectedMemberId(member.id)}
                 className={`
-                  flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors
+                  flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors
                   ${selectedMemberId === member.id
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                   }
                 `}
               >
-                {member.name} ({stats.completed}/{stats.total})
+                <MemberAvatar 
+                  name={member.name} 
+                  photoUrl={member.photo_url} 
+                  size="sm"
+                  className={selectedMemberId === member.id ? 'ring-2 ring-white' : ''}
+                />
+                <span>{member.name}</span>
+                <span className="opacity-75">({stats.completed}/{stats.total})</span>
               </button>
             )
           })}
@@ -237,6 +249,45 @@ export default function ScheduleView({
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// Avatar component that shows photo if available, otherwise shows initial
+function MemberAvatar({ name, photoUrl, size = 'md', className = '' }) {
+  const initial = name.charAt(0).toUpperCase()
+  const colors = [
+    { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-600 dark:text-blue-400' },
+    { bg: 'bg-pink-100 dark:bg-pink-900/40', text: 'text-pink-600 dark:text-pink-400' },
+    { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-600 dark:text-green-400' },
+    { bg: 'bg-purple-100 dark:bg-purple-900/40', text: 'text-purple-600 dark:text-purple-400' },
+    { bg: 'bg-orange-100 dark:bg-orange-900/40', text: 'text-orange-600 dark:text-orange-400' },
+  ]
+  const colorIndex = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length
+  const color = colors[colorIndex]
+
+  const sizeClasses = {
+    sm: 'w-6 h-6 text-xs',
+    md: 'w-8 h-8 text-sm',
+    lg: 'w-10 h-10 text-base',
+  }
+
+  // If there's a photo URL, show the image
+  if (photoUrl) {
+    const imageSrc = photoUrl.startsWith('http') ? photoUrl : `${API_BASE}${photoUrl}`
+    return (
+      <img
+        src={imageSrc}
+        alt={name}
+        className={`${sizeClasses[size].split(' ').slice(0, 2).join(' ')} rounded-full object-cover ${className}`}
+      />
+    )
+  }
+
+  // Otherwise show the initial
+  return (
+    <div className={`flex items-center justify-center rounded-full ${sizeClasses[size]} ${color.bg} ${className}`}>
+      <span className={`font-semibold ${color.text}`}>{initial}</span>
     </div>
   )
 }

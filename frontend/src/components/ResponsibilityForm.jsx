@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import PhotoUpload from './PhotoUpload'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -24,30 +25,39 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
   const isEditMode = !!initial?.id
 
   const [title, setTitle] = useState(initial?.title || '')
+  const [description, setDescription] = useState(initial?.description || '')
   const [category, setCategory] = useState(initial?.category || 'MORNING')
   const [assignedTo, setAssignedTo] = useState(initial?.assigned_to || null)
   const [frequency, setFrequency] = useState(
     initial?.frequency || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
   )
+  const [iconUrl, setIconUrl] = useState(initial?.icon_url || null)
   const [familyMembers, setFamilyMembers] = useState([])
+  const [stockIcons, setStockIcons] = useState([])
   const [isLoadingFamilyMembers, setIsLoadingFamilyMembers] = useState(true)
+  const [showCustomUpload, setShowCustomUpload] = useState(false)
 
   useEffect(() => {
-    const loadFamilyMembers = async () => {
+    const loadData = async () => {
       try {
-        const response = await axios.get(`${API_BASE}/family-members`)
-        setFamilyMembers(response.data)
+        const [membersRes, iconsRes] = await Promise.all([
+          axios.get(`${API_BASE}/family-members`),
+          axios.get(`${API_BASE}/upload/stock-icons`),
+        ])
+        
+        setFamilyMembers(membersRes.data)
+        setStockIcons(iconsRes.data)
 
-        if (!initial?.assigned_to && response.data.length > 0) {
-          setAssignedTo(response.data[0].id)
+        if (!initial?.assigned_to && membersRes.data.length > 0) {
+          setAssignedTo(membersRes.data[0].id)
         }
       } catch (err) {
-        console.error('Error loading family members:', err)
+        console.error('Error loading data:', err)
       } finally {
         setIsLoadingFamilyMembers(false)
       }
     }
-    loadFamilyMembers()
+    loadData()
   }, [initial?.assigned_to])
 
   const toggleDay = (dayFull) => {
@@ -67,16 +77,20 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
       // Only send editable fields in edit mode
       onSubmit({
         id: initial.id,
+        description: description.trim() || null,
         category,
         assigned_to: assignedTo,
         frequency,
+        icon_url: iconUrl,
       })
     } else {
       onSubmit({
         title,
+        description: description.trim() || null,
         category,
         assigned_to: assignedTo,
         frequency,
+        icon_url: iconUrl,
       })
     }
   }
@@ -108,6 +122,30 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
             "
           />
         )}
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Description <span className="text-gray-400 dark:text-gray-500 text-xs font-normal">(optional)</span>
+        </label>
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Add details about this responsibility..."
+          rows={2}
+          maxLength={500}
+          className="
+            w-full px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 
+            rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            outline-none transition text-sm sm:text-base resize-none
+            placeholder:text-gray-400 dark:placeholder:text-gray-500
+          "
+        />
+        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 text-right">
+          {description.length}/500
+        </p>
       </div>
 
       {/* Category */}
@@ -217,6 +255,84 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
           <p className="mt-2 text-sm text-red-500 dark:text-red-400">
             Please select at least one day
           </p>
+        )}
+      </div>
+
+      {/* Icon Selection */}
+      <div>
+        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Icon <span className="text-gray-400 dark:text-gray-500 text-xs font-normal">(optional)</span>
+        </label>
+        
+        {/* Current icon preview and clear button */}
+        {iconUrl && (
+          <div className="flex items-center gap-3 mb-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <img 
+              src={iconUrl.startsWith('http') ? iconUrl : `${API_BASE}${iconUrl}`}
+              alt="Selected icon"
+              className="w-10 h-10 rounded object-cover"
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400 flex-1">Selected icon</span>
+            <button
+              type="button"
+              onClick={() => setIconUrl(null)}
+              className="text-xs text-red-500 hover:text-red-600 dark:text-red-400"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+
+        {/* Stock icons grid */}
+        <div className="grid grid-cols-5 gap-2 mb-3">
+          {stockIcons.map(icon => (
+            <button
+              key={icon.id}
+              type="button"
+              onClick={() => {
+                setIconUrl(icon.url)
+                setShowCustomUpload(false)
+              }}
+              className={`
+                p-2 rounded-lg border-2 transition-all
+                ${iconUrl === icon.url
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }
+              `}
+              title={icon.label}
+            >
+              <img 
+                src={`${API_BASE}${icon.url}`}
+                alt={icon.label}
+                className="w-8 h-8 mx-auto object-contain"
+              />
+            </button>
+          ))}
+        </div>
+
+        {/* Custom upload toggle */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCustomUpload(!showCustomUpload)}
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            {showCustomUpload ? 'Hide custom upload' : 'Upload custom icon'}
+          </button>
+        </div>
+
+        {/* Custom upload area */}
+        {showCustomUpload && (
+          <div className="mt-3">
+            <PhotoUpload
+              currentUrl={iconUrl && !stockIcons.some(s => s.url === iconUrl) ? iconUrl : null}
+              onUpload={(url) => setIconUrl(url)}
+              uploadEndpoint="/upload/responsibility-icon"
+              placeholder="Upload Icon"
+              size="md"
+            />
+          </div>
         )}
       </div>
 

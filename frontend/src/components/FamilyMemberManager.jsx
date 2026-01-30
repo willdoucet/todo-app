@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import PhotoUpload from './PhotoUpload'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -8,8 +9,10 @@ export default function FamilyMemberManager() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberPhotoUrl, setNewMemberPhotoUrl] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
+  const [editingPhotoUrl, setEditingPhotoUrl] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Fetch family members
@@ -40,10 +43,12 @@ export default function FamilyMemberManager() {
     setError(null)
     try {
       const response = await axios.post(`${API_BASE}/family-members`, {
-        name: newMemberName.trim()
+        name: newMemberName.trim(),
+        photo_url: newMemberPhotoUrl,
       })
       setFamilyMembers([...familyMembers, response.data])
       setNewMemberName('')
+      setNewMemberPhotoUrl(null)
     } catch (err) {
       console.error('Error creating family member:', err)
       setError(err.response?.data?.detail || 'Failed to create family member')
@@ -56,12 +61,14 @@ export default function FamilyMemberManager() {
   const startEdit = (member) => {
     setEditingId(member.id)
     setEditingName(member.name)
+    setEditingPhotoUrl(member.photo_url)
   }
 
   // Cancel editing
   const cancelEdit = () => {
     setEditingId(null)
     setEditingName('')
+    setEditingPhotoUrl(null)
   }
 
   // Save edit
@@ -72,13 +79,15 @@ export default function FamilyMemberManager() {
     setError(null)
     try {
       const response = await axios.patch(`${API_BASE}/family-members/${id}`, {
-        name: editingName.trim()
+        name: editingName.trim(),
+        photo_url: editingPhotoUrl,
       })
       setFamilyMembers(familyMembers.map(m => 
         m.id === id ? response.data : m
       ))
       setEditingId(null)
       setEditingName('')
+      setEditingPhotoUrl(null)
     } catch (err) {
       console.error('Error updating family member:', err)
       setError(err.response?.data?.detail || 'Failed to update family member')
@@ -128,32 +137,41 @@ export default function FamilyMemberManager() {
 
       {/* Add new member form */}
       <form onSubmit={handleCreate} className="mb-6">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newMemberName}
-            onChange={(e) => setNewMemberName(e.target.value)}
-            placeholder="Add family member..."
-            className="
-              flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 
-              rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-              focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-              outline-none transition text-sm
-              placeholder:text-gray-400 dark:placeholder:text-gray-500
-            "
+        <div className="flex gap-3 items-start">
+          <PhotoUpload
+            currentUrl={newMemberPhotoUrl}
+            onUpload={(url) => setNewMemberPhotoUrl(url)}
+            uploadEndpoint="/upload/family-photo"
+            placeholder="Photo"
+            size="sm"
           />
-          <button
-            type="submit"
-            disabled={isSubmitting || !newMemberName.trim()}
-            className="
-              px-4 py-2.5 bg-blue-600 text-white font-medium rounded-lg
-              hover:bg-blue-700 transition-colors duration-200
-              disabled:opacity-50 disabled:cursor-not-allowed
-              text-sm
-            "
-          >
-            Add
-          </button>
+          <div className="flex-1 flex gap-2">
+            <input
+              type="text"
+              value={newMemberName}
+              onChange={(e) => setNewMemberName(e.target.value)}
+              placeholder="Add family member..."
+              className="
+                flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 
+                rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                outline-none transition text-sm
+                placeholder:text-gray-400 dark:placeholder:text-gray-500
+              "
+            />
+            <button
+              type="submit"
+              disabled={isSubmitting || !newMemberName.trim()}
+              className="
+                px-4 py-2.5 bg-blue-600 text-white font-medium rounded-lg
+                hover:bg-blue-700 transition-colors duration-200
+                disabled:opacity-50 disabled:cursor-not-allowed
+                text-sm
+              "
+            >
+              Add
+            </button>
+          </div>
         </div>
       </form>
 
@@ -202,6 +220,13 @@ export default function FamilyMemberManager() {
               {editingId === member.id ? (
                 // Edit mode
                 <>
+                  <PhotoUpload
+                    currentUrl={editingPhotoUrl}
+                    onUpload={(url) => setEditingPhotoUrl(url)}
+                    uploadEndpoint="/upload/family-photo"
+                    placeholder="Photo"
+                    size="sm"
+                  />
                   <input
                     type="text"
                     value={editingName}
@@ -235,7 +260,7 @@ export default function FamilyMemberManager() {
               ) : (
                 // View mode
                 <>
-                  <MemberAvatar name={member.name} />
+                  <MemberAvatar name={member.name} photoUrl={member.photo_url} />
                   <span className="flex-1 text-gray-900 dark:text-gray-100 text-sm">
                     {member.name}
                   </span>
@@ -261,8 +286,8 @@ export default function FamilyMemberManager() {
   )
 }
 
-// Simple avatar component (reuses color logic from TodoItem)
-function MemberAvatar({ name }) {
+// Avatar component that shows photo if available, otherwise shows initial
+function MemberAvatar({ name, photoUrl }) {
   const initial = name.charAt(0).toUpperCase()
   const colors = [
     { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-600 dark:text-blue-400' },
@@ -274,6 +299,20 @@ function MemberAvatar({ name }) {
   const colorIndex = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length
   const color = colors[colorIndex]
 
+  // If there's a photo URL, show the image
+  if (photoUrl) {
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+    const imageSrc = photoUrl.startsWith('http') ? photoUrl : `${API_BASE}${photoUrl}`
+    return (
+      <img
+        src={imageSrc}
+        alt={name}
+        className="w-8 h-8 rounded-full object-cover"
+      />
+    )
+  }
+
+  // Otherwise show the initial
   return (
     <div className={`flex items-center justify-center w-8 h-8 rounded-full ${color.bg}`}>
       <span className={`text-sm font-semibold ${color.text}`}>{initial}</span>

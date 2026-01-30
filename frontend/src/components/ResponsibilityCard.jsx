@@ -1,19 +1,34 @@
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
 export default function ResponsibilityCard({ responsibility, isCompleted, onToggle, onEdit, onDelete }) {
+  const iconSrc = responsibility.icon_url 
+    ? (responsibility.icon_url.startsWith('http') ? responsibility.icon_url : `${API_BASE}${responsibility.icon_url}`)
+    : null
+
   return (
     <div
       onClick={onToggle}
       className={`
-        group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200
+        group flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200
         ${isCompleted
           ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
           : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
         }
       `}
     >
+      {/* Icon */}
+      {iconSrc && (
+        <img 
+          src={iconSrc}
+          alt=""
+          className={`w-10 h-10 rounded object-cover flex-shrink-0 ${isCompleted ? 'opacity-60' : ''}`}
+        />
+      )}
+
       {/* Checkbox */}
       <div
         className={`
-          w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors
+          w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors mt-0.5
           ${isCompleted
             ? 'bg-green-500 border-green-500'
             : 'border-gray-300 dark:border-gray-500'
@@ -27,18 +42,33 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
         )}
       </div>
 
-      {/* Title */}
-      <span
-        className={`
-          flex-1 text-sm font-medium transition-colors
-          ${isCompleted
-            ? 'text-green-700 dark:text-green-400 line-through'
-            : 'text-gray-900 dark:text-gray-100'
-          }
-        `}
-      >
-        {responsibility.title}
-      </span>
+      {/* Title and Description */}
+      <div className="flex-1 min-w-0">
+        <span
+          className={`
+            block text-sm font-medium transition-colors
+            ${isCompleted
+              ? 'text-green-700 dark:text-green-400 line-through'
+              : 'text-gray-900 dark:text-gray-100'
+            }
+          `}
+        >
+          {responsibility.title}
+        </span>
+        {responsibility.description && (
+          <p 
+            className={`
+              mt-0.5 text-xs line-clamp-2
+              ${isCompleted
+                ? 'text-green-600/70 dark:text-green-500/70'
+                : 'text-gray-500 dark:text-gray-400'
+              }
+            `}
+          >
+            {responsibility.description}
+          </p>
+        )}
+      </div>
 
       {/* Action buttons */}
       {(onEdit || onDelete) && (
