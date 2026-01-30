@@ -65,15 +65,13 @@ async def update_responsibility(
 
 async def delete_responsibility(db: AsyncSession, responsibility_id: int):
     """Delete a responsibility and all its completions (via cascade)."""
-    stmt = select(models.Responsibility).where(
-        models.Responsibility.id == responsibility_id
-    )
-    result = await db.execute(stmt)
-    responsibility = result.scalar_one_or_none()
+    # First check if responsibility exists
+    responsibility = await get_responsibility(db, responsibility_id)
     if responsibility:
         await db.delete(responsibility)
         await db.commit()
-    return responsibility
+        return True
+    return False
 
 
 async def get_completions_for_date(db: AsyncSession, target_date: date):

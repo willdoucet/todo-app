@@ -13,6 +13,7 @@ class ResponsibilityCategory(str, Enum):
 
 class FamilyMemberBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
+    photo_url: Optional[str] = None
 
 
 class FamilyMemberCreate(FamilyMemberBase):
@@ -21,6 +22,7 @@ class FamilyMemberCreate(FamilyMemberBase):
 
 class FamilyMemberUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=50)
+    photo_url: Optional[str] = None
 
 
 class FamilyMember(FamilyMemberBase):
@@ -70,9 +72,11 @@ class Task(TaskBase):
 
 class ResponsibilityBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, min_length=1, max_length=500)
     category: ResponsibilityCategory
     assigned_to: int = Field(..., ge=1)
     frequency: List[str] = Field(..., min_length=1)
+    icon_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -84,9 +88,11 @@ class ResponsibilityCreate(ResponsibilityBase):
 
 class ResponsibilityUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, min_length=1, max_length=500)
     category: Optional[ResponsibilityCategory] = None
     assigned_to: Optional[int] = Field(None, ge=1)
     frequency: Optional[List[str]] = None
+    icon_url: Optional[str] = None
 
 
 class Responsibility(ResponsibilityBase):

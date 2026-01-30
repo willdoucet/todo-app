@@ -45,6 +45,14 @@ ENV PATH=".venv/bin:$PATH"
 
 # Security: run as non-root user
 RUN useradd --create-home --shell /bin/bash appuser
+
+
+# Create uploads directory with proper permissions
+RUN mkdir -p /app/uploads && chown appuser:appuser /app/uploads
+
+# Copy stock icons to a staging location (will be copied to uploads volume at startup)
+COPY --chown=appuser:appuser ./stock_icons /app/stock_icons_src
+
 USER appuser
 
 # Default command - run migrations + start server

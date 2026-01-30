@@ -29,6 +29,7 @@ class FamilyMember(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     is_system = Column(Boolean, default=False, nullable=False)
+    photo_url = Column(String, nullable=True)  # Path to uploaded photo
 
     tasks = relationship("Task", back_populates="family_member")
     responsibilities = relationship("Responsibility", back_populates="family_member")
@@ -58,6 +59,8 @@ class Responsibility(Base):
     category = Column(SQLEnum(ResponsibilityCategory), nullable=False)
     assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=False)
     frequency = Column(ARRAY(String), nullable=False)
+    icon_url = Column(String, nullable=True)  # Path to icon/image
+    description = Column(String, nullable=True)  # Optional description
     family_member = relationship("FamilyMember", back_populates="responsibilities")
     completions = relationship(
         "ResponsibilityCompletion",
