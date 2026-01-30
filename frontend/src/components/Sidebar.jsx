@@ -51,7 +51,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-16 sm:top-20 bottom-0 w-20 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-8 gap-4 z-20">
+    <aside className="hidden sm:flex fixed left-0 top-16 sm:top-20 bottom-0 w-20 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
       {menuItems.map((item) => (
         <Link
           key={item.path}
