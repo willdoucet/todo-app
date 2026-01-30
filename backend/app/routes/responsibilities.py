@@ -78,16 +78,16 @@ async def update_responsibility(
     return updated
 
 
-@router.delete("/{responsibility_id}", response_model=schemas.Responsibility)
+@router.delete("/{responsibility_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_responsibility(
     responsibility_id: int,
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a responsibility and all its completions."""
     deleted = await crud_responsibilities.delete_responsibility(db, responsibility_id)
-    if deleted is None:
+    if not deleted:
         raise HTTPException(status_code=404, detail="Responsibility not found")
-    return deleted
+    return None
 
 
 @router.post("/{responsibility_id}/complete")
