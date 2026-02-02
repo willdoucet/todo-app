@@ -52,7 +52,11 @@ async def update_task(db: AsyncSession, task_id: int, task: schemas.TaskUpdate):
 
 
 async def delete_task(db: AsyncSession, task_id: int):
-    stmt = select(models.Task).where(models.Task.id == task_id)
+    stmt = (
+        select(models.Task)
+        .options(selectinload(models.Task.family_member))
+        .where(models.Task.id == task_id)
+    )
     result = await db.execute(stmt)
     task = result.scalar_one_or_none()
     if task:

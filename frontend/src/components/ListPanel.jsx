@@ -237,7 +237,7 @@ export default function ListPanel({
       </Transition>
 
       {/* Desktop: Fixed side panel */}
-      <aside className="hidden sm:flex fixed left-[5.5rem] top-[5.5rem] bottom-3 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl flex-col z-10">
+      <aside className="hidden sm:flex fixed left-[5.5rem] top-4 bottom-4 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl flex-col z-10">
         {/* Header */}
         <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Lists</h2>

@@ -53,7 +53,7 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-card-bg/90 dark:bg-gray-900/80 backdrop-blur-sm border-b border-card-border/50 dark:border-gray-700/50 sticky top-0 z-30 shadow-sm">
+    <header className="sm:hidden bg-card-bg/90 dark:bg-gray-900/80 backdrop-blur-sm border-b border-card-border/50 dark:border-gray-700/50 sticky top-0 z-30 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16 sm:h-20">
           {/* Left: Mobile Menu Button + Title */}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import ResponsibilityCard from './ResponsibilityCard'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
@@ -85,28 +86,30 @@ export default function ScheduleView({
     const memberResponsibilities = getResponsibilitiesForMember(member.id)
     const grouped = groupByCategory(memberResponsibilities)
 
+    const percentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0
+
     return (
       <div
         key={member.id}
-        className={`bg-card-bg dark:bg-gray-800 rounded-xl border border-card-border dark:border-gray-700 overflow-hidden ${className}`}
+        className={`bg-card-bg dark:bg-gray-800 rounded-2xl shadow-md overflow-hidden ${className}`}
       >
         {/* Member Header */}
-        <div className="p-4 bg-warm-beige dark:bg-gray-800 border-b border-card-border dark:border-gray-700">
+        <div className="p-4 pb-3">
           <div className="flex items-center gap-3 mb-3">
             <MemberAvatar name={member.name} photoUrl={member.photo_url} size="xl" />
             <h3 className="text-lg font-semibold text-text-primary dark:text-gray-100">
               {member.name}
             </h3>
           </div>
-          {/* Progress bar with stats */}
+          {/* Progress bar with stats - enhanced with sage gradient */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-2 bg-warm-sand dark:bg-gray-700 rounded-full overflow-hidden">
+            <div className="flex-1 h-2.5 bg-warm-sand/70 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
-                className="h-full bg-sage-500 transition-all duration-300"
-                style={{ width: stats.total > 0 ? `${(stats.completed / stats.total) * 100}%` : '0%' }}
+                className="h-full bg-gradient-to-r from-sage-400 to-sage-500 dark:from-green-500 dark:to-green-400 transition-all duration-500 ease-out"
+                style={{ width: `${percentage}%` }}
               />
             </div>
-            <span className="text-sm text-text-muted dark:text-gray-400 flex-shrink-0">
+            <span className="text-sm font-medium text-sage-600 dark:text-green-400 tabular-nums min-w-[3rem] text-right">
               {stats.completed}/{stats.total}
             </span>
           </div>
@@ -158,14 +161,14 @@ export default function ScheduleView({
   return (
     <div className="space-y-6">
       {/* Date Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-center gap-4 mb-4">
         <button
           onClick={onPreviousDay}
-          className="p-2 rounded-lg hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors text-text-secondary dark:text-gray-400"
+          className="p-2 rounded-full text-text-secondary hover:text-terracotta-600 hover:bg-peach-100 dark:hover:bg-gray-700 dark:hover:text-blue-400 transition-colors"
         >
-          ← Prev
+          <ChevronLeftIcon className="w-5 h-5" />
         </button>
-        <div className="text-center">
+        <div className="text-center min-w-[140px]">
           <p className="text-lg font-semibold text-text-primary dark:text-gray-100">
             {currentDayName}
           </p>
@@ -175,9 +178,9 @@ export default function ScheduleView({
         </div>
         <button
           onClick={onNextDay}
-          className="p-2 rounded-lg hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors text-text-secondary dark:text-gray-400"
+          className="p-2 rounded-full text-text-secondary hover:text-terracotta-600 hover:bg-peach-100 dark:hover:bg-gray-700 dark:hover:text-blue-400 transition-colors"
         >
-          Next →
+          <ChevronRightIcon className="w-5 h-5" />
         </button>
       </div>
 
@@ -191,7 +194,7 @@ export default function ScheduleView({
               px-3 py-1.5 rounded-full text-sm font-medium transition-colors
               ${selectedCategory === cat.id
                 ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
-                : 'bg-warm-beige dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-sand dark:hover:bg-gray-600'
+                : 'bg-warm-sand/50 text-text-secondary hover:bg-warm-sand dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
               }
             `}
           >

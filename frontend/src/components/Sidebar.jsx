@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import DarkModeToggle from './DarkModeToggle'
 
 export default function Sidebar() {
   const location = useLocation()
@@ -60,7 +61,13 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden sm:flex fixed left-0 top-16 sm:top-20 bottom-0 w-20 bg-warm-sand dark:bg-gray-800 border-r border-card-border dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
+    <>
+      {/* Fixed Dark Mode Toggle - Top Right (Desktop Only) */}
+      <div className="hidden sm:block fixed top-4 right-4 z-30">
+        <DarkModeToggle />
+      </div>
+
+      <aside className="hidden sm:flex fixed left-0 top-0 bottom-0 w-20 bg-warm-sand dark:bg-gray-800 border-r border-card-border dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
       {menuItems.map((item) => (
         <Link
           key={item.path}
@@ -89,5 +96,6 @@ export default function Sidebar() {
         </Link>
       ))}
     </aside>
+    </>
   )
 }
