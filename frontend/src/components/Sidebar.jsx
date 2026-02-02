@@ -14,11 +14,20 @@ export default function Sidebar() {
       )
     },
     {
-      name: 'Tasks',
-      path: '/tasks',
+      name: 'Lists',
+      path: '/lists',
       icon: (
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+      )
+    },
+    {
+      name: 'Responsibilities',
+      path: '/responsibilities',
+      icon: (
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
       )
     },
@@ -51,7 +60,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden sm:flex fixed left-0 top-16 sm:top-20 bottom-0 w-20 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
+    <aside className="hidden sm:flex fixed left-0 top-16 sm:top-20 bottom-0 w-20 bg-warm-sand dark:bg-gray-800 border-r border-card-border dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
       {menuItems.map((item) => (
         <Link
           key={item.path}
@@ -60,17 +69,17 @@ export default function Sidebar() {
             flex flex-col items-center justify-center w-14 h-14 rounded-xl
             transition-all duration-200 group relative
             ${isActive(item.path)
-              ? 'bg-blue-600 text-white shadow-lg'
-              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400'
+              ? 'bg-peach-100 text-terracotta-600 dark:bg-blue-600 dark:text-white shadow-lg'
+              : 'text-text-secondary dark:text-gray-400 hover:bg-warm-beige dark:hover:bg-gray-800 hover:text-terracotta-600 dark:hover:text-blue-400'
             }
           `}
           title={item.name}
         >
           {item.icon}
-          
+
           {/* Tooltip */}
           <span className="
-            absolute left-full ml-3 px-3 py-1.5 bg-gray-900 dark:bg-gray-700 
+            absolute left-full ml-3 px-3 py-1.5 bg-text-primary dark:bg-gray-700
             text-white text-sm rounded-lg whitespace-nowrap
             opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none
             shadow-lg

@@ -99,11 +99,11 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
     <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
       {/* Title */}
       <div>
-        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
           Title {!isEditMode && <span className="text-red-500 dark:text-red-400">*</span>}
         </label>
         {isEditMode ? (
-          <div className="px-4 py-2.5 sm:py-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm sm:text-base">
+          <div className="px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-700 rounded-lg bg-warm-beige dark:bg-gray-800 text-text-secondary dark:text-gray-300 text-sm sm:text-base">
             {title}
           </div>
         ) : (
@@ -114,11 +114,11 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
             required
             placeholder="Enter responsibility title"
             className="
-              w-full px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 
-              rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-              focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+              w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
+              rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+              focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
               outline-none transition text-sm sm:text-base
-              placeholder:text-gray-400 dark:placeholder:text-gray-500
+              placeholder:text-text-muted dark:placeholder:text-gray-500
             "
           />
         )}
@@ -126,8 +126,8 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
 
       {/* Description */}
       <div>
-        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Description <span className="text-gray-400 dark:text-gray-500 text-xs font-normal">(optional)</span>
+        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
+          Description <span className="text-text-muted dark:text-gray-500 text-xs font-normal">(optional)</span>
         </label>
         <textarea
           value={description}
@@ -136,30 +136,30 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
           rows={2}
           maxLength={500}
           className="
-            w-full px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 
-            rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
+            rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+            focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
             outline-none transition text-sm sm:text-base resize-none
-            placeholder:text-gray-400 dark:placeholder:text-gray-500
+            placeholder:text-text-muted dark:placeholder:text-gray-500
           "
         />
-        <p className="mt-1 text-xs text-gray-400 dark:text-gray-500 text-right">
+        <p className="mt-1 text-xs text-text-muted dark:text-gray-500 text-right">
           {description.length}/500
         </p>
       </div>
 
       {/* Category */}
       <div>
-        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
           Category <span className="text-red-500 dark:text-red-400">*</span>
         </label>
         <select
           value={category}
           onChange={e => setCategory(e.target.value)}
           className="
-            w-full px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 
-            rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
+            rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+            focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
             outline-none transition text-sm sm:text-base
           "
         >
@@ -173,7 +173,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
 
       {/* Assigned To */}
       <div>
-        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
           Assigned To
         </label>
         <select
@@ -181,9 +181,9 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
           onChange={e => setAssignedTo(parseInt(e.target.value))}
           disabled={isLoadingFamilyMembers}
           className="
-            w-full px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 
-            rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
+            rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+            focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
             outline-none transition text-sm sm:text-base
           "
         >
@@ -201,7 +201,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
 
       {/* Frequency - Day Selector */}
       <div>
-        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
           Repeat On <span className="text-red-500 dark:text-red-400">*</span>
         </label>
         <div className="flex flex-wrap gap-2">
@@ -215,8 +215,8 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
                 className={`
                   w-10 h-10 rounded-full text-sm font-medium transition-colors
                   ${isSelected
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    ? 'bg-terracotta-500 text-white dark:bg-blue-600'
+                    : 'bg-warm-beige dark:bg-gray-700 text-text-secondary dark:text-gray-400 hover:bg-warm-sand dark:hover:bg-gray-600'
                   }
                 `}
               >
@@ -231,21 +231,21 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
           <button
             type="button"
             onClick={() => setFrequency(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'])}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-xs text-terracotta-600 dark:text-blue-400 hover:underline"
           >
             Weekdays
           </button>
           <button
             type="button"
             onClick={() => setFrequency(['Saturday', 'Sunday'])}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-xs text-terracotta-600 dark:text-blue-400 hover:underline"
           >
             Weekends
           </button>
           <button
             type="button"
             onClick={() => setFrequency(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'])}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-xs text-terracotta-600 dark:text-blue-400 hover:underline"
           >
             Daily
           </button>
@@ -260,19 +260,19 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
 
       {/* Icon Selection */}
       <div>
-        <label className="block text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Icon <span className="text-gray-400 dark:text-gray-500 text-xs font-normal">(optional)</span>
+        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
+          Icon <span className="text-text-muted dark:text-gray-500 text-xs font-normal">(optional)</span>
         </label>
-        
+
         {/* Current icon preview and clear button */}
         {iconUrl && (
-          <div className="flex items-center gap-3 mb-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <img 
+          <div className="flex items-center gap-3 mb-3 p-2 bg-warm-beige dark:bg-gray-800 rounded-lg">
+            <img
               src={iconUrl.startsWith('http') ? iconUrl : `${API_BASE}${iconUrl}`}
               alt="Selected icon"
               className="w-10 h-10 rounded object-cover"
             />
-            <span className="text-sm text-gray-600 dark:text-gray-400 flex-1">Selected icon</span>
+            <span className="text-sm text-text-secondary dark:text-gray-400 flex-1">Selected icon</span>
             <button
               type="button"
               onClick={() => setIconUrl(null)}
@@ -296,13 +296,13 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
               className={`
                 p-2 rounded-lg border-2 transition-all
                 ${iconUrl === icon.url
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-terracotta-500 bg-peach-100 dark:bg-blue-900/20 dark:border-blue-500'
+                  : 'border-card-border dark:border-gray-700 hover:border-terracotta-200 dark:hover:border-gray-600'
                 }
               `}
               title={icon.label}
             >
-              <img 
+              <img
                 src={`${API_BASE}${icon.url}`}
                 alt={icon.label}
                 className="w-8 h-8 mx-auto object-contain"
@@ -316,7 +316,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
           <button
             type="button"
             onClick={() => setShowCustomUpload(!showCustomUpload)}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-xs text-terracotta-600 dark:text-blue-400 hover:underline"
           >
             {showCustomUpload ? 'Hide custom upload' : 'Upload custom icon'}
           </button>
@@ -342,8 +342,8 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
           type="button"
           onClick={onCancel}
           className="
-            px-5 py-2.5 sm:py-2.5 text-gray-700 dark:text-gray-300 font-medium 
-            hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200
+            px-5 py-2.5 sm:py-2.5 text-text-secondary dark:text-gray-300 font-medium
+            hover:bg-warm-beige dark:hover:bg-gray-700 rounded-lg transition-colors duration-200
             text-sm sm:text-base
           "
         >
@@ -353,9 +353,9 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
           type="submit"
           disabled={frequency.length === 0}
           className="
-            px-6 py-2.5 sm:py-2.5 bg-blue-600 text-white font-medium 
-            rounded-lg hover:bg-blue-700 transition-colors duration-200
-            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+            px-6 py-2.5 sm:py-2.5 bg-terracotta-500 text-white font-medium
+            rounded-lg hover:bg-terracotta-600 transition-colors duration-200
+            focus:outline-none focus:ring-2 focus:ring-terracotta-500 focus:ring-offset-2
             text-sm sm:text-base
             disabled:opacity-50 disabled:cursor-not-allowed
           "

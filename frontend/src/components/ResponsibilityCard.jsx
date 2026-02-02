@@ -11,14 +11,14 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
       className={`
         group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200
         ${isCompleted
-          ? 'bg-green-200 dark:bg-green-800 border border-green-200 dark:border-green-800'
-          : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+          ? 'bg-sage-100 dark:bg-green-800 border border-sage-200 dark:border-green-800'
+          : 'bg-card-bg dark:bg-gray-700/50 border border-card-border dark:border-gray-600 hover:bg-warm-beige dark:hover:bg-gray-700'
         }
       `}
     >
       {/* Icon */}
       {iconSrc && (
-        <img 
+        <img
           src={iconSrc}
           alt=""
           className={`w-10 h-10 rounded object-cover flex-shrink-0 ${isCompleted ? 'opacity-60' : ''}`}
@@ -31,20 +31,20 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
           className={`
             block text-sm font-medium transition-colors
             ${isCompleted
-              ? 'text-green-700 dark:text-green-400 line-through'
-              : 'text-gray-900 dark:text-gray-100'
+              ? 'text-sage-700 dark:text-green-400 line-through'
+              : 'text-text-primary dark:text-gray-100'
             }
           `}
         >
           {responsibility.title}
         </span>
         {responsibility.description && (
-          <p 
+          <p
             className={`
               mt-0.5 text-xs line-clamp-2
               ${isCompleted
-                ? 'text-green-600/70 dark:text-green-500/70'
-                : 'text-gray-500 dark:text-gray-400'
+                ? 'text-sage-600/70 dark:text-green-500/70'
+                : 'text-text-muted dark:text-gray-400'
               }
             `}
           >
@@ -64,11 +64,11 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
               }}
               className="
                 sm:opacity-0 sm:group-hover:opacity-100 opacity-100
-                p-1.5 text-blue-600 dark:text-blue-400 
-                hover:text-blue-700 dark:hover:text-blue-300 
-                hover:bg-blue-50 dark:hover:bg-blue-900/30
+                p-1.5 text-terracotta-600 dark:text-blue-400
+                hover:text-terracotta-700 dark:hover:text-blue-300
+                hover:bg-terracotta-50 dark:hover:bg-blue-900/30
                 rounded transition-all duration-200
-                focus:outline-none focus:ring-2 focus:ring-blue-500
+                focus:outline-none focus:ring-2 focus:ring-terracotta-500
               "
               aria-label="Edit responsibility"
             >
@@ -85,8 +85,8 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
               }}
               className="
                 sm:opacity-0 sm:group-hover:opacity-100 opacity-100
-                p-1.5 text-red-600 dark:text-red-400 
-                hover:text-red-700 dark:hover:text-red-300 
+                p-1.5 text-red-600 dark:text-red-400
+                hover:text-red-700 dark:hover:text-red-300
                 hover:bg-red-50 dark:hover:bg-red-900/30
                 rounded transition-all duration-200
                 focus:outline-none focus:ring-2 focus:ring-red-500

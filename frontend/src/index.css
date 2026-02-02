@@ -2,6 +2,46 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Warm Light Mode Color Palette */
+@theme {
+  /* Main backgrounds - warm cream/beige tones */
+  --color-warm-cream: #FAF7F2;
+  --color-warm-beige: #F5F0E8;
+  --color-warm-sand: #EBE5DA;
+
+  /* Card colors */
+  --color-card-bg: #FFFDFB;
+  --color-card-border: #E8E2D9;
+
+  /* Primary accent - terracotta/coral */
+  --color-terracotta-50: #FEF3F0;
+  --color-terracotta-100: #FCE4DE;
+  --color-terracotta-200: #FAC9BD;
+  --color-terracotta-500: #D97452;
+  --color-terracotta-600: #C4613F;
+  --color-terracotta-700: #A34E32;
+
+  /* Active/selected state - peachy salmon */
+  --color-peach-100: #FFE8DF;
+  --color-peach-200: #FFD4C4;
+
+  /* Completion/success - muted sage green */
+  --color-sage-50: #F4F7F4;
+  --color-sage-100: #E5EDE6;
+  --color-sage-200: #C8DBC9;
+  --color-sage-500: #6B9A70;
+  --color-sage-600: #588D5E;
+  --color-sage-700: #4A7A50;
+
+  /* Text colors - warm grays */
+  --color-text-primary: #3D3833;
+  --color-text-secondary: #6B645A;
+  --color-text-muted: #9A9287;
+
+  /* Category labels */
+  --color-label-green: #5D8A61;
+}
+
 :root {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',

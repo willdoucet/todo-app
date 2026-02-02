@@ -23,9 +23,9 @@ export default function ConfirmDialog({
       button: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500',
     },
     info: {
-      icon: 'bg-blue-100 dark:bg-blue-900/30',
-      iconColor: 'text-blue-600 dark:text-blue-400',
-      button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+      icon: 'bg-terracotta-100 dark:bg-blue-900/30',
+      iconColor: 'text-terracotta-600 dark:text-blue-400',
+      button: 'bg-terracotta-500 hover:bg-terracotta-600 focus:ring-terracotta-500',
     },
   }
 
@@ -56,7 +56,7 @@ export default function ConfirmDialog({
             leaveFrom="opacity-100 scale-100"
             leaveTo="opacity-0 scale-95"
           >
-            <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 p-6 text-left align-middle shadow-2xl transition-all">
+            <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-2xl bg-card-bg dark:bg-gray-800 p-6 text-left align-middle shadow-2xl transition-all">
               <div className="flex items-start gap-4">
                 {/* Icon */}
                 <div className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full ${styles.icon}`}>
@@ -65,10 +65,10 @@ export default function ConfirmDialog({
 
                 {/* Content */}
                 <div className="flex-1">
-                  <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  <Dialog.Title className="text-lg font-semibold text-text-primary dark:text-gray-100">
                     {title}
                   </Dialog.Title>
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  <p className="mt-2 text-sm text-text-secondary dark:text-gray-400">
                     {message}
                   </p>
                 </div>
@@ -80,10 +80,10 @@ export default function ConfirmDialog({
                   type="button"
                   onClick={onClose}
                   className="
-                    px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300
-                    hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg
+                    px-4 py-2 text-sm font-medium text-text-secondary dark:text-gray-300
+                    hover:bg-warm-beige dark:hover:bg-gray-700 rounded-lg
                     transition-colors duration-200
-                    focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
+                    focus:outline-none focus:ring-2 focus:ring-terracotta-500 focus:ring-offset-2
                     dark:focus:ring-offset-gray-800
                   "
                 >

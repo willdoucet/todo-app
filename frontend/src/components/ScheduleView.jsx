@@ -88,25 +88,25 @@ export default function ScheduleView({
     return (
       <div
         key={member.id}
-        className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
+        className={`bg-card-bg dark:bg-gray-800 rounded-xl border border-card-border dark:border-gray-700 overflow-hidden ${className}`}
       >
         {/* Member Header */}
-        <div className="p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4 bg-warm-beige dark:bg-gray-800 border-b border-card-border dark:border-gray-700">
           <div className="flex items-center gap-3 mb-3">
             <MemberAvatar name={member.name} photoUrl={member.photo_url} size="xl" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold text-text-primary dark:text-gray-100">
               {member.name}
             </h3>
           </div>
           {/* Progress bar with stats */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-warm-sand dark:bg-gray-700 rounded-full overflow-hidden">
               <div
-                className="h-full bg-green-500 transition-all duration-300"
+                className="h-full bg-sage-500 transition-all duration-300"
                 style={{ width: stats.total > 0 ? `${(stats.completed / stats.total) * 100}%` : '0%' }}
               />
             </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0">
+            <span className="text-sm text-text-muted dark:text-gray-400 flex-shrink-0">
               {stats.completed}/{stats.total}
             </span>
           </div>
@@ -118,7 +118,7 @@ export default function ScheduleView({
             const category = CATEGORIES.find(c => c.id === categoryId)
             return (
               <div key={categoryId}>
-                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                <h4 className="text-xs font-semibold text-label-green dark:text-gray-400 uppercase tracking-wider mb-2">
                   {category?.icon} {category?.label}
                 </h4>
                 <div className="space-y-2">
@@ -128,8 +128,8 @@ export default function ScheduleView({
                       responsibility={responsibility}
                       isCompleted={isCompleted(responsibility.id, member.id)}
                       onToggle={() => onToggleCompletion(responsibility.id, member.id)}
-                      onEdit={onEditResponsibility}
-                      onDelete={onDeleteResponsibility}
+                      onEdit={onEditResponsibility || null}
+                      onDelete={onDeleteResponsibility || null}
                     />
                   ))}
                 </div>
@@ -138,7 +138,7 @@ export default function ScheduleView({
           })}
 
           {memberResponsibilities.length === 0 && (
-            <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">
+            <p className="text-sm text-text-muted dark:text-gray-500 text-center py-4">
               No responsibilities for today
             </p>
           )}
@@ -150,7 +150,7 @@ export default function ScheduleView({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-terracotta-500 dark:border-blue-600"></div>
       </div>
     )
   }
@@ -161,21 +161,21 @@ export default function ScheduleView({
       <div className="flex items-center justify-between">
         <button
           onClick={onPreviousDay}
-          className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400"
+          className="p-2 rounded-lg hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors text-text-secondary dark:text-gray-400"
         >
           ← Prev
         </button>
         <div className="text-center">
-          <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <p className="text-lg font-semibold text-text-primary dark:text-gray-100">
             {currentDayName}
           </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-text-muted dark:text-gray-400">
             {currentDate.toLocaleDateString()}
           </p>
         </div>
         <button
           onClick={onNextDay}
-          className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400"
+          className="p-2 rounded-lg hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors text-text-secondary dark:text-gray-400"
         >
           Next →
         </button>
@@ -190,8 +190,8 @@ export default function ScheduleView({
             className={`
               px-3 py-1.5 rounded-full text-sm font-medium transition-colors
               ${selectedCategory === cat.id
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
+                : 'bg-warm-beige dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-sand dark:hover:bg-gray-600'
               }
             `}
           >
@@ -213,16 +213,16 @@ export default function ScheduleView({
                 className={`
                   flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors
                   ${selectedMemberId === member.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
+                    : 'bg-warm-beige dark:bg-gray-700 text-text-secondary dark:text-gray-300'
                   }
                 `}
               >
-                <MemberAvatar 
-                  name={member.name} 
-                  photoUrl={member.photo_url} 
+                <MemberAvatar
+                  name={member.name}
+                  photoUrl={member.photo_url}
                   size="sm"
-                  className={selectedMemberId === member.id ? 'ring-2 ring-white' : ''}
+                  className={selectedMemberId === member.id ? 'ring-2 ring-terracotta-500 dark:ring-white' : ''}
                 />
                 <span>{member.name}</span>
                 <span className="opacity-75">({stats.completed}/{stats.total})</span>
@@ -244,7 +244,7 @@ export default function ScheduleView({
 
       {familyMembers.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400">
+          <p className="text-text-muted dark:text-gray-400">
             No family members found. Add family members first.
           </p>
         </div>

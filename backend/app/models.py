@@ -48,6 +48,8 @@ class Task(Base):
     assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=False)
     family_member = relationship("FamilyMember", back_populates="tasks")
     important = Column(Boolean, default=False)
+    list_id = Column(Integer, ForeignKey("lists.id"), nullable=False)
+    list = relationship("List", back_populates="tasks")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
@@ -102,3 +104,14 @@ class Recipe(Base):
     ingredients = Column(ARRAY(String))
     instructions = Column(String)
     prep_time_minutes = Column(Integer, nullable=True)
+
+
+class List(Base):
+    __tablename__ = "lists"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)
+    color = Column(String, nullable=True)
+    icon = Column(String, nullable=True)
+    tasks = relationship("Task", back_populates="list")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
