@@ -42,6 +42,7 @@ class TaskBase(BaseModel):
     completed: bool = False
     assigned_to: int = Field(..., ge=1, le=1000000)
     important: bool = False
+    list_id: int = Field(..., ge=1)
 
     class Config:
         from_attributes = True
@@ -58,6 +59,7 @@ class TaskUpdate(BaseModel):
     completed: Optional[bool] = None
     important: Optional[bool] = None
     assigned_to: Optional[int] = Field(None, ge=1, le=1000000)
+    list_id: Optional[int] = Field(None, ge=1)
 
 
 class Task(TaskBase):
@@ -121,6 +123,34 @@ class ResponsibilityCompletionCreate(BaseModel):
 class ResponsibilityCompletion(ResponsibilityCompletionBase):
     id: int
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ListBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    color: Optional[str] = Field(None, min_length=1, max_length=7)
+    icon: Optional[str] = Field(None, min_length=1, max_length=100)
+
+    class Config:
+        from_attributes = True
+
+
+class ListCreate(ListBase):
+    pass
+
+
+class ListUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    color: Optional[str] = Field(None, min_length=1, max_length=7)
+    icon: Optional[str] = Field(None, min_length=1, max_length=100)
+
+
+class List(ListBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

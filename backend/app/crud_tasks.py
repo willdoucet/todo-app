@@ -4,14 +4,18 @@ from sqlalchemy.orm import selectinload
 from . import models, schemas
 
 
-async def get_tasks(db: AsyncSession, skip: int = 0, limit: int = 10):
+async def get_tasks(
+    db: AsyncSession, skip: int = 0, limit: int = 10, list_id: int = None
+):
     stmt = (
         select(models.Task)
         .options(selectinload(models.Task.family_member))
-        .offset(skip)
-        .limit(limit)
-        .order_by(models.Task.created_at.desc())
+        .options(selectinload(models.Task.list))
     )
+    if list_id is not None:
+        stmt = stmt.where(models.Task.list_id == list_id)
+
+    stmt = stmt.offset(skip).limit(limit).order_by(models.Task.created_at.desc())
     result = await db.execute(stmt)
     return result.scalars().all()
 

@@ -14,9 +14,12 @@ router = APIRouter(
 
 @router.get("/", response_model=List[schemas.Task])
 async def get_tasks(
-    skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    list_id: int = None,
 ):
-    tasks = await crud_tasks.get_tasks(db, skip=skip, limit=limit)
+    tasks = await crud_tasks.get_tasks(db, skip=skip, limit=limit, list_id=list_id)
     return tasks
 
 

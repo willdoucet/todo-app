@@ -7,8 +7,8 @@ function AssignedIcon({ familyMember }) {
   // Handle "Everyone" (system member) with group icon
   if (familyMember?.is_system || familyMember?.name === 'Everyone') {
     return (
-      <div className="flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gray-100 dark:bg-gray-700" title="Assigned to Everyone">
-        <svg className={`${baseClass} text-gray-500 dark:text-gray-400`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-warm-beige dark:bg-gray-700" title="Assigned to Everyone">
+        <svg className={`${baseClass} text-text-muted dark:text-gray-400`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
       </div>
@@ -49,10 +49,10 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
     
     return (
       <div className={`
-        group flex items-start gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl border 
-        ${task.completed 
-          ? 'bg-gray-50/50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700' 
-          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md'}
+        group flex items-start gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl border
+        ${task.completed
+          ? 'bg-sage-50 dark:bg-gray-800/50 border-card-border dark:border-gray-700'
+          : 'bg-card-bg dark:bg-gray-800 border-card-border dark:border-gray-700 hover:border-terracotta-200 dark:hover:border-gray-600 hover:shadow-md'}
         transition-all duration-200
       `}>
         <input
@@ -60,24 +60,24 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
           checked={task.completed}
           onChange={() => onToggle(task.id)}
           className="
-            mt-0.5 sm:mt-1 h-5 w-5 sm:h-6 sm:w-6 rounded border-gray-300 dark:border-gray-600
-            text-blue-600 dark:text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
-            dark:focus:ring-offset-gray-800 cursor-pointer flex-shrink-0
+            mt-0.5 sm:mt-1 h-5 w-5 sm:h-6 sm:w-6 rounded border-card-border dark:border-gray-600
+            text-sage-600 dark:text-blue-500 focus:ring-2 focus:ring-terracotta-500 focus:ring-offset-1
+            dark:focus:ring-offset-gray-800 cursor-pointer flex-shrink-0 accent-sage-600
           "
         />
-  
+
         <div className="flex-1 min-w-0">
           <p className={`
             text-sm sm:text-base font-medium leading-snug
-            ${task.completed 
-              ? 'line-through text-gray-400 dark:text-gray-500' 
-              : 'text-gray-900 dark:text-gray-100'}
+            ${task.completed
+              ? 'line-through text-text-muted dark:text-gray-500'
+              : 'text-text-primary dark:text-gray-100'}
           `}>
             {task.title}
           </p>
           {task.description && (
             <p className={`mt-1.5 text-xs sm:text-sm ${
-              task.completed ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-400'
+              task.completed ? 'text-text-muted dark:text-gray-500' : 'text-text-secondary dark:text-gray-400'
             }`}>
               {task.description}
             </p>
@@ -85,19 +85,19 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
           {task.due_date && (
             <div className="mt-2 flex items-center gap-1.5">
               <svg className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
-                isOverdue ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'
+                isOverdue ? 'text-red-500 dark:text-red-400' : 'text-text-muted dark:text-gray-500'
               }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <p className={`text-xs sm:text-sm font-medium ${
-                isOverdue 
-                  ? 'text-red-600 dark:text-red-400' 
-                  : task.completed 
-                    ? 'text-gray-400 dark:text-gray-500' 
-                    : 'text-gray-500 dark:text-gray-400'
+                isOverdue
+                  ? 'text-red-600 dark:text-red-400'
+                  : task.completed
+                    ? 'text-text-muted dark:text-gray-500'
+                    : 'text-text-secondary dark:text-gray-400'
               }`}>
-                Due {new Date(task.due_date).toLocaleDateString('en-US', { 
-                  month: 'short', 
+                Due {new Date(task.due_date).toLocaleDateString('en-US', {
+                  month: 'short',
                   day: 'numeric',
                   year: 'numeric'
                 })}
@@ -129,11 +129,11 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
             onClick={onEdit}
             className="
               sm:opacity-0 sm:group-hover:opacity-100 opacity-100
-              px-3 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm 
-              text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 
-              hover:bg-blue-50 dark:hover:bg-blue-900/30
+              px-3 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm
+              text-terracotta-600 dark:text-blue-400 hover:text-terracotta-700 dark:hover:text-blue-300
+              hover:bg-terracotta-50 dark:hover:bg-blue-900/30
               font-medium rounded-lg transition-all duration-200
-              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
+              focus:outline-none focus:ring-2 focus:ring-terracotta-500 focus:ring-offset-1
               dark:focus:ring-offset-gray-800
             "
             aria-label="Edit task"
@@ -147,8 +147,8 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
             onClick={() => onDelete(task.id)}
             className="
               sm:opacity-0 sm:group-hover:opacity-100 opacity-100
-              px-3 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm 
-              text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 
+              px-3 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm
+              text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300
               hover:bg-red-50 dark:hover:bg-red-900/30
               font-medium rounded-lg transition-all duration-200
               focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1

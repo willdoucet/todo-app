@@ -117,14 +117,14 @@ export default function FamilyMemberManager() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-terracotta-500 dark:border-blue-600"></div>
       </div>
     )
   }
 
   return (
     <div className="max-w-lg mx-auto">
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
+      <h2 className="text-xl font-semibold text-text-primary dark:text-gray-100 mb-6">
         Family Members
       </h2>
 
@@ -152,19 +152,19 @@ export default function FamilyMemberManager() {
               onChange={(e) => setNewMemberName(e.target.value)}
               placeholder="Add family member..."
               className="
-                flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 
-                rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                flex-1 px-4 py-2.5 border border-card-border dark:border-gray-600
+                rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+                focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
                 outline-none transition text-sm
-                placeholder:text-gray-400 dark:placeholder:text-gray-500
+                placeholder:text-text-muted dark:placeholder:text-gray-500
               "
             />
             <button
               type="submit"
               disabled={isSubmitting || !newMemberName.trim()}
               className="
-                px-4 py-2.5 bg-blue-600 text-white font-medium rounded-lg
-                hover:bg-blue-700 transition-colors duration-200
+                px-4 py-2.5 bg-terracotta-500 text-white font-medium rounded-lg
+                hover:bg-terracotta-600 transition-colors duration-200
                 disabled:opacity-50 disabled:cursor-not-allowed
                 text-sm
               "
@@ -178,23 +178,23 @@ export default function FamilyMemberManager() {
       {/* System members (Everyone) - shown but not editable */}
       {systemMembers.length > 0 && (
         <div className="mb-4">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+          <p className="text-xs font-medium text-label-green dark:text-gray-400 uppercase tracking-wide mb-2">
             System
           </p>
           {systemMembers.map(member => (
             <div
               key={member.id}
-              className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg"
+              className="flex items-center gap-3 p-3 bg-warm-beige dark:bg-gray-800/50 rounded-lg"
             >
-              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700">
-                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-warm-sand dark:bg-gray-700">
+                <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <span className="text-gray-600 dark:text-gray-400 text-sm">
+              <span className="text-text-secondary dark:text-gray-400 text-sm">
                 {member.name}
               </span>
-              <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">
+              <span className="ml-auto text-xs text-text-muted dark:text-gray-500">
                 (cannot be modified)
               </span>
             </div>
@@ -204,18 +204,18 @@ export default function FamilyMemberManager() {
 
       {/* Editable members list */}
       <div className="space-y-2">
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+        <p className="text-xs font-medium text-label-green dark:text-gray-400 uppercase tracking-wide mb-2">
           Family Members
         </p>
         {editableMembers.length === 0 ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm py-4 text-center">
+          <p className="text-text-muted dark:text-gray-400 text-sm py-4 text-center">
             No family members yet. Add one above!
           </p>
         ) : (
           editableMembers.map(member => (
             <div
               key={member.id}
-              className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+              className="flex items-center gap-3 p-3 bg-card-bg dark:bg-gray-800 border border-card-border dark:border-gray-700 rounded-lg"
             >
               {editingId === member.id ? (
                 // Edit mode
@@ -232,9 +232,9 @@ export default function FamilyMemberManager() {
                     value={editingName}
                     onChange={(e) => setEditingName(e.target.value)}
                     className="
-                      flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 
-                      rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                      focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      flex-1 px-3 py-1.5 border border-card-border dark:border-gray-600
+                      rounded bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+                      focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
                       outline-none text-sm
                     "
                     autoFocus
@@ -246,13 +246,13 @@ export default function FamilyMemberManager() {
                   <button
                     onClick={() => handleUpdate(member.id)}
                     disabled={isSubmitting}
-                    className="px-3 py-1.5 text-sm text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+                    className="px-3 py-1.5 text-sm text-sage-600 dark:text-green-400 hover:bg-sage-50 dark:hover:bg-green-900/20 rounded transition-colors"
                   >
                     Save
                   </button>
                   <button
                     onClick={cancelEdit}
-                    className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                    className="px-3 py-1.5 text-sm text-text-secondary dark:text-gray-400 hover:bg-warm-beige dark:hover:bg-gray-700 rounded transition-colors"
                   >
                     Cancel
                   </button>
@@ -261,12 +261,12 @@ export default function FamilyMemberManager() {
                 // View mode
                 <>
                   <MemberAvatar name={member.name} photoUrl={member.photo_url} />
-                  <span className="flex-1 text-gray-900 dark:text-gray-100 text-sm">
+                  <span className="flex-1 text-text-primary dark:text-gray-100 text-sm">
                     {member.name}
                   </span>
                   <button
                     onClick={() => startEdit(member)}
-                    className="px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                    className="px-3 py-1.5 text-sm text-terracotta-600 dark:text-blue-400 hover:bg-terracotta-50 dark:hover:bg-blue-900/20 rounded transition-colors"
                   >
                     Edit
                   </button>
