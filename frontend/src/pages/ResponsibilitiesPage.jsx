@@ -163,21 +163,21 @@ export default function ResponsibilitiesPage() {
 
       <main className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 mx-auto max-w-7xl">
         {/* Title */}
-        <div className="flex flex-col items-center mb-4">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-text-primary dark:text-gray-100 tracking-tight mb-2">
+        <div className="mb-6">
+          <h1 className="text-xl sm:text-2xl font-semibold text-text-primary dark:text-gray-100">
             Responsibilities
           </h1>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex justify-center gap-2 mb-6">
+        {/* Tab Navigation - Segmented Control */}
+        <div className="flex gap-1 mb-6 p-1 bg-warm-sand/50 dark:bg-gray-800/50 rounded-xl w-fit">
           <button
             onClick={() => setActiveTab('daily')}
             className={`
-              px-4 py-2 rounded-lg font-medium text-sm sm:text-base transition-colors duration-200
+              px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
               ${activeTab === 'daily'
-                ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
-                : 'bg-warm-beige dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-sand dark:hover:bg-gray-600'
+                ? 'bg-white text-terracotta-600 shadow-sm dark:bg-gray-700 dark:text-white'
+                : 'text-text-secondary hover:text-text-primary dark:text-gray-400 dark:hover:text-gray-200'
               }
             `}
           >
@@ -186,10 +186,10 @@ export default function ResponsibilitiesPage() {
           <button
             onClick={() => setActiveTab('edit')}
             className={`
-              px-4 py-2 rounded-lg font-medium text-sm sm:text-base transition-colors duration-200
+              px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200
               ${activeTab === 'edit'
-                ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
-                : 'bg-warm-beige dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-sand dark:hover:bg-gray-600'
+                ? 'bg-white text-terracotta-600 shadow-sm dark:bg-gray-700 dark:text-white'
+                : 'text-text-secondary hover:text-text-primary dark:text-gray-400 dark:hover:text-gray-200'
               }
             `}
           >
@@ -300,7 +300,15 @@ export default function ResponsibilitiesPage() {
   )
 }
 
-// Edit Responsibilities Tab - flat list view
+// Category metadata for grouping
+const CATEGORY_META = {
+  MORNING: { icon: '🌅', label: 'Morning' },
+  AFTERNOON: { icon: '☀️', label: 'Afternoon' },
+  EVENING: { icon: '🌙', label: 'Evening' },
+  CHORE: { icon: '🧹', label: 'Chores' },
+}
+
+// Edit Responsibilities Tab - grouped by category
 function EditResponsibilitiesView({ responsibilities, isLoading, onEdit, onDelete }) {
   if (isLoading) {
     return (
@@ -313,24 +321,48 @@ function EditResponsibilitiesView({ responsibilities, isLoading, onEdit, onDelet
   if (responsibilities.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500 dark:text-gray-400">
+        <p className="text-text-muted dark:text-gray-400">
           No responsibilities created yet. Click the + button to add one.
         </p>
       </div>
     )
   }
 
+  // Group by category
+  const grouped = {
+    MORNING: responsibilities.filter(r => r.category === 'MORNING'),
+    AFTERNOON: responsibilities.filter(r => r.category === 'AFTERNOON'),
+    EVENING: responsibilities.filter(r => r.category === 'EVENING'),
+    CHORE: responsibilities.filter(r => r.category === 'CHORE'),
+  }
+
   return (
-    <div className="max-w-2xl mx-auto space-y-3">
-      {responsibilities.map(responsibility => (
-        <ResponsibilityCard
-          key={responsibility.id}
-          responsibility={responsibility}
-          isCompleted={false}
-          onToggle={() => {}}
-          onEdit={onEdit}
-          onDelete={onDelete}
-        />
+    <div className="max-w-2xl mx-auto space-y-8">
+      {Object.entries(grouped).map(([category, items]) => (
+        items.length > 0 && (
+          <div key={category}>
+            {/* Category header */}
+            <h3 className="text-xs font-semibold text-label-green dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="text-sm">{CATEGORY_META[category].icon}</span>
+              {CATEGORY_META[category].label}
+              <span className="text-text-muted font-normal lowercase">
+                · {items.length} {items.length === 1 ? 'item' : 'items'}
+              </span>
+            </h3>
+            <div className="space-y-2">
+              {items.map(responsibility => (
+                <ResponsibilityCard
+                  key={responsibility.id}
+                  responsibility={responsibility}
+                  isCompleted={false}
+                  onToggle={() => {}}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              ))}
+            </div>
+          </div>
+        )
       ))}
     </div>
   )
