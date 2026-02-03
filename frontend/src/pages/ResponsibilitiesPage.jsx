@@ -9,6 +9,8 @@ import AddButton from '../components/AddButton'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
 import ScheduleView from '../components/ScheduleView'
+import usePageTitle from '../hooks/usePageTitle'
+import { EmptyResponsibilitiesState } from '../components/EmptyState'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -36,6 +38,9 @@ export default function ResponsibilitiesPage() {
 
   // Derived values for schedule
   const dateString = scheduleDate.toISOString().split('T')[0]
+
+  // Update page title
+  usePageTitle('Responsibilities')
 
   // Persist activeTab to localStorage
   useEffect(() => {
@@ -222,6 +227,10 @@ export default function ResponsibilitiesPage() {
             isLoading={isLoading}
             onEdit={handleEditResponsibility}
             onDelete={handleDeleteResponsibility}
+            onAdd={() => {
+              setEditingResponsibility(null)
+              setIsOpen(true)
+            }}
           />
         )}
       </main>
@@ -309,7 +318,7 @@ const CATEGORY_META = {
 }
 
 // Edit Responsibilities Tab - grouped by category
-function EditResponsibilitiesView({ responsibilities, isLoading, onEdit, onDelete }) {
+function EditResponsibilitiesView({ responsibilities, isLoading, onEdit, onDelete, onAdd }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -319,13 +328,7 @@ function EditResponsibilitiesView({ responsibilities, isLoading, onEdit, onDelet
   }
 
   if (responsibilities.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-text-muted dark:text-gray-400">
-          No responsibilities created yet. Click the + button to add one.
-        </p>
-      </div>
-    )
+    return <EmptyResponsibilitiesState onAction={onAdd} />
   }
 
   // Group by category

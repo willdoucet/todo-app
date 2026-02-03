@@ -228,7 +228,7 @@ describe('TaskItem', () => {
 
       render(<TaskItem {...defaultProps} onEdit={onEdit} />)
 
-      await user.click(screen.getByLabelText('Edit task'))
+      await user.click(screen.getByLabelText(/^Edit task:/))
 
       expect(onEdit).toHaveBeenCalledTimes(1)
     })
@@ -245,7 +245,7 @@ describe('TaskItem', () => {
         />
       )
 
-      await user.click(screen.getByLabelText('Delete task'))
+      await user.click(screen.getByLabelText(/^Delete task:/))
 
       expect(onDelete).toHaveBeenCalledTimes(1)
       expect(onDelete).toHaveBeenCalledWith(99)

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import ResponsibilityCard from './ResponsibilityCard'
+import { EmptyDailyViewState } from './EmptyState'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -45,6 +46,20 @@ export default function ScheduleView({
 
   // Derived values
   const currentDayName = DAYS[currentDate.getDay()]
+
+  // Get all responsibilities for today (before category filter)
+  const todaysResponsibilities = responsibilities.filter(r => r.frequency.includes(currentDayName))
+
+  // Calculate category counts for filter badges
+  const getCategoryCounts = () => {
+    const counts = {}
+    CATEGORIES.forEach(cat => {
+      counts[cat.id] = todaysResponsibilities.filter(r => r.category === cat.id).length
+    })
+    return counts
+  }
+  const categoryCounts = getCategoryCounts()
+  const totalCount = todaysResponsibilities.length
 
   // Check if a responsibility is completed for the current date
   const isCompleted = (responsibilityId, memberId) => {
@@ -103,13 +118,20 @@ export default function ScheduleView({
           </div>
           {/* Progress bar with stats - enhanced with sage gradient */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-2.5 bg-warm-sand/70 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="flex-1 h-2.5 bg-warm-sand/70 dark:bg-gray-700 rounded-full overflow-hidden"
+              role="progressbar"
+              aria-valuenow={stats.completed}
+              aria-valuemin={0}
+              aria-valuemax={stats.total}
+              aria-label={`${member.name}'s progress: ${stats.completed} of ${stats.total} tasks completed`}
+            >
               <div
                 className="h-full bg-gradient-to-r from-sage-400 to-sage-500 dark:from-green-500 dark:to-green-400 transition-all duration-500 ease-out"
                 style={{ width: `${percentage}%` }}
               />
             </div>
-            <span className="text-sm font-medium text-sage-600 dark:text-green-400 tabular-nums min-w-[3rem] text-right">
+            <span className="text-sm font-medium text-sage-600 dark:text-green-400 tabular-nums min-w-[3rem] text-right" aria-hidden="true">
               {stats.completed}/{stats.total}
             </span>
           </div>
@@ -141,9 +163,11 @@ export default function ScheduleView({
           })}
 
           {memberResponsibilities.length === 0 && (
-            <p className="text-sm text-text-muted dark:text-gray-500 text-center py-4">
-              No responsibilities for today
-            </p>
+            <div className="py-4">
+              <p className="text-sm text-text-muted dark:text-gray-500 text-center">
+                No responsibilities for today
+              </p>
+            </div>
           )}
         </div>
       </div>
@@ -164,7 +188,8 @@ export default function ScheduleView({
       <div className="flex items-center justify-center gap-4 mb-4">
         <button
           onClick={onPreviousDay}
-          className="p-2 rounded-full text-text-secondary hover:text-terracotta-600 hover:bg-peach-100 dark:hover:bg-gray-700 dark:hover:text-blue-400 transition-colors"
+          className="p-2 rounded-full text-text-secondary hover:text-terracotta-600 hover:bg-peach-100 dark:hover:bg-gray-700 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 dark:focus-visible:ring-blue-500"
+          aria-label="Previous day"
         >
           <ChevronLeftIcon className="w-5 h-5" />
         </button>
@@ -178,29 +203,50 @@ export default function ScheduleView({
         </div>
         <button
           onClick={onNextDay}
-          className="p-2 rounded-full text-text-secondary hover:text-terracotta-600 hover:bg-peach-100 dark:hover:bg-gray-700 dark:hover:text-blue-400 transition-colors"
+          className="p-2 rounded-full text-text-secondary hover:text-terracotta-600 hover:bg-peach-100 dark:hover:bg-gray-700 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 dark:focus-visible:ring-blue-500"
+          aria-label="Next day"
         >
           <ChevronRightIcon className="w-5 h-5" />
         </button>
       </div>
 
       {/* Category Filter */}
-      <div className="flex gap-2 flex-wrap justify-center">
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat.id}
-            onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
-            className={`
-              px-3 py-1.5 rounded-full text-sm font-medium transition-colors
-              ${selectedCategory === cat.id
-                ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
-                : 'bg-warm-sand/50 text-text-secondary hover:bg-warm-sand dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-              }
-            `}
-          >
-            {cat.icon} {cat.label}
-          </button>
-        ))}
+      <div className="flex gap-2 flex-wrap justify-center" role="group" aria-label="Filter by category">
+        {/* All button */}
+        <button
+          onClick={() => setSelectedCategory(null)}
+          aria-pressed={selectedCategory === null}
+          className={`
+            px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 dark:focus-visible:ring-blue-500
+            ${selectedCategory === null
+              ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
+              : 'bg-warm-sand/50 text-text-secondary hover:bg-warm-sand dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+            }
+          `}
+        >
+          All {totalCount > 0 && <span className="opacity-75">({totalCount})</span>}
+        </button>
+        {CATEGORIES.map(cat => {
+          const count = categoryCounts[cat.id] || 0
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+              aria-pressed={selectedCategory === cat.id}
+              className={`
+                px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+                focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 dark:focus-visible:ring-blue-500
+                ${selectedCategory === cat.id
+                  ? 'bg-peach-100 text-terracotta-700 dark:bg-blue-600 dark:text-white'
+                  : 'bg-warm-sand/50 text-text-secondary hover:bg-warm-sand dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                }
+              `}
+            >
+              {cat.icon} {cat.label} {count > 0 && <span className="opacity-75">({count})</span>}
+            </button>
+          )
+        })}
       </div>
 
       {/* Mobile View - Tab bar + single card */}
@@ -246,11 +292,7 @@ export default function ScheduleView({
       </div>
 
       {familyMembers.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-text-muted dark:text-gray-400">
-            No family members found. Add family members first.
-          </p>
-        </div>
+        <EmptyDailyViewState />
       )}
     </div>
   )

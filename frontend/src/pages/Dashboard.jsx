@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
+import usePageTitle from '../hooks/usePageTitle'
 
 export default function Dashboard() {
+  usePageTitle('Dashboard')
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-cream to-warm-beige dark:from-gray-900 dark:to-gray-800 sm:pl-20">
       <Sidebar />
