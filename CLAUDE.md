@@ -37,6 +37,23 @@ alembic upgrade head                               # Apply migrations
 ```
 Migrations run automatically on Docker container startup.
 
+### Testing
+```bash
+# Backend (pytest with testcontainers)
+cd backend
+uv run pytest                      # All tests (171)
+uv run pytest tests/unit -v        # Unit tests only
+uv run pytest tests/integration -v # Integration tests (requires Docker)
+
+# Frontend (vitest with MSW)
+cd frontend
+npm test                           # Watch mode
+npm run test:run                   # Single run (CI)
+npm run test:coverage              # With coverage report
+```
+
+CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
+
 ## Architecture
 
 ### Backend (`/backend`)

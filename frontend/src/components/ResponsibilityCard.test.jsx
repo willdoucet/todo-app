@@ -166,7 +166,7 @@ describe('ResponsibilityCard', () => {
         />
       )
 
-      await user.click(screen.getByLabelText('Edit responsibility'))
+      await user.click(screen.getByLabelText(/^Edit responsibility:/))
 
       expect(onEdit).toHaveBeenCalledTimes(1)
       expect(onEdit).toHaveBeenCalledWith(responsibility)
@@ -188,7 +188,7 @@ describe('ResponsibilityCard', () => {
         />
       )
 
-      await user.click(screen.getByLabelText('Delete responsibility'))
+      await user.click(screen.getByLabelText(/^Delete responsibility:/))
 
       expect(onDelete).toHaveBeenCalledTimes(1)
       expect(onDelete).toHaveBeenCalledWith(99)
@@ -201,25 +201,25 @@ describe('ResponsibilityCard', () => {
     it('shows edit button when onEdit is provided', () => {
       render(<ResponsibilityCard {...defaultProps} onEdit={vi.fn()} />)
 
-      expect(screen.getByLabelText('Edit responsibility')).toBeInTheDocument()
+      expect(screen.getByLabelText(/^Edit responsibility:/)).toBeInTheDocument()
     })
 
     it('does not show edit button when onEdit is not provided', () => {
       render(<ResponsibilityCard {...defaultProps} onEdit={undefined} />)
 
-      expect(screen.queryByLabelText('Edit responsibility')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/^Edit responsibility:/)).not.toBeInTheDocument()
     })
 
     it('shows delete button when onDelete is provided', () => {
       render(<ResponsibilityCard {...defaultProps} onDelete={vi.fn()} />)
 
-      expect(screen.getByLabelText('Delete responsibility')).toBeInTheDocument()
+      expect(screen.getByLabelText(/^Delete responsibility:/)).toBeInTheDocument()
     })
 
     it('does not show delete button when onDelete is not provided', () => {
       render(<ResponsibilityCard {...defaultProps} onDelete={undefined} />)
 
-      expect(screen.queryByLabelText('Delete responsibility')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/^Delete responsibility:/)).not.toBeInTheDocument()
     })
 
     it('does not show action buttons container when both handlers are missing', () => {
@@ -232,8 +232,8 @@ describe('ResponsibilityCard', () => {
       )
 
       // No buttons should exist
-      expect(screen.queryByLabelText('Edit responsibility')).not.toBeInTheDocument()
-      expect(screen.queryByLabelText('Delete responsibility')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/^Edit responsibility:/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/^Delete responsibility:/)).not.toBeInTheDocument()
     })
   })
 })

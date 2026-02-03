@@ -8,6 +8,7 @@ import ListPanel from '../components/ListPanel'
 import AddButton from '../components/AddButton'
 import Header from '../components/Header'
 import Sidebar from '../components/Sidebar'
+import usePageTitle from '../hooks/usePageTitle'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -206,6 +207,9 @@ export default function ListsPage() {
 
   const selectedList = lists.find(l => l.id === selectedListId)
 
+  // Update page title based on selected list
+  usePageTitle(selectedList?.name || 'Lists')
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-warm-cream to-warm-beige dark:from-gray-900 dark:to-gray-800 pb-24 sm:pb-20 sm:pl-20">
       <Sidebar />
@@ -268,6 +272,10 @@ export default function ListsPage() {
                 setIsOpen(true)
               }}
               onDelete={deleteTask}
+              onAddTask={() => {
+                setEditingTask(null)
+                setIsOpen(true)
+              }}
             />
           )}
         </div>
