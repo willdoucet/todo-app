@@ -103,7 +103,7 @@ VITE_API_BASE_URL=http://localhost:8000
 - One task per subagent for focused execution
 
 ### 3.  Self-Improvement Loop
-- After ANY correction from the user: update `tasks/lessons.md` with the pattern
+- After ANY correction from the user: update `.claude/tasks/lessons.md` with the pattern
 - Write rules for yourself that prevent the same mistake
 - Ruthlessly iterate on these lessons until mistake rate drops
 - Review lessons at session start for relevant project
@@ -112,6 +112,7 @@ VITE_API_BASE_URL=http://localhost:8000
 - Never mark a task complete without proving it works
 - Diff behavior between main and your changes when relevant
 - Ask yourself: "Would a staff engineer approve this?"
+- Run tests, check logs, demonstrate correctness
 
 ### 5.  Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask "is there a more elegant way?"
@@ -122,7 +123,7 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## Task Management
 
-1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
+1. **Plan First**: Write plan to `./claude/tasks/todo.md` with checkable items
 2. **Verify Plan**: Check in before starting implementation
 3. **Track Progress**: Mark items complete as you go
 4. **Explain Progress**: High-level summary at each step
