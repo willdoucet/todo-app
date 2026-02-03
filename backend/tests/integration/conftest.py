@@ -1,0 +1,183 @@
+"""
+Integration test fixtures with real PostgreSQL database.
+
+These fixtures spin up a real PostgreSQL container using testcontainers,
+create tables, and provide a clean database for each test.
+"""
+
+import os
+import tempfile
+
+# Set UPLOAD_DIR before importing app (app creates directory at import time)
+_test_upload_dir = tempfile.mkdtemp(prefix="test_uploads_")
+os.environ["UPLOAD_DIR"] = _test_upload_dir
+
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text
+from httpx import AsyncClient, ASGITransport
+
+from app.models import Base, FamilyMember, List, Task
+from app.main import app
+from app.database import get_db
+
+
+# =============================================================================
+# Database Container & Engine (session-scoped, non-async)
+# =============================================================================
+
+@pytest.fixture(scope="session")
+def postgres_url():
+    """
+    Get PostgreSQL connection URL.
+
+    For CI (GitHub Actions), uses the service container.
+    For local development, uses testcontainers to spin up PostgreSQL.
+    """
+    # Check if running in CI with pre-configured DATABASE_URL
+    if os.environ.get("DATABASE_URL"):
+        return os.environ["DATABASE_URL"]
+
+    # Local development: use testcontainers
+    from testcontainers.postgres import PostgresContainer
+
+    postgres = PostgresContainer("postgres:15")
+    postgres.start()
+
+    # Convert the URL to async format
+    url = postgres.get_connection_url()
+    if "postgresql+psycopg2://" in url:
+        async_url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://")
+    else:
+        async_url = url.replace("postgresql://", "postgresql+asyncpg://")
+
+    # Store container reference for cleanup
+    pytest.postgres_container = postgres
+
+    return async_url
+
+
+# =============================================================================
+# Per-Test Database Session
+# =============================================================================
+
+@pytest_asyncio.fixture
+async def db_session(postgres_url):
+    """
+    Provide a database session for each test.
+
+    Creates fresh engine and tables for each test for isolation.
+    """
+    # Create fresh engine for this test
+    engine = create_async_engine(postgres_url, echo=False)
+
+    # Create tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Create session
+    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async with async_session() as session:
+        yield session
+
+    # Drop all tables (clean slate for next test)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+    # Dispose engine
+    await engine.dispose()
+
+
+# =============================================================================
+# API Client Fixture
+# =============================================================================
+
+@pytest_asyncio.fixture
+async def client(db_session):
+    """
+    Async HTTP client for testing API endpoints.
+
+    Overrides the database dependency to use our test session.
+    """
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    app.dependency_overrides.clear()
+
+
+# =============================================================================
+# Test Data Fixtures
+# =============================================================================
+
+@pytest_asyncio.fixture
+async def test_family_member(db_session):
+    """Create a test family member in the database."""
+    member = FamilyMember(name="Test User", is_system=False)
+    db_session.add(member)
+    await db_session.commit()
+    await db_session.refresh(member)
+    return member
+
+
+@pytest_asyncio.fixture
+async def test_system_member(db_session):
+    """Create the system 'Everyone' member in the database."""
+    member = FamilyMember(name="Everyone", is_system=True)
+    db_session.add(member)
+    await db_session.commit()
+    await db_session.refresh(member)
+    return member
+
+
+@pytest_asyncio.fixture
+async def test_list(db_session):
+    """Create a test list in the database."""
+    list_obj = List(name="Test List", color="#EF4444", icon="clipboard")
+    db_session.add(list_obj)
+    await db_session.commit()
+    await db_session.refresh(list_obj)
+    return list_obj
+
+
+@pytest_asyncio.fixture
+async def test_task(db_session, test_list, test_family_member):
+    """Create a test task in the database."""
+    task = Task(
+        title="Test Task",
+        description="A test task",
+        list_id=test_list.id,
+        assigned_to=test_family_member.id,
+        completed=False,
+        important=False,
+    )
+    db_session.add(task)
+    await db_session.commit()
+    await db_session.refresh(task)
+    return task
+
+
+@pytest_asyncio.fixture
+async def test_responsibility(db_session, test_family_member):
+    """Create a test responsibility in the database."""
+    from app.models import Responsibility
+
+    responsibility = Responsibility(
+        title="Make bed",
+        description="Make your bed every morning",
+        category="MORNING",
+        assigned_to=test_family_member.id,
+        frequency=["monday", "tuesday", "wednesday", "thursday", "friday"],
+        icon_url=None,
+    )
+    db_session.add(responsibility)
+    await db_session.commit()
+    await db_session.refresh(responsibility)
+    return responsibility

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime, date
 from typing import Optional, List
 from enum import Enum
@@ -26,16 +26,17 @@ class FamilyMemberUpdate(BaseModel):
 
 
 class FamilyMember(FamilyMemberBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_system: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
-
 
 class TaskBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     title: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     due_date: Optional[datetime] = Field(None)
@@ -43,9 +44,6 @@ class TaskBase(BaseModel):
     assigned_to: int = Field(..., ge=1, le=1000000)
     important: bool = False
     list_id: int = Field(..., ge=1)
-
-    class Config:
-        from_attributes = True
 
 
 class TaskCreate(TaskBase):
@@ -63,25 +61,23 @@ class TaskUpdate(BaseModel):
 
 
 class Task(TaskBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
     family_member: FamilyMember
 
-    class Config:
-        from_attributes = True
-
 
 class ResponsibilityBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     title: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     category: ResponsibilityCategory
     assigned_to: int = Field(..., ge=1)
     frequency: List[str] = Field(..., min_length=1)
     icon_url: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
 class ResponsibilityCreate(ResponsibilityBase):
@@ -98,22 +94,20 @@ class ResponsibilityUpdate(BaseModel):
 
 
 class Responsibility(ResponsibilityBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
     family_member: FamilyMember
 
-    class Config:
-        from_attributes = True
-
 
 class ResponsibilityCompletionBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     responsibility_id: int = Field(..., ge=1)
     family_member_id: int = Field(..., ge=1)
     completion_date: date
-
-    class Config:
-        from_attributes = True
 
 
 class ResponsibilityCompletionCreate(BaseModel):
@@ -121,20 +115,18 @@ class ResponsibilityCompletionCreate(BaseModel):
 
 
 class ResponsibilityCompletion(ResponsibilityCompletionBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class ListBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     name: str = Field(..., min_length=1, max_length=100)
     color: Optional[str] = Field(None, min_length=1, max_length=7)
     icon: Optional[str] = Field(None, min_length=1, max_length=100)
-
-    class Config:
-        from_attributes = True
 
 
 class ListCreate(ListBase):
@@ -148,9 +140,8 @@ class ListUpdate(BaseModel):
 
 
 class List(ListBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
