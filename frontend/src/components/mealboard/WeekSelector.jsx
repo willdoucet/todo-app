@@ -1,4 +1,4 @@
-export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek }) {
+export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek, compact = false }) {
   const formatWeekRange = () => {
     const start = weekDates[0]
     const end = weekDates[6]
@@ -26,9 +26,11 @@ export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek }) {
         </svg>
       </button>
 
-      <span className="px-4 py-2 min-w-[140px] text-center text-sm font-medium text-text-primary dark:text-gray-100 bg-warm-sand dark:bg-gray-700 rounded-lg">
-        {formatWeekRange()}
-      </span>
+      {!compact && (
+        <span className="px-4 py-2 min-w-[140px] text-center text-sm font-medium text-text-primary dark:text-gray-100 bg-warm-sand dark:bg-gray-700 rounded-lg">
+          {formatWeekRange()}
+        </span>
+      )}
 
       <button
         onClick={onNextWeek}

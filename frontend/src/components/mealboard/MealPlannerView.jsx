@@ -36,6 +36,11 @@ export default function MealPlannerView() {
   const [loading, setLoading] = useState(true)
   const [showRightPanel, setShowRightPanel] = useState(false)
 
+  // Compact mode for small screens (<620px)
+  const [isCompactMode, setIsCompactMode] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 620 : false
+  )
+
   // Modal state
   const [addMealModal, setAddMealModal] = useState({
     open: false,
@@ -54,10 +59,19 @@ export default function MealPlannerView() {
   }, [weekDates])
 
   useEffect(() => {
-    if (todayColumnRef.current && window.innerWidth < 1280) {
+    if (todayColumnRef.current && window.innerWidth < 1200) {
       todayColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' })
     }
   }, [weekDates])
+
+  // Handle resize for compact mode
+  useEffect(() => {
+    const handleResize = () => {
+      setIsCompactMode(window.innerWidth < 620)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const fetchData = async () => {
     setLoading(true)
@@ -147,13 +161,26 @@ export default function MealPlannerView() {
     <div className="flex-1 flex flex-col xl:flex-row min-h-0">
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Mobile Navigation */}
-        <div className="xl:hidden px-4 py-3 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
-          <div className="flex items-center justify-between">
-            <MealboardNav variant="dropdown" />
+        {/* Unified Header - All screen sizes */}
+        <div className="px-4 py-3 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
+          <div className="flex items-center justify-between xl:justify-center gap-2">
+            {/* Mealboard Nav Dropdown - only visible when sidebar hidden */}
+            <div className="xl:hidden">
+              <MealboardNav variant="dropdown" compact={isCompactMode} />
+            </div>
+
+            {/* Week Selector - always visible */}
+            <WeekSelector
+              weekDates={weekDates}
+              onPrevWeek={handlePrevWeek}
+              onNextWeek={handleNextWeek}
+              compact={isCompactMode}
+            />
+
+            {/* Right Panel Toggle - only visible when sidebar hidden */}
             <button
               onClick={() => setShowRightPanel(!showRightPanel)}
-              className="p-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300"
+              className="xl:hidden p-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -162,49 +189,21 @@ export default function MealPlannerView() {
           </div>
         </div>
 
-        {/* Desktop Header */}
-        <div className="hidden xl:block px-6 py-6 border-b border-card-border dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-text-secondary dark:text-gray-400 mb-1">
-                {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </p>
-              <h1 className="text-2xl font-bold text-text-primary dark:text-gray-100">
-                What's cooking this week?
-              </h1>
-            </div>
-            <WeekSelector
-              weekDates={weekDates}
-              onPrevWeek={handlePrevWeek}
-              onNextWeek={handleNextWeek}
-            />
-          </div>
-        </div>
-
-        {/* Mobile Week Selector */}
-        <div className="xl:hidden px-4 py-3 border-b border-card-border dark:border-gray-700">
-          <WeekSelector
-            weekDates={weekDates}
-            onPrevWeek={handlePrevWeek}
-            onNextWeek={handleNextWeek}
-          />
-        </div>
-
         {/* Week Calendar */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="w-8 h-8 border-2 border-terracotta-500 dark:border-blue-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
-            <div className="flex xl:grid xl:grid-cols-7 min-w-max xl:min-w-0 h-full">
+            <div className="meal-calendar">
               {weekDates.map((date, index) => {
                 const isToday = date.getTime() === today.getTime()
                 return (
                   <div
                     key={index}
                     ref={isToday ? todayColumnRef : null}
-                    className="w-40 xl:w-auto flex-shrink-0 xl:flex-shrink"
+                    className="meal-day-column"
                   >
                     <MealDayColumn
                       date={date}

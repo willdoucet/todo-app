@@ -50,7 +50,7 @@ const menuItems = [
   }
 ]
 
-export default function MealboardNav({ variant = 'sidebar' }) {
+export default function MealboardNav({ variant = 'sidebar', compact = false }) {
   const location = useLocation()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -72,10 +72,12 @@ export default function MealboardNav({ variant = 'sidebar' }) {
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-primary dark:text-gray-100 font-medium hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors"
+          className={`flex items-center gap-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-primary dark:text-gray-100 font-medium hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors ${
+            compact ? 'p-2' : 'px-3 py-2'
+          }`}
         >
           {currentItem.icon}
-          <span>{currentItem.name}</span>
+          {!compact && <span>{currentItem.name}</span>}
           <svg
             className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
             fill="none"

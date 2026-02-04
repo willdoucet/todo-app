@@ -49,7 +49,7 @@ export default function MealPlannerRightPanel({ recipes, onAddRecipeToDay }) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Shopping List Section */}
-      <div className="p-4 border-b border-card-border dark:border-gray-700">
+      <div className="min-h-[25%] p-4 border-b border-card-border dark:border-gray-700 overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-text-primary dark:text-gray-100">Shopping List</h3>
           <Link

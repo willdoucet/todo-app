@@ -19,7 +19,7 @@ export default function MealDayColumn({
   }
 
   return (
-    <div className={`h-full flex flex-col border-r border-card-border dark:border-gray-700 last:border-r-0 ${
+    <div className={`h-full flex flex-col ${
       isToday ? 'bg-peach-100/30 dark:bg-blue-900/10' : ''
     }`}>
       {/* Day Header */}

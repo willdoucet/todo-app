@@ -62,13 +62,7 @@ export default function Sidebar() {
   }
 
   return (
-    <>
-      {/* Fixed Dark Mode Toggle - Top Right (Desktop Only) */}
-      <div className="hidden sm:block fixed top-4 right-4 z-30">
-        <DarkModeToggle />
-      </div>
-
-      <aside className="hidden sm:flex fixed left-0 top-0 bottom-0 w-20 bg-warm-sand dark:bg-gray-800 border-r border-card-border dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
+    <aside className="hidden sm:flex fixed left-0 top-0 bottom-0 w-20 bg-warm-sand dark:bg-gray-800 border-r border-card-border dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
       {menuItems.map((item) => (
         <Link
           key={item.path}
@@ -96,7 +90,11 @@ export default function Sidebar() {
           </span>
         </Link>
       ))}
+
+      {/* Dark Mode Toggle - Bottom of sidebar */}
+      <div className="mt-auto">
+        <DarkModeToggle />
+      </div>
     </aside>
-    </>
   )
 }
