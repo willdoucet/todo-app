@@ -33,11 +33,12 @@ export default function Sidebar() {
       )
     },
     {
-      name: 'Recipes',
-      path: '/recipes',
+      name: 'Mealboard',
+      path: '/mealboard',
       icon: (
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 14h.01M12 14h.01M15 14h.01M9 17h.01M12 17h.01" />
         </svg>
       )
     },
@@ -61,13 +62,7 @@ export default function Sidebar() {
   }
 
   return (
-    <>
-      {/* Fixed Dark Mode Toggle - Top Right (Desktop Only) */}
-      <div className="hidden sm:block fixed top-4 right-4 z-30">
-        <DarkModeToggle />
-      </div>
-
-      <aside className="hidden sm:flex fixed left-0 top-0 bottom-0 w-20 bg-warm-sand dark:bg-gray-800 border-r border-card-border dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
+    <aside className="hidden sm:flex fixed left-0 top-0 bottom-0 w-20 bg-warm-sand dark:bg-gray-800 border-r border-card-border dark:border-gray-700 flex-col items-center py-8 gap-4 z-20">
       {menuItems.map((item) => (
         <Link
           key={item.path}
@@ -95,7 +90,11 @@ export default function Sidebar() {
           </span>
         </Link>
       ))}
+
+      {/* Dark Mode Toggle - Bottom of sidebar */}
+      <div className="mt-auto">
+        <DarkModeToggle />
+      </div>
     </aside>
-    </>
   )
 }

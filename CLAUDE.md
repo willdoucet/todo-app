@@ -72,7 +72,19 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - **Structure**:
   - `src/pages/` - Route-level components
   - `src/components/` - Reusable UI components
+  - `src/components/mealboard/` - Mealboard feature components
   - `src/contexts/` - React context providers (DarkModeContext)
+
+### Mealboard Feature (`/mealboard/*`)
+- **Routes**: `/mealboard/planner`, `/mealboard/recipes`, `/mealboard/shopping`, `/mealboard/favorites`, `/mealboard/finder`
+- **Components**:
+  - `MealboardPage.jsx` - Main layout with responsive navigation
+  - `MealboardNav.jsx` - Left panel (>=1200px) or dropdown menu (<1200px)
+  - `MealPlannerView.jsx` - Weekly calendar view with meal slots
+  - `RecipesView.jsx` - Recipe catalog with filtering and sorting
+  - `ShoppingListView.jsx` - Shopping list linked from existing lists
+  - `RecipeFinderView.jsx` - Placeholder for AI-powered recipe discovery
+- **Responsive Breakpoint**: 1200px (xl:) for desktop vs mobile layout
 
 ### Data Model
 - **FamilyMember** - Household members (has is_system flag for "Everyone")
@@ -80,6 +92,8 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - **Task** - Todo items assigned to members, belong to lists
 - **Responsibility** - Recurring tasks with category (MORNING/AFTERNOON/EVENING/CHORE) and frequency (days of week)
 - **ResponsibilityCompletion** - Tracks daily completion by member
+- **Recipe** - Meal recipes with ingredients, instructions, times, and favorite status
+- **MealPlan** - Scheduled meals for specific dates with category (BREAKFAST/LUNCH/DINNER)
 
 ## Key Patterns
 
@@ -103,7 +117,7 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## API Base URL
 - Backend: `http://localhost:8000`
-- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`
+- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`
 
 ## Workflow Orchestration
 

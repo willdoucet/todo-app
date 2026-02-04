@@ -28,16 +28,58 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Meals Page Prompt.md",
+                "file": "Untitled.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Meals Page Prompt"
+              "title": "Untitled"
+            }
+          },
+          {
+            "id": "8f0710a2dc41bbd8",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Meals Page Backend Prompt.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Meals Page Backend Prompt"
+            }
+          },
+          {
+            "id": "87968d2d4bc849cb",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Meals Page FrontendPrompt.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Meals Page FrontendPrompt"
+            }
+          },
+          {
+            "id": "e90d402aa7611a52",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Meals Page FrontendPrompt.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Meals Page FrontendPrompt"
             }
           }
         ],
-        "currentTab": 1
+        "currentTab": 2
       },
       {
         "id": "38f164f0d4304129",
@@ -127,7 +169,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Meals Page Prompt.md",
+                "file": "Meals Page Backend Prompt.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -137,7 +179,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Meals Page Prompt"
+              "title": "Backlinks for Meals Page Backend Prompt"
             }
           },
           {
@@ -146,12 +188,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Meals Page Prompt.md",
+                "file": "Meals Page Backend Prompt.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Meals Page Prompt"
+              "title": "Outgoing links from Meals Page Backend Prompt"
             }
           },
           {
@@ -189,13 +231,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Meals Page Prompt.md",
+                "file": "Meals Page Backend Prompt.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Meals Page Prompt"
+              "title": "Outline of Meals Page Backend Prompt"
             }
           }
         ]
@@ -216,9 +258,15 @@
       "bases:Create new base": false
     }
   },
-  "active": "9f8b09529833a33a",
+  "active": "8f0710a2dc41bbd8",
   "lastOpenFiles": [
+    "Meals Page FrontendPrompt.md",
+    "Meals Page Backend Prompt.md",
     "Welcome.md",
-    "Meals Page Prompt.md"
+    "Untitled.md",
+    "Meals Page Fine Tuning.md",
+    "UI Bugs.md",
+    "Untitled/Untitled.base",
+    "Untitled"
   ]
 }

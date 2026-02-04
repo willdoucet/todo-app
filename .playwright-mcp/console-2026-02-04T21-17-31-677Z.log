@@ -1,0 +1,9 @@
+[     156ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8000/meal-plans?start_date=2026-02-02&end_date=2026-02-08:0
+[     157ms] [ERROR] Error fetching data: AxiosError @ http://localhost:5173/src/components/mealboard/MealPlannerView.jsx?t=1770239843980:83
+[     157ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8000/recipes:0
+[     157ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8000/meal-plans?start_date=2026-02-02&end_date=2026-02-08:0
+[     157ms] [ERROR] Error fetching data: AxiosError @ http://localhost:5173/src/components/mealboard/MealPlannerView.jsx?t=1770239843980:83
+[     157ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8000/recipes:0
+[     160ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8000/meal-plans?start_date=2026-02-02&end_date=2026-02-08:0
+[     160ms] [ERROR] Error fetching data: AxiosError @ http://localhost:5173/src/components/mealboard/MealPlannerView.jsx?t=1770239843980:83
+[     161ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8000/recipes:0

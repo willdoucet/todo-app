@@ -82,6 +82,61 @@ const mockResponsibilities = [
   },
 ]
 
+const mockRecipes = [
+  {
+    id: 1,
+    name: 'Honey Garlic Chicken',
+    description: 'Sweet and savory chicken stir fry',
+    ingredients: [
+      { name: 'Chicken breast', quantity: 1, unit: 'lb', category: 'Protein' },
+      { name: 'Honey', quantity: 3, unit: 'tbsp', category: 'Pantry' },
+      { name: 'Garlic', quantity: 4, unit: 'cloves', category: 'Produce' },
+    ],
+    instructions: '1. Cut chicken into cubes\n2. Mix honey and garlic\n3. Cook chicken\n4. Add sauce',
+    prep_time_minutes: 15,
+    cook_time_minutes: 30,
+    servings: 4,
+    image_url: null,
+    is_favorite: true,
+    tags: ['quick', 'chicken', 'dinner'],
+    created_at: '2025-01-15T10:00:00Z',
+    updated_at: null,
+  },
+  {
+    id: 2,
+    name: 'Creamy Tuscan Pasta',
+    description: 'Rich and creamy Italian pasta',
+    ingredients: [
+      { name: 'Pasta', quantity: 1, unit: 'lb', category: 'Pantry' },
+      { name: 'Heavy cream', quantity: 1, unit: 'cups', category: 'Dairy' },
+      { name: 'Sun-dried tomatoes', quantity: 0.5, unit: 'cups', category: 'Pantry' },
+    ],
+    instructions: '1. Cook pasta\n2. Make cream sauce\n3. Combine and serve',
+    prep_time_minutes: 10,
+    cook_time_minutes: 25,
+    servings: 6,
+    image_url: null,
+    is_favorite: false,
+    tags: ['pasta', 'italian'],
+    created_at: '2025-01-10T10:00:00Z',
+    updated_at: null,
+  },
+]
+
+const mockMealPlans = [
+  {
+    id: 1,
+    date: new Date().toISOString().split('T')[0],
+    category: 'DINNER',
+    recipe_id: 1,
+    custom_meal_name: null,
+    was_cooked: false,
+    notes: null,
+    created_at: '2025-01-20T10:00:00Z',
+    updated_at: null,
+  },
+]
+
 // =============================================================================
 // Handlers
 // =============================================================================
@@ -217,5 +272,84 @@ export const handlers = [
 
   http.post(`${API_BASE}/upload/responsibility-icon`, () => {
     return HttpResponse.json({ url: '/uploads/test-icon.jpg' })
+  }),
+
+  // -------------------------------------------------------------------------
+  // Recipes
+  // -------------------------------------------------------------------------
+  http.get(`${API_BASE}/recipes`, () => {
+    return HttpResponse.json(mockRecipes)
+  }),
+
+  http.get(`${API_BASE}/recipes/:id`, ({ params }) => {
+    const recipe = mockRecipes.find((r) => r.id === Number(params.id))
+    if (!recipe) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    return HttpResponse.json(recipe)
+  }),
+
+  http.post(`${API_BASE}/recipes`, async ({ request }) => {
+    const body = await request.json()
+    const newRecipe = {
+      id: mockRecipes.length + 1,
+      created_at: new Date().toISOString(),
+      updated_at: null,
+      ...body,
+    }
+    return HttpResponse.json(newRecipe, { status: 201 })
+  }),
+
+  http.patch(`${API_BASE}/recipes/:id`, async ({ params, request }) => {
+    const body = await request.json()
+    const recipe = mockRecipes.find((r) => r.id === Number(params.id))
+    if (!recipe) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    return HttpResponse.json({ ...recipe, ...body, updated_at: new Date().toISOString() })
+  }),
+
+  http.delete(`${API_BASE}/recipes/:id`, ({ params }) => {
+    const recipe = mockRecipes.find((r) => r.id === Number(params.id))
+    if (!recipe) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    return HttpResponse.json(recipe)
+  }),
+
+  // -------------------------------------------------------------------------
+  // Meal Plans
+  // -------------------------------------------------------------------------
+  http.get(`${API_BASE}/meal-plans`, () => {
+    return HttpResponse.json(mockMealPlans)
+  }),
+
+  http.post(`${API_BASE}/meal-plans`, async ({ request }) => {
+    const body = await request.json()
+    const newMealPlan = {
+      id: mockMealPlans.length + 1,
+      created_at: new Date().toISOString(),
+      updated_at: null,
+      was_cooked: false,
+      ...body,
+    }
+    return HttpResponse.json(newMealPlan, { status: 201 })
+  }),
+
+  http.patch(`${API_BASE}/meal-plans/:id`, async ({ params, request }) => {
+    const body = await request.json()
+    const mealPlan = mockMealPlans.find((mp) => mp.id === Number(params.id))
+    if (!mealPlan) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    return HttpResponse.json({ ...mealPlan, ...body, updated_at: new Date().toISOString() })
+  }),
+
+  http.delete(`${API_BASE}/meal-plans/:id`, ({ params }) => {
+    const mealPlan = mockMealPlans.find((mp) => mp.id === Number(params.id))
+    if (!mealPlan) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    return HttpResponse.json(mealPlan)
   }),
 ]
