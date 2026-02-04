@@ -28,6 +28,14 @@ function formatDateKey(date) {
   return date.toISOString().split('T')[0]
 }
 
+function formatCurrentDate() {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
 export default function MealPlannerView() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [weekDates, setWeekDates] = useState(() => getWeekDates(new Date()))
@@ -36,9 +44,9 @@ export default function MealPlannerView() {
   const [loading, setLoading] = useState(true)
   const [showRightPanel, setShowRightPanel] = useState(false)
 
-  // Compact mode for small screens (<620px)
+  // Compact mode for small screens (<768px) - matches calendar column view breakpoint
   const [isCompactMode, setIsCompactMode] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth < 620 : false
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
   )
 
   // Modal state
@@ -59,7 +67,7 @@ export default function MealPlannerView() {
   }, [weekDates])
 
   useEffect(() => {
-    if (todayColumnRef.current && window.innerWidth < 1200) {
+    if (todayColumnRef.current && window.innerWidth < 768) {
       todayColumnRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' })
     }
   }, [weekDates])
@@ -67,7 +75,7 @@ export default function MealPlannerView() {
   // Handle resize for compact mode
   useEffect(() => {
     const handleResize = () => {
-      setIsCompactMode(window.innerWidth < 620)
+      setIsCompactMode(window.innerWidth < 768)
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
@@ -162,14 +170,34 @@ export default function MealPlannerView() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-0">
         {/* Unified Header - All screen sizes */}
-        <div className="px-4 py-3 xl:py-8 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
-          <div className="grid grid-cols-3 items-center xl:flex xl:justify-center">
-            {/* Left column - Mealboard Nav Dropdown */}
-            <div className="xl:hidden">
+        <div className="px-4 py-3 xl:py-6 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
+
+          {/* Desktop Header (>=1200px) - Title/date left, week selector centered */}
+          <div className="hidden xl:flex xl:items-center">
+            <div className="flex flex-col">
+              <span className="text-sm text-text-muted dark:text-gray-400">
+                {formatCurrentDate()}
+              </span>
+              <h1 className="text-2xl font-bold text-text-primary dark:text-gray-100">
+                What's Cooking?
+              </h1>
+            </div>
+            <div className="flex-1 flex justify-center">
+              <WeekSelector
+                weekDates={weekDates}
+                onPrevWeek={handlePrevWeek}
+                onNextWeek={handleNextWeek}
+                compact={false}
+              />
+            </div>
+            <div className="w-32" />
+          </div>
+
+          {/* Non-desktop Header (<1200px) - Original 3-column grid */}
+          <div className="grid grid-cols-3 items-center xl:hidden">
+            <div>
               <MealboardNav variant="dropdown" compact={isCompactMode} />
             </div>
-
-            {/* Center column - Week Selector */}
             <div className="flex justify-center">
               <WeekSelector
                 weekDates={weekDates}
@@ -178,9 +206,7 @@ export default function MealPlannerView() {
                 compact={isCompactMode}
               />
             </div>
-
-            {/* Right column - Panel Toggle */}
-            <div className="xl:hidden flex justify-end">
+            <div className="flex justify-end">
               <button
                 onClick={() => setShowRightPanel(!showRightPanel)}
                 className="p-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors"
