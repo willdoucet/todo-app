@@ -162,30 +162,34 @@ export default function MealPlannerView() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-0">
         {/* Unified Header - All screen sizes */}
-        <div className="px-4 py-3 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
-          <div className="flex items-center justify-between xl:justify-center gap-2">
-            {/* Mealboard Nav Dropdown - only visible when sidebar hidden */}
+        <div className="px-4 py-3 xl:py-8 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
+          <div className="grid grid-cols-3 items-center xl:flex xl:justify-center">
+            {/* Left column - Mealboard Nav Dropdown */}
             <div className="xl:hidden">
               <MealboardNav variant="dropdown" compact={isCompactMode} />
             </div>
 
-            {/* Week Selector - always visible */}
-            <WeekSelector
-              weekDates={weekDates}
-              onPrevWeek={handlePrevWeek}
-              onNextWeek={handleNextWeek}
-              compact={isCompactMode}
-            />
+            {/* Center column - Week Selector */}
+            <div className="flex justify-center">
+              <WeekSelector
+                weekDates={weekDates}
+                onPrevWeek={handlePrevWeek}
+                onNextWeek={handleNextWeek}
+                compact={isCompactMode}
+              />
+            </div>
 
-            {/* Right Panel Toggle - only visible when sidebar hidden */}
-            <button
-              onClick={() => setShowRightPanel(!showRightPanel)}
-              className="xl:hidden p-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </button>
+            {/* Right column - Panel Toggle */}
+            <div className="xl:hidden flex justify-end">
+              <button
+                onClick={() => setShowRightPanel(!showRightPanel)}
+                className="p-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
