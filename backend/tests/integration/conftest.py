@@ -181,3 +181,72 @@ async def test_responsibility(db_session, test_family_member):
     await db_session.commit()
     await db_session.refresh(responsibility)
     return responsibility
+
+
+# =============================================================================
+# Mealboard Test Data Fixtures
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def test_recipe(db_session):
+    """Create a test recipe in the database."""
+    from app.models import Recipe
+
+    recipe = Recipe(
+        name="Test Recipe",
+        description="A test recipe",
+        ingredients=[
+            {"name": "Test ingredient", "quantity": 1, "unit": "cups", "category": "Pantry"}
+        ],
+        instructions="Test instructions",
+        prep_time_minutes=10,
+        cook_time_minutes=20,
+        servings=4,
+        is_favorite=False,
+        tags=["test"],
+    )
+    db_session.add(recipe)
+    await db_session.commit()
+    await db_session.refresh(recipe)
+    return recipe
+
+
+@pytest_asyncio.fixture
+async def test_favorite_recipe(db_session):
+    """Create a favorite test recipe in the database."""
+    from app.models import Recipe
+
+    recipe = Recipe(
+        name="Favorite Recipe",
+        description="A favorite recipe",
+        ingredients=[{"name": "Ingredient", "quantity": 2, "unit": "cups", "category": "Pantry"}],
+        instructions="Favorite instructions",
+        prep_time_minutes=15,
+        cook_time_minutes=30,
+        servings=6,
+        is_favorite=True,
+        tags=["favorite", "test"],
+    )
+    db_session.add(recipe)
+    await db_session.commit()
+    await db_session.refresh(recipe)
+    return recipe
+
+
+@pytest_asyncio.fixture
+async def test_meal_plan(db_session, test_recipe):
+    """Create a test meal plan in the database."""
+    from app.models import MealPlan
+    from datetime import date
+
+    meal_plan = MealPlan(
+        date=date.today(),
+        category="DINNER",
+        recipe_id=test_recipe.id,
+        was_cooked=False,
+    )
+    db_session.add(meal_plan)
+    await db_session.commit()
+    await db_session.refresh(meal_plan)
+    return meal_plan

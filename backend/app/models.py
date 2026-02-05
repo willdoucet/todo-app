@@ -7,6 +7,8 @@ from sqlalchemy import (
     Date,
     ForeignKey,
     ARRAY,
+    JSON,
+    Text,
     func,
     UniqueConstraint,
 )
@@ -22,6 +24,12 @@ class ResponsibilityCategory(PyEnum):
     AFTERNOON = "AFTERNOON"
     EVENING = "EVENING"
     CHORE = "CHORE"
+
+
+class MealCategory(PyEnum):
+    BREAKFAST = "BREAKFAST"
+    LUNCH = "LUNCH"
+    DINNER = "DINNER"
 
 
 class FamilyMember(Base):
@@ -99,11 +107,40 @@ class ResponsibilityCompletion(Base):
 
 class Recipe(Base):
     __tablename__ = "recipes"
+
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    ingredients = Column(ARRAY(String))
-    instructions = Column(String)
+    name = Column(String, index=True, nullable=False)
+    description = Column(String, nullable=True)
+    ingredients = Column(JSON, nullable=True)  # Array of {name, quantity, unit, category}
+    instructions = Column(Text, nullable=False)
     prep_time_minutes = Column(Integer, nullable=True)
+    cook_time_minutes = Column(Integer, nullable=True)
+    servings = Column(Integer, default=4)
+    image_url = Column(String, nullable=True)
+    is_favorite = Column(Boolean, default=False)
+    tags = Column(JSON, nullable=True)  # Array of strings
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    meal_plans = relationship("MealPlan", back_populates="recipe")
+
+
+class MealPlan(Base):
+    __tablename__ = "meal_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True, nullable=False)
+    category = Column(SQLEnum(MealCategory), nullable=False)
+    recipe_id = Column(
+        Integer, ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True
+    )
+    custom_meal_name = Column(String, nullable=True)
+    was_cooked = Column(Boolean, default=False)
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    recipe = relationship("Recipe", back_populates="meal_plans")
 
 
 class List(Base):
