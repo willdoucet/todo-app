@@ -6,7 +6,6 @@
       {
         "id": "6945b2418f5fdebd",
         "type": "tabs",
-        "dimension": 76.3728323699422,
         "children": [
           {
             "id": "59916d1637d0c359",
@@ -42,12 +41,68 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Meals Page Backend Prompt.md",
+                "file": "Mealboard/Meals Page FrontendPrompt.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Meals Page Backend Prompt"
+              "title": "Meals Page FrontendPrompt"
+            }
+          },
+          {
+            "id": "98b372f95ff1b749",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Meals Page UI.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Meals Page UI"
+            }
+          },
+          {
+            "id": "b13672d39e49bc58",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Canonical/PRD.md.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "PRD.md"
+            }
+          },
+          {
+            "id": "a84dbc3a04bfbb4b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "AI Questions.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "AI Questions"
+            }
+          },
+          {
+            "id": "6a7d783f9df060bd",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Canonical/Update 1 to PRD.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Update 1 to PRD"
             }
           },
           {
@@ -56,7 +111,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Meals Page FrontendPrompt.md",
+                "file": "Mealboard/Meals Page FrontendPrompt.md",
                 "mode": "source",
                 "source": false
               },
@@ -70,33 +125,58 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Meals Page FrontendPrompt.md",
+                "file": "Canonical/Update 1 to PRD.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Meals Page FrontendPrompt"
+              "title": "Update 1 to PRD"
+            }
+          },
+          {
+            "id": "d2f201eded6bd293",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Dashboard/Original Spec.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Original Spec"
+            }
+          },
+          {
+            "id": "51f703f0ee8454b4",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Context.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Context"
+            }
+          },
+          {
+            "id": "396f7817beb4fc02",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Mealboard/BUGS.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "BUGS"
             }
           }
         ],
-        "currentTab": 2
-      },
-      {
-        "id": "38f164f0d4304129",
-        "type": "tabs",
-        "dimension": 23.627167630057805,
-        "children": [
-          {
-            "id": "2e89781bea4eaab6",
-            "type": "leaf",
-            "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
-            }
-          }
-        ]
+        "currentTab": 11
       }
     ],
     "direction": "vertical"
@@ -169,7 +249,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Meals Page Backend Prompt.md",
+                "file": "Canonical/Update 1 to PRD.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -179,7 +259,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Meals Page Backend Prompt"
+              "title": "Backlinks for Update 1 to PRD"
             }
           },
           {
@@ -188,12 +268,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Meals Page Backend Prompt.md",
+                "file": "Canonical/Update 1 to PRD.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Meals Page Backend Prompt"
+              "title": "Outgoing links from Update 1 to PRD"
             }
           },
           {
@@ -231,13 +311,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Meals Page Backend Prompt.md",
+                "file": "Canonical/Update 1 to PRD.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Meals Page Backend Prompt"
+              "title": "Outline of Update 1 to PRD"
             }
           }
         ]
@@ -258,15 +338,26 @@
       "bases:Create new base": false
     }
   },
-  "active": "8f0710a2dc41bbd8",
+  "active": "396f7817beb4fc02",
   "lastOpenFiles": [
-    "Meals Page FrontendPrompt.md",
-    "Meals Page Backend Prompt.md",
+    "Context.md",
+    "Mealboard/BUGS.md",
+    "Meals Page UI.md",
+    "UI Bugs.md",
     "Welcome.md",
     "Untitled.md",
-    "Meals Page Fine Tuning.md",
-    "UI Bugs.md",
+    "Dashboard/Original Spec.md",
+    "Canonical/PRD.md.md",
     "Untitled/Untitled.base",
+    "AI Questions.md",
+    "Canonical/Update 1 to PRD.md",
+    "Mealboard/Meals Page Fine Tuning.md",
+    "Mealboard/Meals Page FrontendPrompt.md",
+    "Mealboard/Meals Page Backend Prompt.md",
+    "Dashboard",
+    "Untitled 1",
+    "Canonical",
+    "Mealboard",
     "Untitled"
   ]
 }

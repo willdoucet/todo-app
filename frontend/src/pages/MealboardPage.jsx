@@ -34,7 +34,6 @@ export default function MealboardPage() {
             <Route path="planner" element={<MealPlannerView />} />
             <Route path="recipes" element={<RecipesView />} />
             <Route path="shopping" element={<ShoppingListView />} />
-            <Route path="favorites" element={<RecipesView favoritesOnly />} />
             <Route path="finder" element={<RecipeFinderView />} />
           </Routes>
         </div>

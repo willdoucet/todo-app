@@ -131,3 +131,60 @@ body {
 .dark .meal-day-column {
   border-color: #374151;
 }
+
+/* Right panel breakpoint - show at 1525px+ */
+.right-panel-desktop {
+  display: none;
+}
+
+@media (min-width: 1525px) {
+  .right-panel-desktop {
+    display: block;
+  }
+}
+
+/* Right panel toggle button - hide at 1525px+ */
+.right-panel-toggle {
+  display: block;
+}
+
+@media (min-width: 1525px) {
+  .right-panel-toggle {
+    display: none;
+  }
+}
+
+/* Mobile right panel overlay - hide at 1525px+ */
+.right-panel-mobile-overlay {
+  display: block;
+}
+
+@media (min-width: 1525px) {
+  .right-panel-mobile-overlay {
+    display: none;
+  }
+}
+
+/* MealCard - row calendar view (>=768px) fixed height */
+@media (min-width: 768px) {
+  .meal-card-row-view {
+    height: 150px;
+  }
+}
+
+/* MealCard actions - hover visibility */
+.meal-card-actions {
+  opacity: 0;
+  transition: opacity 150ms ease-in-out;
+}
+
+.meal-card:hover .meal-card-actions,
+.meal-card:focus-within .meal-card-actions,
+.meal-card-actions:focus-within {
+  opacity: 1;
+}
+
+/* Keep actions visible if meal is already cooked */
+.meal-card-cooked .meal-card-actions {
+  opacity: 1;
+}

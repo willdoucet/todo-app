@@ -11,9 +11,9 @@ export default function MealCard({ meal, recipe, onToggleCooked, onDelete }) {
   const categoryColor = CATEGORY_COLORS[meal.category] || CATEGORY_COLORS.DINNER
 
   return (
-    <div className={`relative p-3 rounded-xl border transition-all ${
+    <div className={`meal-card meal-card-row-view relative p-3 rounded-xl border transition-all ${
       meal.was_cooked
-        ? 'bg-sage-50 dark:bg-green-900/20 border-sage-200 dark:border-green-800'
+        ? 'meal-card-cooked bg-sage-50 dark:bg-green-900/20 border-sage-200 dark:border-green-800'
         : 'bg-card-bg dark:bg-gray-800 border-card-border dark:border-gray-700 hover:shadow-md'
     }`}>
       {/* Category Badge */}
@@ -54,12 +54,12 @@ export default function MealCard({ meal, recipe, onToggleCooked, onDelete }) {
         </p>
       )}
 
-      {/* Actions */}
-      <div className="absolute top-2 right-2 flex items-center gap-1">
+      {/* Actions - Bottom of card, visible on hover */}
+      <div className="meal-card-actions absolute bottom-2 left-3 right-3 flex items-center justify-end gap-1">
         {/* Cooked Toggle */}
         <button
           onClick={onToggleCooked}
-          className={`p-1 rounded-full transition-colors ${
+          className={`p-1.5 rounded-full transition-colors ${
             meal.was_cooked
               ? 'bg-sage-500 text-white'
               : 'bg-warm-sand dark:bg-gray-700 text-text-muted dark:text-gray-500 hover:bg-sage-100 dark:hover:bg-green-900/30 hover:text-sage-600 dark:hover:text-green-400'
@@ -74,7 +74,7 @@ export default function MealCard({ meal, recipe, onToggleCooked, onDelete }) {
         {/* Delete */}
         <button
           onClick={onDelete}
-          className="p-1 rounded-full bg-warm-sand dark:bg-gray-700 text-text-muted dark:text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 transition-colors"
+          className="p-1.5 rounded-full bg-warm-sand dark:bg-gray-700 text-text-muted dark:text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 transition-colors"
           title="Remove meal"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
