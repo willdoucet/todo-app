@@ -165,3 +165,77 @@ def mock_completion():
     completion.completion_date = date.today()
     completion.created_at = datetime.now()
     return completion
+
+
+# =============================================================================
+# Mealboard Sample Data Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def sample_recipe_data():
+    """Sample data for creating a recipe."""
+    return {
+        "name": "Honey Garlic Chicken",
+        "description": "Quick and easy dinner",
+        "ingredients": [
+            {"name": "Chicken breast", "quantity": 2, "unit": "lb", "category": "Protein"},
+            {"name": "Honey", "quantity": 0.25, "unit": "cups", "category": "Pantry"},
+        ],
+        "instructions": "1. Season chicken. 2. Cook in pan. 3. Add sauce.",
+        "prep_time_minutes": 10,
+        "cook_time_minutes": 25,
+        "servings": 4,
+        "is_favorite": True,
+        "tags": ["chicken", "quick", "dinner"],
+    }
+
+
+@pytest.fixture
+def sample_meal_plan_data():
+    """Sample data for creating a meal plan."""
+    return {
+        "date": date.today().isoformat(),
+        "category": "DINNER",
+        "recipe_id": None,
+        "custom_meal_name": None,
+        "was_cooked": False,
+        "notes": None,
+    }
+
+
+@pytest.fixture
+def mock_recipe():
+    """A mock Recipe object for unit tests."""
+    recipe = MagicMock()
+    recipe.id = 1
+    recipe.name = "Test Recipe"
+    recipe.description = "A test recipe"
+    recipe.ingredients = [{"name": "Test", "quantity": 1, "unit": "cups", "category": "Pantry"}]
+    recipe.instructions = "Test instructions"
+    recipe.prep_time_minutes = 10
+    recipe.cook_time_minutes = 20
+    recipe.servings = 4
+    recipe.image_url = None
+    recipe.is_favorite = False
+    recipe.tags = ["test"]
+    recipe.created_at = datetime.now()
+    recipe.updated_at = None
+    return recipe
+
+
+@pytest.fixture
+def mock_meal_plan(mock_recipe):
+    """A mock MealPlan object for unit tests."""
+    meal_plan = MagicMock()
+    meal_plan.id = 1
+    meal_plan.date = date.today()
+    meal_plan.category = "DINNER"
+    meal_plan.recipe_id = 1
+    meal_plan.recipe = mock_recipe
+    meal_plan.custom_meal_name = None
+    meal_plan.was_cooked = False
+    meal_plan.notes = None
+    meal_plan.created_at = datetime.now()
+    meal_plan.updated_at = None
+    return meal_plan

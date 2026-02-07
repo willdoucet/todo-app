@@ -8,13 +8,13 @@ import ConfirmDialog from '../ConfirmDialog'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-export default function RecipesView({ favoritesOnly = false }) {
+export default function RecipesView() {
   const [recipes, setRecipes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   // Filter and sort state
-  const [filterFavorite, setFilterFavorite] = useState(favoritesOnly ? 'yes' : 'all')
+  const [filterFavorite, setFilterFavorite] = useState('all')
   const [sortBy, setSortBy] = useState('name_asc')
 
   // Modal state
@@ -25,12 +25,6 @@ export default function RecipesView({ favoritesOnly = false }) {
   useEffect(() => {
     fetchRecipes()
   }, [])
-
-  useEffect(() => {
-    if (favoritesOnly) {
-      setFilterFavorite('yes')
-    }
-  }, [favoritesOnly])
 
   const fetchRecipes = async () => {
     setLoading(true)
@@ -134,7 +128,7 @@ export default function RecipesView({ favoritesOnly = false }) {
       <div className="px-4 sm:px-6 lg:px-8 py-6 border-b border-card-border dark:border-gray-700">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h1 className="text-2xl font-bold text-text-primary dark:text-gray-100">
-            {favoritesOnly ? 'Favorite Recipes' : 'Recipes'}
+            Recipes
           </h1>
           <button
             onClick={() => setIsFormOpen(true)}
@@ -149,17 +143,15 @@ export default function RecipesView({ favoritesOnly = false }) {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 mt-4">
-          {!favoritesOnly && (
-            <select
-              value={filterFavorite}
-              onChange={(e) => setFilterFavorite(e.target.value)}
-              className="px-3 py-2 border border-card-border dark:border-gray-600 rounded-lg bg-card-bg dark:bg-gray-800 text-text-primary dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
-            >
-              <option value="all">All Recipes</option>
-              <option value="yes">Favorites Only</option>
-              <option value="no">Non-Favorites</option>
-            </select>
-          )}
+          <select
+            value={filterFavorite}
+            onChange={(e) => setFilterFavorite(e.target.value)}
+            className="px-3 py-2 border border-card-border dark:border-gray-600 rounded-lg bg-card-bg dark:bg-gray-800 text-text-primary dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
+          >
+            <option value="all">All Recipes</option>
+            <option value="yes">Favorites Only</option>
+            <option value="no">Non-Favorites</option>
+          </select>
 
           <select
             value={sortBy}

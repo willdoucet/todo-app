@@ -209,7 +209,7 @@ export default function MealPlannerView() {
             <div className="flex justify-end">
               <button
                 onClick={() => setShowRightPanel(!showRightPanel)}
-                className="p-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors"
+                className="right-panel-toggle p-2 rounded-lg bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -282,17 +282,17 @@ export default function MealPlannerView() {
         </div>
       </div>
 
-      {/* Right Panel - Desktop */}
-      <div className="hidden xl:block w-80 border-l border-card-border dark:border-gray-700 flex-shrink-0">
+      {/* Right Panel - Desktop (1525px+) */}
+      <div className="right-panel-desktop w-80 border-l border-card-border dark:border-gray-700 flex-shrink-0">
         <MealPlannerRightPanel
           recipes={favoriteRecipes}
           onAddRecipeToDay={(recipe) => setAddMealModal({ open: true, date: today, category: 'DINNER', recipe })}
         />
       </div>
 
-      {/* Right Panel - Mobile Overlay */}
+      {/* Right Panel - Mobile/Tablet Overlay (<1525px) */}
       {showRightPanel && (
-        <div className="xl:hidden fixed inset-0 z-40">
+        <div className="right-panel-mobile-overlay fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/30" onClick={() => setShowRightPanel(false)} />
           <div className="absolute right-0 top-0 bottom-0 w-80 bg-card-bg dark:bg-gray-800 shadow-xl">
             <div className="flex items-center justify-between p-4 border-b border-card-border dark:border-gray-700">

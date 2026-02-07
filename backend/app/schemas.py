@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List as TypingList
 from enum import Enum
 
 
@@ -9,6 +9,12 @@ class ResponsibilityCategory(str, Enum):
     AFTERNOON = "AFTERNOON"
     EVENING = "EVENING"
     CHORE = "CHORE"
+
+
+class MealCategory(str, Enum):
+    BREAKFAST = "BREAKFAST"
+    LUNCH = "LUNCH"
+    DINNER = "DINNER"
 
 
 class FamilyMemberBase(BaseModel):
@@ -76,7 +82,7 @@ class ResponsibilityBase(BaseModel):
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     category: ResponsibilityCategory
     assigned_to: int = Field(..., ge=1)
-    frequency: List[str] = Field(..., min_length=1)
+    frequency: TypingList[str] = Field(..., min_length=1)
     icon_url: Optional[str] = None
 
 
@@ -89,7 +95,7 @@ class ResponsibilityUpdate(BaseModel):
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     category: Optional[ResponsibilityCategory] = None
     assigned_to: Optional[int] = Field(None, ge=1)
-    frequency: Optional[List[str]] = None
+    frequency: Optional[TypingList[str]] = None
     icon_url: Optional[str] = None
 
 
@@ -143,5 +149,95 @@ class List(ListBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+# =============================================================================
+# Recipe Schemas
+# =============================================================================
+
+
+class Ingredient(BaseModel):
+    name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    category: str = "Other"
+
+
+class RecipeBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    ingredients: Optional[TypingList[Ingredient]] = None
+    instructions: str = Field(..., min_length=1)
+    prep_time_minutes: Optional[int] = Field(None, ge=0)
+    cook_time_minutes: Optional[int] = Field(None, ge=0)
+    servings: int = Field(default=4, ge=1)
+    image_url: Optional[str] = None
+    is_favorite: bool = False
+    tags: Optional[TypingList[str]] = None
+
+
+class RecipeCreate(RecipeBase):
+    pass
+
+
+class RecipeUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=1000)
+    ingredients: Optional[TypingList[Ingredient]] = None
+    instructions: Optional[str] = Field(None, min_length=1)
+    prep_time_minutes: Optional[int] = Field(None, ge=0)
+    cook_time_minutes: Optional[int] = Field(None, ge=0)
+    servings: Optional[int] = Field(None, ge=1)
+    image_url: Optional[str] = None
+    is_favorite: Optional[bool] = None
+    tags: Optional[TypingList[str]] = None
+
+
+class Recipe(RecipeBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+# =============================================================================
+# MealPlan Schemas
+# =============================================================================
+
+
+class MealPlanBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    category: MealCategory
+    recipe_id: Optional[int] = Field(None, ge=1)
+    custom_meal_name: Optional[str] = Field(None, max_length=200)
+    was_cooked: bool = False
+    notes: Optional[str] = Field(None, max_length=500)
+
+
+class MealPlanCreate(MealPlanBase):
+    pass
+
+
+class MealPlanUpdate(BaseModel):
+    date: Optional[date] = None
+    category: Optional[MealCategory] = None
+    recipe_id: Optional[int] = Field(None, ge=1)
+    custom_meal_name: Optional[str] = Field(None, max_length=200)
+    was_cooked: Optional[bool] = None
+    notes: Optional[str] = Field(None, max_length=500)
+
+
+class MealPlan(MealPlanBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    recipe: Optional[Recipe] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

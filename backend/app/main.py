@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
-from .routes import tasks, family_members, responsibilities, uploads, lists
+from .routes import tasks, family_members, responsibilities, uploads, lists, recipes, meal_plans
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 
@@ -32,6 +32,8 @@ app.include_router(family_members.router)
 app.include_router(responsibilities.router)
 app.include_router(uploads.router)
 app.include_router(lists.router)
+app.include_router(recipes.router)
+app.include_router(meal_plans.router)
 
 
 @app.get("/")
