@@ -1,0 +1,31 @@
+[ 2689961ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/AllDaySection.jsx?t=1770520317496:0
+[ 2689961ms] [ERROR] [vite] Failed to reload /src/components/calendar/AllDaySection.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2689981ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/CalendarPage.jsx?t=1770520317497:0
+[ 2689981ms] [ERROR] [vite] Failed to reload /src/components/calendar/CalendarPage.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2689985ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/DayView.jsx?t=1770520317498:0
+[ 2689985ms] [ERROR] [vite] Failed to reload /src/components/calendar/DayView.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2689989ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/EventFormModal.jsx?t=1770520317499:0
+[ 2689989ms] [ERROR] [vite] Failed to reload /src/components/calendar/EventFormModal.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2689994ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/FamilyMemberFilter.jsx?t=1770520317500:0
+[ 2689994ms] [ERROR] [vite] Failed to reload /src/components/calendar/FamilyMemberFilter.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690000ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/MobileDayList.jsx?t=1770520317501:0
+[ 2690000ms] [ERROR] [vite] Failed to reload /src/components/calendar/MobileDayList.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690003ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/MonthDayPopover.jsx?t=1770520317502:0
+[ 2690003ms] [ERROR] [vite] Failed to reload /src/components/calendar/MonthDayPopover.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690008ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/MonthView.jsx?t=1770520317503:0
+[ 2690008ms] [ERROR] [vite] Failed to reload /src/components/calendar/MonthView.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690015ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/CalendarHeader.jsx?t=1770520317504:0
+[ 2690015ms] [ERROR] [vite] Failed to reload /src/components/calendar/CalendarHeader.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690020ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/CalendarItem.jsx?t=1770520317505:0
+[ 2690020ms] [ERROR] [vite] Failed to reload /src/components/calendar/CalendarItem.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690024ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/TaskFormModal.jsx?t=1770520317506:0
+[ 2690024ms] [ERROR] [vite] Failed to reload /src/components/calendar/TaskFormModal.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690027ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/QuickAddPopover.jsx?t=1770520317507:0
+[ 2690027ms] [ERROR] [vite] Failed to reload /src/components/calendar/QuickAddPopover.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690031ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/TimeGrid.jsx?t=1770520317508:0
+[ 2690031ms] [ERROR] [vite] Failed to reload /src/components/calendar/TimeGrid.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690033ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/WeekViewDesktop.jsx?t=1770520317509:0
+[ 2690034ms] [ERROR] [vite] Failed to reload /src/components/calendar/WeekViewDesktop.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2690036ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/components/calendar/WeekViewMobile.jsx?t=1770520317510:0
+[ 2690036ms] [ERROR] [vite] Failed to reload /src/components/calendar/WeekViewMobile.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 2699760ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/src/pages/Dashboard.jsx?t=1770520326889:0

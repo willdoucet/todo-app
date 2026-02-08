@@ -72,16 +72,16 @@ export default function ResponsibilitiesPage() {
     }
   }
 
-  const toggleCompletion = async (responsibilityId, memberId) => {
+  const toggleCompletion = async (responsibilityId, memberId, category) => {
     try {
       const response = await axios.post(
-        `${API_BASE}/responsibilities/${responsibilityId}/complete?date=${dateString}&family_member_id=${memberId}`
+        `${API_BASE}/responsibilities/${responsibilityId}/complete?date=${dateString}&family_member_id=${memberId}&category=${category}`
       )
       if (response.data.completed) {
         setCompletions([...completions, response.data.completion])
       } else {
         setCompletions(completions.filter(
-          c => !(c.responsibility_id === responsibilityId && c.family_member_id === memberId)
+          c => !(c.responsibility_id === responsibilityId && c.family_member_id === memberId && c.category === category)
         ))
       }
     } catch (err) {
@@ -116,9 +116,11 @@ export default function ResponsibilitiesPage() {
       if (editingResponsibility) {
         // Update existing responsibility
         await axios.patch(`${API_BASE}/responsibilities/${data.id}`, {
-          category: data.category,
+          description: data.description,
+          categories: data.categories,
           assigned_to: data.assigned_to,
           frequency: data.frequency,
+          icon_url: data.icon_url,
         })
         setEditingResponsibility(null)
       } else {
@@ -331,12 +333,12 @@ function EditResponsibilitiesView({ responsibilities, isLoading, onEdit, onDelet
     return <EmptyResponsibilitiesState onAction={onAdd} />
   }
 
-  // Group by category
+  // Group by category (a responsibility with multiple categories appears in each)
   const grouped = {
-    MORNING: responsibilities.filter(r => r.category === 'MORNING'),
-    AFTERNOON: responsibilities.filter(r => r.category === 'AFTERNOON'),
-    EVENING: responsibilities.filter(r => r.category === 'EVENING'),
-    CHORE: responsibilities.filter(r => r.category === 'CHORE'),
+    MORNING: responsibilities.filter(r => r.categories.includes('MORNING')),
+    AFTERNOON: responsibilities.filter(r => r.categories.includes('AFTERNOON')),
+    EVENING: responsibilities.filter(r => r.categories.includes('EVENING')),
+    CHORE: responsibilities.filter(r => r.categories.includes('CHORE')),
   }
 
   return (

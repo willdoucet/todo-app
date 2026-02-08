@@ -73,7 +73,7 @@ class Responsibility(Base):
     __tablename__ = "responsibilities"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True, nullable=False)
-    category = Column(SQLEnum(ResponsibilityCategory), nullable=False)
+    categories = Column(ARRAY(String), nullable=False)  # e.g. ["MORNING", "EVENING"]
     assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=False)
     frequency = Column(ARRAY(String), nullable=False)
     icon_url = Column(String, nullable=True)  # Path to icon/image
@@ -97,6 +97,7 @@ class ResponsibilityCompletion(Base):
     )
     family_member_id = Column(Integer, ForeignKey("family_members.id"), nullable=False)
     completion_date = Column(Date, nullable=False)
+    category = Column(String, nullable=False)  # Which category was completed
 
     responsibility = relationship("Responsibility", back_populates="completions")
     family_member = relationship("FamilyMember")
@@ -107,7 +108,8 @@ class ResponsibilityCompletion(Base):
         UniqueConstraint(
             "responsibility_id",
             "completion_date",
-            name="uq_responsibility_completion_date",
+            "category",
+            name="uq_responsibility_completion_date_category",
         ),
     )
 

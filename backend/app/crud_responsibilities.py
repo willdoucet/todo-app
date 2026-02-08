@@ -17,7 +17,7 @@ async def get_responsibilities(
         .options(selectinload(models.Responsibility.family_member))
         .offset(skip)
         .limit(limit)
-        .order_by(models.Responsibility.category, models.Responsibility.title)
+        .order_by(models.Responsibility.title)
     )
     if assigned_to:
         stmt = stmt.where(models.Responsibility.assigned_to == assigned_to)
@@ -88,6 +88,7 @@ async def toggle_completion(
     responsibility_id: int,
     target_date: date,
     family_member_id: int,
+    category: str,
 ):
 
     # First verify the responsibility exists
@@ -95,12 +96,13 @@ async def toggle_completion(
     if not responsibility:
         return None, False
 
-    # Check if completion already exists for this date
+    # Check if completion already exists for this date + category
     stmt = select(models.ResponsibilityCompletion).where(
         and_(
             models.ResponsibilityCompletion.responsibility_id == responsibility_id,
             models.ResponsibilityCompletion.completion_date == target_date,
             models.ResponsibilityCompletion.family_member_id == family_member_id,
+            models.ResponsibilityCompletion.category == category,
         )
     )
     result = await db.execute(stmt)
@@ -117,6 +119,7 @@ async def toggle_completion(
             responsibility_id=responsibility_id,
             family_member_id=family_member_id,
             completion_date=target_date,
+            category=category,
         )
         db.add(completion)
         await db.commit()

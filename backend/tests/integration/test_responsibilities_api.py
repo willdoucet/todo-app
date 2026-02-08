@@ -2,9 +2,9 @@
 Integration tests for /responsibilities API endpoints.
 
 Responsibilities are recurring tasks with:
-- Category (MORNING, AFTERNOON, EVENING, CHORE)
+- Categories (list of MORNING, AFTERNOON, EVENING, CHORE)
 - Frequency (list of days like ["monday", "tuesday"])
-- Completion tracking per date and family member
+- Completion tracking per date, family member, and category
 """
 
 import pytest
@@ -33,7 +33,7 @@ class TestGetResponsibilities:
         data = response.json()
         assert len(data) == 1
         assert data[0]["title"] == "Make bed"
-        assert data[0]["category"] == "MORNING"
+        assert data[0]["categories"] == ["MORNING"]
         assert data[0]["frequency"] == ["monday", "tuesday", "wednesday", "thursday", "friday"]
         # Verify nested relationship
         assert "family_member" in data[0]
@@ -52,14 +52,14 @@ class TestGetResponsibilities:
         # Responsibility for test_family_member
         resp1 = Responsibility(
             title="Task for Test User",
-            category="MORNING",
+            categories=["MORNING"],
             assigned_to=test_family_member.id,
             frequency=["monday"],
         )
         # Responsibility for other_member
         resp2 = Responsibility(
             title="Task for Other User",
-            category="EVENING",
+            categories=["EVENING"],
             assigned_to=other_member.id,
             frequency=["friday"],
         )
@@ -92,7 +92,7 @@ class TestGetResponsibility:
         assert data["id"] == test_responsibility.id
         assert data["title"] == "Make bed"
         assert data["description"] == "Make your bed every morning"
-        assert data["category"] == "MORNING"
+        assert data["categories"] == ["MORNING"]
         assert data["family_member"]["name"] == "Test User"
 
     async def test_returns_404_when_not_found(self, client):
@@ -114,7 +114,7 @@ class TestCreateResponsibility:
         """Should create a responsibility and return 201."""
         new_resp = {
             "title": "Do homework",
-            "category": "AFTERNOON",
+            "categories": ["AFTERNOON"],
             "assigned_to": test_family_member.id,
             "frequency": ["monday", "wednesday", "friday"],
         }
@@ -124,17 +124,32 @@ class TestCreateResponsibility:
         assert response.status_code == 201
         data = response.json()
         assert data["title"] == "Do homework"
-        assert data["category"] == "AFTERNOON"
+        assert data["categories"] == ["AFTERNOON"]
         assert data["frequency"] == ["monday", "wednesday", "friday"]
         assert "id" in data
         assert data["family_member"]["id"] == test_family_member.id
+
+    async def test_creates_responsibility_with_multiple_categories(self, client, test_family_member):
+        """Should create a responsibility with multiple categories."""
+        new_resp = {
+            "title": "Brush teeth",
+            "categories": ["MORNING", "EVENING"],
+            "assigned_to": test_family_member.id,
+            "frequency": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+        }
+
+        response = await client.post("/responsibilities/", json=new_resp)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["categories"] == ["MORNING", "EVENING"]
 
     async def test_creates_responsibility_with_all_fields(self, client, test_family_member):
         """Should create a responsibility with optional fields."""
         new_resp = {
             "title": "Evening routine",
             "description": "Brush teeth, read book",
-            "category": "EVENING",
+            "categories": ["EVENING"],
             "assigned_to": test_family_member.id,
             "frequency": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
             "icon_url": "/uploads/icon.png",
@@ -151,7 +166,7 @@ class TestCreateResponsibility:
         """Should return 422 when frequency list is empty."""
         invalid = {
             "title": "No days",
-            "category": "MORNING",
+            "categories": ["MORNING"],
             "assigned_to": test_family_member.id,
             "frequency": [],  # Empty - not allowed
         }
@@ -164,7 +179,20 @@ class TestCreateResponsibility:
         """Should return 422 when category is invalid."""
         invalid = {
             "title": "Bad category",
-            "category": "INVALID",
+            "categories": ["INVALID"],
+            "assigned_to": test_family_member.id,
+            "frequency": ["monday"],
+        }
+
+        response = await client.post("/responsibilities/", json=invalid)
+
+        assert response.status_code == 422
+
+    async def test_rejects_empty_categories(self, client, test_family_member):
+        """Should return 422 when categories list is empty."""
+        invalid = {
+            "title": "No categories",
+            "categories": [],
             "assigned_to": test_family_member.id,
             "frequency": ["monday"],
         }
@@ -193,9 +221,9 @@ class TestUpdateResponsibility:
         assert response.status_code == 200
         assert response.json()["title"] == "Updated Title"
 
-    async def test_updates_category(self, client, test_responsibility):
-        """Should update the category."""
-        update_data = {"category": "CHORE"}
+    async def test_updates_categories(self, client, test_responsibility):
+        """Should update the categories."""
+        update_data = {"categories": ["CHORE"]}
 
         response = await client.patch(
             f"/responsibilities/{test_responsibility.id}",
@@ -203,7 +231,19 @@ class TestUpdateResponsibility:
         )
 
         assert response.status_code == 200
-        assert response.json()["category"] == "CHORE"
+        assert response.json()["categories"] == ["CHORE"]
+
+    async def test_updates_to_multiple_categories(self, client, test_responsibility):
+        """Should update to multiple categories."""
+        update_data = {"categories": ["MORNING", "EVENING"]}
+
+        response = await client.patch(
+            f"/responsibilities/{test_responsibility.id}",
+            json=update_data,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["categories"] == ["MORNING", "EVENING"]
 
     async def test_updates_frequency(self, client, test_responsibility):
         """Should update the frequency."""
@@ -276,7 +316,7 @@ class TestGetCompletions:
         target_date = "2024-06-15"
         await client.post(
             f"/responsibilities/{test_responsibility.id}/complete"
-            f"?date={target_date}&family_member_id={test_family_member.id}"
+            f"?date={target_date}&family_member_id={test_family_member.id}&category=MORNING"
         )
 
         # Now fetch completions for that date
@@ -287,6 +327,7 @@ class TestGetCompletions:
         assert len(data) == 1
         assert data[0]["responsibility_id"] == test_responsibility.id
         assert data[0]["family_member_id"] == test_family_member.id
+        assert data[0]["category"] == "MORNING"
 
 
 # =============================================================================
@@ -304,7 +345,7 @@ class TestToggleCompletion:
 
         response = await client.post(
             f"/responsibilities/{test_responsibility.id}/complete"
-            f"?date={target_date}&family_member_id={test_family_member.id}"
+            f"?date={target_date}&family_member_id={test_family_member.id}&category=MORNING"
         )
 
         assert response.status_code == 200
@@ -312,6 +353,7 @@ class TestToggleCompletion:
         assert data["completed"] is True
         assert data["completion"] is not None
         assert data["completion"]["responsibility_id"] == test_responsibility.id
+        assert data["completion"]["category"] == "MORNING"
 
     async def test_marks_responsibility_incomplete(
         self, client, test_responsibility, test_family_member
@@ -320,7 +362,7 @@ class TestToggleCompletion:
         target_date = "2024-06-15"
         url = (
             f"/responsibilities/{test_responsibility.id}/complete"
-            f"?date={target_date}&family_member_id={test_family_member.id}"
+            f"?date={target_date}&family_member_id={test_family_member.id}&category=MORNING"
         )
 
         # First toggle: complete
@@ -338,7 +380,7 @@ class TestToggleCompletion:
         """Should return 404 when responsibility doesn't exist."""
         response = await client.post(
             f"/responsibilities/99999/complete"
-            f"?date=2024-06-15&family_member_id={test_family_member.id}"
+            f"?date=2024-06-15&family_member_id={test_family_member.id}&category=MORNING"
         )
 
         assert response.status_code == 404
@@ -354,14 +396,14 @@ class TestToggleCompletion:
         # Complete on date1
         resp1 = await client.post(
             f"/responsibilities/{test_responsibility.id}/complete"
-            f"?date={date1}&family_member_id={member_id}"
+            f"?date={date1}&family_member_id={member_id}&category=MORNING"
         )
         assert resp1.json()["completed"] is True
 
         # Complete on date2 (independent)
         resp2 = await client.post(
             f"/responsibilities/{test_responsibility.id}/complete"
-            f"?date={date2}&family_member_id={member_id}"
+            f"?date={date2}&family_member_id={member_id}&category=MORNING"
         )
         assert resp2.json()["completed"] is True
 
@@ -374,7 +416,7 @@ class TestToggleCompletion:
         # Uncomplete date1, date2 should remain
         resp3 = await client.post(
             f"/responsibilities/{test_responsibility.id}/complete"
-            f"?date={date1}&family_member_id={member_id}"
+            f"?date={date1}&family_member_id={member_id}&category=MORNING"
         )
         assert resp3.json()["completed"] is False
 
@@ -382,3 +424,57 @@ class TestToggleCompletion:
         completions2_after = await client.get(f"/responsibilities/completions?date={date2}")
         assert len(completions1_after.json()) == 0  # Uncompleted
         assert len(completions2_after.json()) == 1  # Still complete
+
+    async def test_completions_are_per_category(
+        self, client, db_session, test_family_member
+    ):
+        """Completions for different categories are independent."""
+        from app.models import Responsibility
+
+        # Create a multi-category responsibility
+        resp = Responsibility(
+            title="Brush teeth",
+            categories=["MORNING", "EVENING"],
+            assigned_to=test_family_member.id,
+            frequency=["monday", "tuesday", "wednesday", "thursday", "friday"],
+        )
+        db_session.add(resp)
+        await db_session.commit()
+        await db_session.refresh(resp)
+
+        target_date = "2024-06-15"
+        member_id = test_family_member.id
+
+        # Complete MORNING
+        resp1 = await client.post(
+            f"/responsibilities/{resp.id}/complete"
+            f"?date={target_date}&family_member_id={member_id}&category=MORNING"
+        )
+        assert resp1.json()["completed"] is True
+
+        # Complete EVENING (independent)
+        resp2 = await client.post(
+            f"/responsibilities/{resp.id}/complete"
+            f"?date={target_date}&family_member_id={member_id}&category=EVENING"
+        )
+        assert resp2.json()["completed"] is True
+
+        # Verify: both categories have completions
+        completions = await client.get(f"/responsibilities/completions?date={target_date}")
+        data = completions.json()
+        assert len(data) == 2
+        categories = [c["category"] for c in data]
+        assert "MORNING" in categories
+        assert "EVENING" in categories
+
+        # Uncomplete MORNING, EVENING should remain
+        resp3 = await client.post(
+            f"/responsibilities/{resp.id}/complete"
+            f"?date={target_date}&family_member_id={member_id}&category=MORNING"
+        )
+        assert resp3.json()["completed"] is False
+
+        completions_after = await client.get(f"/responsibilities/completions?date={target_date}")
+        data_after = completions_after.json()
+        assert len(data_after) == 1
+        assert data_after[0]["category"] == "EVENING"

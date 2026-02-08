@@ -215,7 +215,7 @@ class TestResponsibilityCreate:
         """Minimal valid responsibility data."""
         return {
             "title": "Make bed",
-            "category": "MORNING",
+            "categories": ["MORNING"],
             "assigned_to": 1,
             "frequency": ["monday", "tuesday"],
         }
@@ -224,25 +224,31 @@ class TestResponsibilityCreate:
         """Should accept valid responsibility data."""
         resp = ResponsibilityCreate(**valid_responsibility_data)
         assert resp.title == "Make bed"
-        assert resp.category == ResponsibilityCategory.MORNING
+        assert resp.categories == [ResponsibilityCategory.MORNING]
         assert resp.assigned_to == 1
         assert resp.frequency == ["monday", "tuesday"]
 
     def test_valid_all_categories(self, valid_responsibility_data):
         """Should accept all valid category values."""
         for category in ["MORNING", "AFTERNOON", "EVENING", "CHORE"]:
-            valid_responsibility_data["category"] = category
+            valid_responsibility_data["categories"] = [category]
             resp = ResponsibilityCreate(**valid_responsibility_data)
-            assert resp.category.value == category
+            assert resp.categories[0].value == category
+
+    def test_valid_multiple_categories(self, valid_responsibility_data):
+        """Should accept multiple categories."""
+        valid_responsibility_data["categories"] = ["MORNING", "EVENING"]
+        resp = ResponsibilityCreate(**valid_responsibility_data)
+        assert len(resp.categories) == 2
 
     def test_rejects_invalid_category(self, valid_responsibility_data):
         """Should reject invalid category value."""
-        valid_responsibility_data["category"] = "INVALID"
+        valid_responsibility_data["categories"] = ["INVALID"]
         with pytest.raises(ValidationError) as exc_info:
             ResponsibilityCreate(**valid_responsibility_data)
 
         errors = exc_info.value.errors()
-        assert any(e["loc"] == ("category",) for e in errors)
+        assert any("categories" in str(e["loc"]) for e in errors)
 
     def test_rejects_empty_frequency(self, valid_responsibility_data):
         """Should reject empty frequency list (min_length=1)."""
@@ -373,15 +379,19 @@ class TestUpdateSchemas:
         with pytest.raises(ValidationError):
             FamilyMemberUpdate(name="A" * 51)  # too long
 
-    def test_responsibility_update_validates_category(self):
-        """ResponsibilityUpdate should validate category if provided."""
-        # Valid category
-        update = ResponsibilityUpdate(category=ResponsibilityCategory.EVENING)
-        assert update.category == ResponsibilityCategory.EVENING
+    def test_responsibility_update_validates_categories(self):
+        """ResponsibilityUpdate should validate categories if provided."""
+        # Valid categories
+        update = ResponsibilityUpdate(categories=[ResponsibilityCategory.EVENING])
+        assert update.categories == [ResponsibilityCategory.EVENING]
+
+        # Multiple valid categories
+        update2 = ResponsibilityUpdate(categories=[ResponsibilityCategory.MORNING, ResponsibilityCategory.EVENING])
+        assert len(update2.categories) == 2
 
         # Invalid category
         with pytest.raises(ValidationError):
-            ResponsibilityUpdate(category="INVALID")
+            ResponsibilityUpdate(categories=["INVALID"])
 
 
 # =============================================================================
