@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -16,10 +18,21 @@ router = APIRouter(
 async def get_tasks(
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db),
     list_id: int = None,
+    start_date: date = None,
+    end_date: date = None,
+    assigned_to: int = None,
+    db: AsyncSession = Depends(get_db),
 ):
-    tasks = await crud_tasks.get_tasks(db, skip=skip, limit=limit, list_id=list_id)
+    tasks = await crud_tasks.get_tasks(
+        db,
+        skip=skip,
+        limit=limit,
+        list_id=list_id,
+        start_date=start_date,
+        end_date=end_date,
+        assigned_to=assigned_to,
+    )
     return tasks
 
 

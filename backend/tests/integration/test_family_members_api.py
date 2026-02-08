@@ -33,6 +33,7 @@ class TestGetFamilyMembers:
         assert len(data) == 1
         assert data[0]["name"] == "Test User"
         assert data[0]["is_system"] is False
+        assert data[0]["color"] == "#3B82F6"
 
     async def test_returns_system_member_first(self, client, test_system_member, test_family_member):
         """Should return 'Everyone' (system member) first in the list."""
@@ -143,6 +144,18 @@ class TestUpdateFamilyMember:
 
         assert response.status_code == 200
         assert response.json()["name"] == "Updated Name"
+
+    async def test_updates_color(self, client, test_family_member):
+        """Should update the member's color."""
+        update_data = {"color": "#EC4899"}
+
+        response = await client.patch(
+            f"/family-members/{test_family_member.id}",
+            json=update_data,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["color"] == "#EC4899"
 
     async def test_updates_photo_url(self, client, test_family_member):
         """Should update the member's photo URL."""

@@ -1,3 +1,5 @@
+from datetime import date, datetime, time
+
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -5,7 +7,13 @@ from . import models, schemas
 
 
 async def get_tasks(
-    db: AsyncSession, skip: int = 0, limit: int = 10, list_id: int = None
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 10,
+    list_id: int = None,
+    start_date: date = None,
+    end_date: date = None,
+    assigned_to: int = None,
 ):
     stmt = (
         select(models.Task)
@@ -14,6 +22,12 @@ async def get_tasks(
     )
     if list_id is not None:
         stmt = stmt.where(models.Task.list_id == list_id)
+    if start_date is not None:
+        stmt = stmt.where(models.Task.due_date >= datetime.combine(start_date, time.min))
+    if end_date is not None:
+        stmt = stmt.where(models.Task.due_date <= datetime.combine(end_date, time(23, 59, 59)))
+    if assigned_to is not None:
+        stmt = stmt.where(models.Task.assigned_to == assigned_to)
 
     stmt = stmt.offset(skip).limit(limit).order_by(models.Task.created_at.desc())
     result = await db.execute(stmt)
