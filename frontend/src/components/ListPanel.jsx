@@ -127,12 +127,16 @@ export default function ListPanel({
         role="button"
         tabIndex={0}
         className={`
-          group flex items-center gap-3 rounded-lg cursor-pointer transition-colors duration-150
+          group flex items-center gap-3 cursor-pointer transition-all duration-200
           focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900
-          ${isMobile ? 'px-4 py-3.5' : 'px-3 py-2.5'}
+          ${isMobile ? 'px-4 py-3.5 rounded-lg' : 'mx-3 px-4 py-3 rounded-xl'}
           ${isSelected
-            ? 'bg-gray-100 dark:bg-gray-800'
-            : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+            ? isMobile
+              ? 'bg-gray-100 dark:bg-gray-800'
+              : 'bg-peach-100 text-terracotta-600 dark:bg-blue-600 dark:text-white shadow-sm'
+            : isMobile
+              ? 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+              : 'hover:bg-warm-beige dark:hover:bg-gray-700'
           }
         `}
         onClick={handleSelect}
@@ -148,10 +152,12 @@ export default function ListPanel({
         {/* List name */}
         <TruncatedText
           className={`
-            flex-1 min-w-0 text-sm transition-colors block
+            flex-1 min-w-0 text-sm font-medium transition-colors block
             ${isSelected
-              ? 'text-gray-900 dark:text-gray-100 font-medium'
-              : 'text-gray-600 dark:text-gray-300'
+              ? isMobile
+                ? 'text-gray-900 dark:text-gray-100'
+                : 'text-terracotta-600 dark:text-white'
+              : 'text-text-secondary dark:text-gray-300'
             }
           `}
         >
@@ -179,7 +185,7 @@ export default function ListPanel({
                 e.stopPropagation()
                 openEditForm(list)
               }}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500"
+              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500"
               aria-label={`Edit ${list.name}`}
             >
               <PencilIcon className="w-3.5 h-3.5" />
@@ -189,7 +195,7 @@ export default function ListPanel({
                 e.stopPropagation()
                 handleDeleteClick(list)
               }}
-              className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-md hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
               aria-label={`Delete ${list.name}`}
             >
               <TrashIcon className="w-3.5 h-3.5" />
@@ -294,15 +300,15 @@ export default function ListPanel({
         </Dialog>
       </Transition>
 
-      {/* Desktop: Fixed side panel */}
-      <aside className="hidden sm:flex fixed left-[5.5rem] top-4 bottom-4 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl flex-col z-10">
+      {/* Desktop: In-flow side panel */}
+      <aside className="hidden sm:flex flex-shrink-0 w-56 bg-warm-sand/50 dark:bg-gray-800/50 border-r border-card-border dark:border-gray-700 flex-col h-full">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Lists</h2>
+        <div className="p-6 border-b border-card-border dark:border-gray-700">
+          <h2 className="text-xl font-bold text-text-primary dark:text-gray-100">Lists</h2>
         </div>
 
         {/* List items */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <div className="flex-1 overflow-y-auto py-4 space-y-0.5">
           {isLoading ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 dark:border-t-gray-300" />
@@ -317,10 +323,10 @@ export default function ListPanel({
         </div>
 
         {/* Create button */}
-        <div className="p-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="p-3 border-t border-card-border dark:border-gray-700">
           <button
             onClick={openCreateForm}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-text-muted dark:text-gray-400 hover:text-terracotta-600 dark:hover:text-gray-200 hover:bg-warm-beige dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
             <PlusIcon className="w-4 h-4" />
             New List
