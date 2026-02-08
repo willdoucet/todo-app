@@ -86,9 +86,9 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
     if (categories.length === 0) return
 
     if (isEditMode) {
-      // Only send editable fields in edit mode
       onSubmit({
         id: initial.id,
+        title: title.trim(),
         description: description.trim() || null,
         categories,
         assigned_to: assignedTo,
@@ -97,7 +97,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
       })
     } else {
       onSubmit({
-        title,
+        title: title.trim(),
         description: description.trim() || null,
         categories,
         assigned_to: assignedTo,
@@ -112,28 +112,22 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
       {/* Title */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
-          Title {!isEditMode && <span className="text-red-500 dark:text-red-400">*</span>}
+          Title <span className="text-red-500 dark:text-red-400">*</span>
         </label>
-        {isEditMode ? (
-          <div className="px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-700 rounded-lg bg-warm-beige dark:bg-gray-800 text-text-secondary dark:text-gray-300 text-sm sm:text-base">
-            {title}
-          </div>
-        ) : (
-          <input
-            type="text"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            required
-            placeholder="Enter responsibility title"
-            className="
-              w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
-              rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
-              focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
-              outline-none transition text-sm sm:text-base
-              placeholder:text-text-muted dark:placeholder:text-gray-500
-            "
-          />
-        )}
+        <input
+          type="text"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          required
+          placeholder="Enter responsibility title"
+          className="
+            w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
+            rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+            focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
+            outline-none transition text-sm sm:text-base
+            placeholder:text-text-muted dark:placeholder:text-gray-500
+          "
+        />
       </div>
 
       {/* Description */}

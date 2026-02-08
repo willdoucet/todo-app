@@ -116,6 +116,7 @@ export default function ResponsibilitiesPage() {
       if (editingResponsibility) {
         // Update existing responsibility
         await axios.patch(`${API_BASE}/responsibilities/${data.id}`, {
+          title: data.title,
           description: data.description,
           categories: data.categories,
           assigned_to: data.assigned_to,

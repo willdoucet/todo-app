@@ -94,10 +94,13 @@ export default function ScheduleView({
     return { completed, total }
   }
 
-  // Group responsibilities by category
+  // Group responsibilities by category (only the selected category when filtered)
   const groupByCategory = (items) => {
     const grouped = {}
-    CATEGORIES.forEach(cat => {
+    const categoriesToShow = selectedCategory
+      ? CATEGORIES.filter(cat => cat.id === selectedCategory)
+      : CATEGORIES
+    categoriesToShow.forEach(cat => {
       const categoryItems = items.filter(r => r.categories.includes(cat.id))
       if (categoryItems.length > 0) {
         grouped[cat.id] = categoryItems

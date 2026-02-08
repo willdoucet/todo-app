@@ -217,12 +217,13 @@ describe('ResponsibilityForm', () => {
       icon_url: null,
     }
 
-    it('shows title as readonly text in edit mode', () => {
+    it('shows title as editable input in edit mode', () => {
       render(<ResponsibilityForm {...defaultProps} initial={existingResponsibility} />)
 
-      // Should show title as text, not input
-      expect(screen.getByText('Make bed')).toBeInTheDocument()
-      expect(screen.queryByPlaceholderText('Enter responsibility title')).not.toBeInTheDocument()
+      // Should show title as editable input pre-filled with existing value
+      const titleInput = screen.getByPlaceholderText('Enter responsibility title')
+      expect(titleInput).toBeInTheDocument()
+      expect(titleInput.value).toBe('Make bed')
     })
 
     it('pre-fills description from initial data', () => {
@@ -249,7 +250,7 @@ describe('ResponsibilityForm', () => {
       expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument()
     })
 
-    it('excludes title from submission in edit mode', async () => {
+    it('includes title in submission in edit mode', async () => {
       const onSubmit = vi.fn()
       const user = userEvent.setup()
 
@@ -264,13 +265,10 @@ describe('ResponsibilityForm', () => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 1,
+          title: 'Make bed',
           categories: ['MORNING'],
           frequency: ['Monday', 'Wednesday', 'Friday'],
         })
-      )
-      // Should not include title in edit mode
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.not.objectContaining({ title: expect.anything() })
       )
     })
 
