@@ -32,9 +32,9 @@ const API_BASE = 'http://localhost:8000'
 // =============================================================================
 
 const mockFamilyMembers = [
-  { id: 1, name: 'Everyone', is_system: true, photo_url: null },
-  { id: 2, name: 'Alice', is_system: false, photo_url: null },
-  { id: 3, name: 'Bob', is_system: false, photo_url: null },
+  { id: 1, name: 'Everyone', is_system: true, photo_url: null, color: '#D97452' },
+  { id: 2, name: 'Alice', is_system: false, photo_url: null, color: '#3B82F6' },
+  { id: 3, name: 'Bob', is_system: false, photo_url: null, color: '#EF4444' },
 ]
 
 const mockLists = [
@@ -123,6 +123,39 @@ const mockRecipes = [
   },
 ]
 
+const mockCalendarEvents = [
+  {
+    id: 1,
+    title: 'Team meeting',
+    description: 'Weekly sync',
+    date: new Date().toISOString().split('T')[0],
+    start_time: '09:00',
+    end_time: '10:00',
+    all_day: false,
+    source: 'MANUAL',
+    external_id: null,
+    assigned_to: 2,
+    family_member: mockFamilyMembers[1],
+    created_at: '2026-01-15T10:00:00Z',
+    updated_at: null,
+  },
+  {
+    id: 2,
+    title: 'School holiday',
+    description: null,
+    date: new Date().toISOString().split('T')[0],
+    start_time: null,
+    end_time: null,
+    all_day: true,
+    source: 'MANUAL',
+    external_id: null,
+    assigned_to: null,
+    family_member: null,
+    created_at: '2026-01-10T10:00:00Z',
+    updated_at: null,
+  },
+]
+
 const mockMealPlans = [
   {
     id: 1,
@@ -198,10 +231,22 @@ export const handlers = [
   http.get(`${API_BASE}/tasks`, ({ request }) => {
     const url = new URL(request.url)
     const listId = url.searchParams.get('list_id')
+    const startDate = url.searchParams.get('start_date')
+    const endDate = url.searchParams.get('end_date')
+    const assignedTo = url.searchParams.get('assigned_to')
 
     let tasks = mockTasks
     if (listId) {
-      tasks = mockTasks.filter((t) => t.list_id === Number(listId))
+      tasks = tasks.filter((t) => t.list_id === Number(listId))
+    }
+    if (startDate) {
+      tasks = tasks.filter((t) => t.due_date && t.due_date >= startDate)
+    }
+    if (endDate) {
+      tasks = tasks.filter((t) => t.due_date && t.due_date <= endDate)
+    }
+    if (assignedTo) {
+      tasks = tasks.filter((t) => t.assigned_to === Number(assignedTo))
     }
     return HttpResponse.json(tasks)
   }),
@@ -351,5 +396,72 @@ export const handlers = [
       return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
     }
     return HttpResponse.json(mealPlan)
+  }),
+
+  // -------------------------------------------------------------------------
+  // Calendar Events
+  // -------------------------------------------------------------------------
+  http.get(`${API_BASE}/calendar-events`, ({ request }) => {
+    const url = new URL(request.url)
+    const startDate = url.searchParams.get('start_date')
+    const endDate = url.searchParams.get('end_date')
+    const assignedTo = url.searchParams.get('assigned_to')
+
+    let events = mockCalendarEvents
+    if (startDate) {
+      events = events.filter((e) => e.date >= startDate)
+    }
+    if (endDate) {
+      events = events.filter((e) => e.date <= endDate)
+    }
+    if (assignedTo) {
+      events = events.filter((e) => e.assigned_to === Number(assignedTo))
+    }
+    return HttpResponse.json(events)
+  }),
+
+  http.get(`${API_BASE}/calendar-events/:id`, ({ params }) => {
+    const event = mockCalendarEvents.find((e) => e.id === Number(params.id))
+    if (!event) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    return HttpResponse.json(event)
+  }),
+
+  http.post(`${API_BASE}/calendar-events`, async ({ request }) => {
+    const body = await request.json()
+    const newEvent = {
+      id: mockCalendarEvents.length + 1,
+      family_member: body.assigned_to
+        ? mockFamilyMembers.find((m) => m.id === body.assigned_to) || null
+        : null,
+      created_at: new Date().toISOString(),
+      updated_at: null,
+      ...body,
+    }
+    return HttpResponse.json(newEvent, { status: 201 })
+  }),
+
+  http.patch(`${API_BASE}/calendar-events/:id`, async ({ params, request }) => {
+    const body = await request.json()
+    const event = mockCalendarEvents.find((e) => e.id === Number(params.id))
+    if (!event) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    if (event.source !== 'MANUAL') {
+      return HttpResponse.json({ detail: 'Cannot modify synced events' }, { status: 400 })
+    }
+    return HttpResponse.json({ ...event, ...body, updated_at: new Date().toISOString() })
+  }),
+
+  http.delete(`${API_BASE}/calendar-events/:id`, ({ params }) => {
+    const event = mockCalendarEvents.find((e) => e.id === Number(params.id))
+    if (!event) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    if (event.source !== 'MANUAL') {
+      return HttpResponse.json({ detail: 'Cannot delete synced events' }, { status: 400 })
+    }
+    return HttpResponse.json(event)
   }),
 ]

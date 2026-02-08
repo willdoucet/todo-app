@@ -32,12 +32,19 @@ class MealCategory(PyEnum):
     DINNER = "DINNER"
 
 
+class CalendarEventSource(PyEnum):
+    MANUAL = "MANUAL"
+    ICLOUD = "ICLOUD"
+    GOOGLE = "GOOGLE"
+
+
 class FamilyMember(Base):
     __tablename__ = "family_members"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     is_system = Column(Boolean, default=False, nullable=False)
     photo_url = Column(String, nullable=True)  # Path to uploaded photo
+    color = Column(String, nullable=True)  # Hex color for calendar display
 
     tasks = relationship("Task", back_populates="family_member")
     responsibilities = relationship("Responsibility", back_populates="family_member")
@@ -141,6 +148,28 @@ class MealPlan(Base):
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
     recipe = relationship("Recipe", back_populates="meal_plans")
+
+
+class CalendarEvent(Base):
+    __tablename__ = "calendar_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    date = Column(Date, index=True, nullable=False)
+    start_time = Column(String, nullable=True)  # HH:MM format, null = all-day
+    end_time = Column(String, nullable=True)  # HH:MM format, null = all-day
+    all_day = Column(Boolean, default=False)
+    source = Column(
+        SQLEnum(CalendarEventSource),
+        default=CalendarEventSource.MANUAL,
+        nullable=False,
+    )
+    external_id = Column(String, nullable=True, unique=True)
+    assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=True)
+    family_member = relationship("FamilyMember")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
 
 class List(Base):

@@ -45,7 +45,7 @@ jobs:
       - name: Run integration tests
         working-directory: backend
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/todo_app_test
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/todo_app_test
         run: uv run pytest tests/integration -v
 
   frontend-tests:

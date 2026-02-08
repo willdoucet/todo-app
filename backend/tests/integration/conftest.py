@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy import text
 from httpx import AsyncClient, ASGITransport
 
-from app.models import Base, FamilyMember, List, Task
+from app.models import Base, FamilyMember, List, Task, CalendarEvent
 from app.main import app
 from app.database import get_db
 
@@ -35,9 +35,11 @@ def postgres_url():
     For CI (GitHub Actions), uses the service container.
     For local development, uses testcontainers to spin up PostgreSQL.
     """
-    # Check if running in CI with pre-configured DATABASE_URL
-    if os.environ.get("DATABASE_URL"):
-        return os.environ["DATABASE_URL"]
+    # Check if running in CI with pre-configured test database
+    # NOTE: Uses TEST_DATABASE_URL (not DATABASE_URL) to avoid accidentally
+    # connecting to the live dev database when running inside docker-compose.
+    if os.environ.get("TEST_DATABASE_URL"):
+        return os.environ["TEST_DATABASE_URL"]
 
     # Local development: use testcontainers
     from testcontainers.postgres import PostgresContainer
@@ -120,7 +122,7 @@ async def client(db_session):
 @pytest_asyncio.fixture
 async def test_family_member(db_session):
     """Create a test family member in the database."""
-    member = FamilyMember(name="Test User", is_system=False)
+    member = FamilyMember(name="Test User", is_system=False, color="#3B82F6")
     db_session.add(member)
     await db_session.commit()
     await db_session.refresh(member)
@@ -130,7 +132,7 @@ async def test_family_member(db_session):
 @pytest_asyncio.fixture
 async def test_system_member(db_session):
     """Create the system 'Everyone' member in the database."""
-    member = FamilyMember(name="Everyone", is_system=True)
+    member = FamilyMember(name="Everyone", is_system=True, color="#D97452")
     db_session.add(member)
     await db_session.commit()
     await db_session.refresh(member)
@@ -250,3 +252,65 @@ async def test_meal_plan(db_session, test_recipe):
     await db_session.commit()
     await db_session.refresh(meal_plan)
     return meal_plan
+
+
+# =============================================================================
+# Calendar Event Test Data Fixtures
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def test_calendar_event(db_session, test_family_member):
+    """Create a test calendar event in the database."""
+    from datetime import date
+
+    event = CalendarEvent(
+        title="Test Event",
+        description="A test event",
+        date=date(2026, 2, 10),
+        start_time="09:00",
+        end_time="10:00",
+        all_day=False,
+        source="MANUAL",
+        assigned_to=test_family_member.id,
+    )
+    db_session.add(event)
+    await db_session.commit()
+    await db_session.refresh(event)
+    return event
+
+
+@pytest_asyncio.fixture
+async def test_all_day_event(db_session):
+    """Create a test all-day calendar event in the database."""
+    from datetime import date
+
+    event = CalendarEvent(
+        title="All Day Event",
+        date=date(2026, 2, 10),
+        all_day=True,
+        source="MANUAL",
+    )
+    db_session.add(event)
+    await db_session.commit()
+    await db_session.refresh(event)
+    return event
+
+
+@pytest_asyncio.fixture
+async def test_synced_event(db_session):
+    """Create a test synced (non-MANUAL) calendar event."""
+    from datetime import date
+
+    event = CalendarEvent(
+        title="Synced Event",
+        date=date(2026, 2, 10),
+        start_time="14:00",
+        end_time="15:00",
+        source="ICLOUD",
+        external_id="icloud-123",
+    )
+    db_session.add(event)
+    await db_session.commit()
+    await db_session.refresh(event)
+    return event

@@ -20,6 +20,7 @@ def sample_family_member_data():
         "name": "Alice",
         "is_system": False,
         "photo_url": None,
+        "color": "#3B82F6",
     }
 
 
@@ -91,6 +92,7 @@ def mock_family_member():
     member.name = "Alice"
     member.is_system = False
     member.photo_url = None
+    member.color = "#3B82F6"
     member.created_at = datetime.now()
     member.updated_at = datetime.now()
     return member
@@ -104,6 +106,7 @@ def mock_system_member():
     member.name = "Everyone"
     member.is_system = True
     member.photo_url = None
+    member.color = "#D97452"
     member.created_at = datetime.now()
     member.updated_at = datetime.now()
     return member

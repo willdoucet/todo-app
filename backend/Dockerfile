@@ -29,8 +29,20 @@ COPY ./alembic.ini ./alembic.ini
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# ── Final runtime stage ─────────────────────────────────────────────────────────
-FROM python:3.12-slim
+# ── Dev stage (includes test deps + uv) ───────────────────────────────────────
+FROM builder AS dev
+
+# Install test extras on top of prod deps
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --extra test
+
+# Keep uv available for `uv run pytest`
+ENV PATH="/app/.venv/bin:$PATH"
+
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug"]
+
+# ── Prod runtime stage ────────────────────────────────────────────────────────
+FROM python:3.12-slim AS prod
 
 WORKDIR /app
 

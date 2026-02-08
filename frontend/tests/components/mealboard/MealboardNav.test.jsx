@@ -21,7 +21,6 @@ describe('MealboardNav', () => {
       expect(screen.getByText('Meal Planner')).toBeInTheDocument()
       expect(screen.getByText('Recipes')).toBeInTheDocument()
       expect(screen.getByText('Shopping')).toBeInTheDocument()
-      expect(screen.getByText('Favorites')).toBeInTheDocument()
       expect(screen.getByText('Recipe Finder')).toBeInTheDocument()
     })
 

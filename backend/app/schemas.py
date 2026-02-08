@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+import re
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from datetime import datetime, date
 from typing import Optional, List as TypingList
 from enum import Enum
@@ -20,6 +22,7 @@ class MealCategory(str, Enum):
 class FamilyMemberBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
     photo_url: Optional[str] = None
+    color: Optional[str] = None
 
 
 class FamilyMemberCreate(FamilyMemberBase):
@@ -29,6 +32,7 @@ class FamilyMemberCreate(FamilyMemberBase):
 class FamilyMemberUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=50)
     photo_url: Optional[str] = None
+    color: Optional[str] = None
 
 
 class FamilyMember(FamilyMemberBase):
@@ -239,5 +243,82 @@ class MealPlan(MealPlanBase):
 
     id: int
     recipe: Optional[Recipe] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+# =============================================================================
+# CalendarEvent Schemas
+# =============================================================================
+
+_TIME_RE = re.compile(r"^\d{2}:\d{2}$")
+
+
+class CalendarEventSource(str, Enum):
+    MANUAL = "MANUAL"
+    ICLOUD = "ICLOUD"
+    GOOGLE = "GOOGLE"
+
+
+class CalendarEventBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=500)
+    date: date
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    all_day: bool = False
+    assigned_to: Optional[int] = Field(None, ge=1)
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def validate_time_format(cls, v):
+        if v is not None and not _TIME_RE.match(v):
+            raise ValueError("Time must be in HH:MM format")
+        return v
+
+    @model_validator(mode="after")
+    def validate_end_after_start(self):
+        if self.start_time and self.end_time and self.end_time <= self.start_time:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+
+class CalendarEventCreate(CalendarEventBase):
+    source: CalendarEventSource = CalendarEventSource.MANUAL
+    external_id: Optional[str] = None
+
+
+class CalendarEventUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=500)
+    date: Optional[date] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    all_day: Optional[bool] = None
+    assigned_to: Optional[int] = Field(None, ge=1)
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def validate_time_format(cls, v):
+        if v is not None and not _TIME_RE.match(v):
+            raise ValueError("Time must be in HH:MM format")
+        return v
+
+    @model_validator(mode="after")
+    def validate_end_after_start(self):
+        if self.start_time and self.end_time and self.end_time <= self.start_time:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+
+class CalendarEvent(CalendarEventBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    source: CalendarEventSource
+    external_id: Optional[str] = None
+    family_member: Optional[FamilyMember] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

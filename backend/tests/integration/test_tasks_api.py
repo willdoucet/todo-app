@@ -34,6 +34,82 @@ class TestGetTasks:
         assert "family_member" in data[0]
         assert data[0]["family_member"]["name"] == "Test User"
 
+    async def test_filters_by_date_range(self, client, test_list, test_family_member, db_session):
+        """Should return only tasks with due_date in range."""
+        from app.models import Task
+        from datetime import datetime
+
+        task_in = Task(
+            title="In Range",
+            list_id=test_list.id,
+            assigned_to=test_family_member.id,
+            due_date=datetime(2026, 2, 15, 10, 0),
+        )
+        task_out = Task(
+            title="Out of Range",
+            list_id=test_list.id,
+            assigned_to=test_family_member.id,
+            due_date=datetime(2026, 3, 15, 10, 0),
+        )
+        task_none = Task(
+            title="No Due Date",
+            list_id=test_list.id,
+            assigned_to=test_family_member.id,
+        )
+        db_session.add_all([task_in, task_out, task_none])
+        await db_session.commit()
+
+        response = await client.get(
+            "/tasks/",
+            params={"start_date": "2026-02-01", "end_date": "2026-02-28"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "In Range"
+
+    async def test_filters_by_assigned_to(self, client, test_list, test_family_member, db_session):
+        """Should return only tasks assigned to the specified member."""
+        from app.models import Task, FamilyMember
+
+        other_member = FamilyMember(name="Other User", is_system=False, color="#EF4444")
+        db_session.add(other_member)
+        await db_session.commit()
+        await db_session.refresh(other_member)
+
+        task1 = Task(
+            title="My Task",
+            list_id=test_list.id,
+            assigned_to=test_family_member.id,
+        )
+        task2 = Task(
+            title="Their Task",
+            list_id=test_list.id,
+            assigned_to=other_member.id,
+        )
+        db_session.add_all([task1, task2])
+        await db_session.commit()
+
+        response = await client.get(
+            "/tasks/",
+            params={"assigned_to": test_family_member.id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "My Task"
+
+    async def test_date_range_params_are_optional(self, client, test_task):
+        """Should return all tasks when no date filters are provided (existing behavior)."""
+        response = await client.get("/tasks/")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "Test Task"
+
     async def test_filters_by_list_id(self, client, test_list, test_family_member, db_session):
         """Should filter tasks by list_id query parameter."""
         # Arrange: Create a second list with its own task

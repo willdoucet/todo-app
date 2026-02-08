@@ -25,7 +25,7 @@ Family task and responsibility management app with a FastAPI backend and React f
 ### Full Stack (Docker Compose)
 ```bash
 cd backend
-docker-compose up              # Start all services (db, api, frontend)
+docker-compose up              # Start all services (db, api, frontend) — uses dev target
 docker-compose up --build      # Rebuild and start
 docker-compose down            # Stop all services
 ```
@@ -34,6 +34,17 @@ Services:
 - PostgreSQL on port 5433
 - FastAPI on port 8000
 - Vite dev server on port 5173
+
+**Multi-target Dockerfile** (`backend/Dockerfile`):
+- `builder` — python:3.12-slim + uv 0.5.24, installs prod deps only, copies app code
+- `dev` (extends builder) — adds test extras (`uv sync --extra test`), keeps uv available, runs with `--reload`
+- `prod` — slim image from builder, non-root `appuser`, no test deps, copies stock icons for uploads
+
+**Docker Compose** (`backend/docker-compose.yml`):
+- `db` — postgres:16, healthcheck, `init-test-db.sh` creates `todo_app_test` DB on first run
+- `api` — builds `dev` target, volume-mounts `app/`, `alembic/`, `tests/` for hot-reload, `UV_DEV_MODE` env var toggles `--reload`
+- `frontend` — builds from `../frontend`, Vite dev on 5173, anonymous volume for `node_modules`
+- `TEST_DATABASE_URL` points to `todo_app_test` DB for isolated integration tests
 
 ### Frontend (via Docker)
 ```bash
@@ -54,7 +65,7 @@ Migrations run automatically on Docker container startup.
 ```bash
 # Backend (pytest with testcontainers)
 cd backend
-docker-compose exec api uv run pytest                      # All tests (171)
+docker-compose exec api uv run pytest                      # All tests
 docker-compose exec api uv run pytest tests/unit -v        # Unit tests only
 docker-compose exec api uv run pytest tests/integration -v # Integration tests
 
@@ -85,14 +96,18 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - **Structure**:
   - `src/pages/` - Route-level components
   - `src/components/` - Reusable UI components
+  - `src/components/calendar/` - Calendar dashboard (18 components: views, modals, hooks, utils)
   - `src/components/mealboard/` - Mealboard feature components
   - `src/contexts/` - React context providers (DarkModeContext)
 
 ### Calendar Dashboard (`/`)
-- **Home page** with unified calendar view (planned)
-- Shows tasks with due dates and synced external events (meal plans are separate in Mealboard)
-- Views: Month (desktop default), Week, Day (mobile default)
-- Two-way sync with iCloud and Google Calendar (planned)
+- **Home page** with unified calendar view (complete — backend + frontend + tests)
+- Shows tasks with due dates and manual calendar events (meal plans are separate in Mealboard)
+- Views: Month (desktop default), Week, Day — responsive at 768px breakpoint
+- 18 components in `src/components/calendar/`: CalendarPage, CalendarHeader, FamilyMemberFilter, MonthView, WeekViewDesktop, WeekViewMobile, DayView, TimeGrid, AllDaySection, CalendarItem, MonthDayPopover, QuickAddPopover, MobileDayList, EventFormModal, TaskFormModal, calendarUtils, useCalendarData, useCalendarNavigation
+- Click-to-edit: clicking any task/event opens its edit modal; task checkbox toggles completion with `stopPropagation`; MonthDayPopover closes before opening edit modal
+- CalendarEvent API: CRUD at `/calendar-events` with date-range filtering, source-based edit restrictions (only MANUAL events editable/deletable), time validation (HH:MM, end > start)
+- Two-way sync with iCloud and Google Calendar (planned — `source` enum + `external_id` ready)
 
 ### Mealboard Feature (`/mealboard/*`)
 - **Routes**: `/mealboard/planner`, `/mealboard/recipes`, `/mealboard/shopping`, `/mealboard/finder`
@@ -106,14 +121,14 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - **Responsive Breakpoint**: 1200px (xl:) for desktop vs mobile layout
 
 ### Data Model
-- **FamilyMember** - Household members (has is_system flag for "Everyone")
+- **FamilyMember** - Household members (has is_system flag for "Everyone", color for calendar display)
 - **List** - Task categories with color/icon
 - **Task** - Todo items assigned to members, belong to lists
 - **Responsibility** - Recurring tasks with category (MORNING/AFTERNOON/EVENING/CHORE) and frequency (days of week)
 - **ResponsibilityCompletion** - Tracks daily completion by member
 - **Recipe** - Meal recipes with ingredients, instructions, times, and favorite status
 - **MealPlan** - Scheduled meals for specific dates with category (BREAKFAST/LUNCH/DINNER)
-- **CalendarEvent** (planned) - Manual events and synced external calendar events
+- **CalendarEvent** - Manual events and synced external calendar events (source: MANUAL/ICLOUD/GOOGLE), with date, time range (HH:MM), all-day flag, and family member assignment
 
 ## Key Patterns
 
@@ -127,6 +142,7 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 Backend (`.env`):
 ```
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app
+TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app_test
 UPLOAD_DIR=/app/uploads
 ```
 
@@ -137,8 +153,8 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## API Base URL
 - Backend: `http://localhost:8000`
-- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`
-- Planned: `/calendar-events`, `/integrations/icloud`, `/integrations/google`
+- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`, `/calendar-events`
+- Planned: `/integrations/icloud`, `/integrations/google`
 
 ## Deployment (Planned)
 - **CI/CD**: GitHub Actions for testing and deployment
