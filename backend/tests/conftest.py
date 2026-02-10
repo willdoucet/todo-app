@@ -54,7 +54,7 @@ def sample_responsibility_data():
     return {
         "title": "Make bed",
         "description": "Make your bed every morning",
-        "category": "MORNING",
+        "categories": ["MORNING"],
         "assigned_to": None,
         "frequency": ["monday", "tuesday", "wednesday", "thursday", "friday"],
         "icon_url": None,
@@ -149,7 +149,7 @@ def mock_responsibility():
     responsibility.id = 1
     responsibility.title = "Make bed"
     responsibility.description = "Make your bed every morning"
-    responsibility.category = "MORNING"
+    responsibility.categories = ["MORNING"]
     responsibility.assigned_to = 2
     responsibility.frequency = ["monday", "tuesday", "wednesday", "thursday", "friday"]
     responsibility.icon_url = None
@@ -166,6 +166,7 @@ def mock_completion():
     completion.responsibility_id = 1
     completion.family_member_id = 2
     completion.completion_date = date.today()
+    completion.category = "MORNING"
     completion.created_at = datetime.now()
     return completion
 

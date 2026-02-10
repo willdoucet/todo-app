@@ -54,17 +54,17 @@ export default function ScheduleView({
   const getCategoryCounts = () => {
     const counts = {}
     CATEGORIES.forEach(cat => {
-      counts[cat.id] = todaysResponsibilities.filter(r => r.category === cat.id).length
+      counts[cat.id] = todaysResponsibilities.filter(r => r.categories.includes(cat.id)).length
     })
     return counts
   }
   const categoryCounts = getCategoryCounts()
   const totalCount = todaysResponsibilities.length
 
-  // Check if a responsibility is completed for the current date
-  const isCompleted = (responsibilityId, memberId) => {
+  // Check if a responsibility is completed for the current date and category
+  const isCompleted = (responsibilityId, memberId, categoryId) => {
     return completions.some(
-      c => c.responsibility_id === responsibilityId && c.family_member_id === memberId
+      c => c.responsibility_id === responsibilityId && c.family_member_id === memberId && c.category === categoryId
     )
   }
 
@@ -73,21 +73,35 @@ export default function ScheduleView({
     return responsibilities
       .filter(r => r.assigned_to === memberId || r.assigned_to === everyoneID)
       .filter(r => r.frequency.includes(currentDayName))
-      .filter(r => !selectedCategory || r.category === selectedCategory)
+      .filter(r => !selectedCategory || r.categories.includes(selectedCategory))
   }
 
-  // Get completion stats for a family member
+  // Get completion stats for a family member (counts per-category items)
   const getCompletionStats = (memberId) => {
     const memberResponsibilities = getResponsibilitiesForMember(memberId)
-    const completedCount = memberResponsibilities.filter(r => isCompleted(r.id, memberId)).length
-    return { completed: completedCount, total: memberResponsibilities.length }
+    // A responsibility in multiple categories counts once per visible category
+    let total = 0
+    let completed = 0
+    memberResponsibilities.forEach(r => {
+      const visibleCategories = selectedCategory
+        ? r.categories.filter(c => c === selectedCategory)
+        : r.categories
+      visibleCategories.forEach(cat => {
+        total++
+        if (isCompleted(r.id, memberId, cat)) completed++
+      })
+    })
+    return { completed, total }
   }
 
-  // Group responsibilities by category
+  // Group responsibilities by category (only the selected category when filtered)
   const groupByCategory = (items) => {
     const grouped = {}
-    CATEGORIES.forEach(cat => {
-      const categoryItems = items.filter(r => r.category === cat.id)
+    const categoriesToShow = selectedCategory
+      ? CATEGORIES.filter(cat => cat.id === selectedCategory)
+      : CATEGORIES
+    categoriesToShow.forEach(cat => {
+      const categoryItems = items.filter(r => r.categories.includes(cat.id))
       if (categoryItems.length > 0) {
         grouped[cat.id] = categoryItems
       }
@@ -149,10 +163,11 @@ export default function ScheduleView({
                 <div className="space-y-2">
                   {items.map(responsibility => (
                     <ResponsibilityCard
-                      key={responsibility.id}
+                      key={`${responsibility.id}-${categoryId}`}
                       responsibility={responsibility}
-                      isCompleted={isCompleted(responsibility.id, member.id)}
-                      onToggle={() => onToggleCompletion(responsibility.id, member.id)}
+                      isCompleted={isCompleted(responsibility.id, member.id, categoryId)}
+                      onToggle={(cat) => onToggleCompletion(responsibility.id, member.id, cat || categoryId)}
+                      categoryContext={categoryId}
                       onEdit={onEditResponsibility || null}
                       onDelete={onDeleteResponsibility || null}
                     />

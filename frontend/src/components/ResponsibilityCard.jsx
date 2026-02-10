@@ -2,15 +2,23 @@ import SwipeableItem from './SwipeableItem'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-export default function ResponsibilityCard({ responsibility, isCompleted, onToggle, onEdit, onDelete, enableSwipe = true }) {
+export default function ResponsibilityCard({ responsibility, isCompleted, onToggle, onEdit, onDelete, enableSwipe = true, categoryContext = null }) {
   const iconSrc = responsibility.icon_url 
     ? (responsibility.icon_url.startsWith('http') ? responsibility.icon_url : `${API_BASE}${responsibility.icon_url}`)
     : null
 
+  const handleToggle = () => {
+    if (categoryContext) {
+      onToggle(categoryContext)
+    } else {
+      onToggle()
+    }
+  }
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
-      onToggle()
+      handleToggle()
     }
   }
 
@@ -23,7 +31,7 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
     <div
       role="button"
       tabIndex={0}
-      onClick={onToggle}
+      onClick={handleToggle}
       onKeyDown={handleKeyDown}
       aria-pressed={isCompleted}
       aria-label={`${responsibility.title}${isCompleted ? ' (completed)' : ''}`}
@@ -127,7 +135,7 @@ export default function ResponsibilityCard({ responsibility, isCompleted, onTogg
   if (showSwipe) {
     return (
       <SwipeableItem
-        onSwipeAction={onToggle}
+        onSwipeAction={handleToggle}
         actionType="complete"
         actionLabel={isCompleted ? 'Undo' : 'Done'}
       >

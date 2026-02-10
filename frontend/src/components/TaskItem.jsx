@@ -106,9 +106,9 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
     >
       <div className={`
         group flex items-start gap-3 p-4 rounded-xl border
-        bg-white dark:bg-gray-900
-        border-gray-200 dark:border-gray-800
-        hover:border-gray-300 dark:hover:border-gray-700
+        bg-warm-sand dark:bg-gray-900
+        border-card-border dark:border-gray-800
+        hover:border-text-muted/30 dark:hover:border-gray-700
         hover:shadow-sm
         transition-all duration-200
         ${task.completed ? 'opacity-60' : ''}
@@ -136,31 +136,35 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
             {task.description}
           </p>
         )}
-        {task.due_date && (
-          <div className="mt-1.5 flex items-center gap-1">
-            {/* Warning icon for overdue tasks (WCAG 1.4.1 - not color alone) */}
-            {isOverdue && (
-              <svg className="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+        {/* Due date row — always rendered for consistent card height */}
+        <div className="mt-1.5 flex items-center gap-1">
+          {task.due_date ? (
+            <>
+              {isOverdue && (
+                <svg className="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                </svg>
+              )}
+              <svg className={`w-3 h-3 ${
+                isOverdue ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'
+              }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-            )}
-            <svg className={`w-3 h-3 ${
-              isOverdue ? 'text-red-500' : 'text-gray-400 dark:text-gray-500'
-            }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <p className={`text-xs ${
-              isOverdue
-                ? 'text-red-500 font-medium'
-                : task.completed
-                  ? 'text-gray-400 dark:text-gray-500'
-                  : 'text-gray-500 dark:text-gray-400'
-            }`}>
-              {isOverdue && <span className="sr-only">Overdue: </span>}
-              {formatDueDate(task.due_date)}
-            </p>
-          </div>
-        )}
+              <p className={`text-xs ${
+                isOverdue
+                  ? 'text-red-500 font-medium'
+                  : task.completed
+                    ? 'text-gray-400 dark:text-gray-500'
+                    : 'text-gray-500 dark:text-gray-400'
+              }`}>
+                {isOverdue && <span className="sr-only">Overdue: </span>}
+                {formatDueDate(task.due_date)}
+              </p>
+            </>
+          ) : (
+            <span className="text-xs invisible" aria-hidden="true">&nbsp;</span>
+          )}
+        </div>
       </div>
 
       {/* Right side: Status icons + Action buttons (unified container) */}

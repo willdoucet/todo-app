@@ -74,7 +74,7 @@ const mockResponsibilities = [
     id: 1,
     title: 'Make bed',
     description: 'Make your bed every morning',
-    category: 'MORNING',
+    categories: ['MORNING'],
     assigned_to: 2,
     frequency: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
     icon_url: null,
@@ -300,8 +300,30 @@ export const handlers = [
     return HttpResponse.json([])
   }),
 
-  http.post(`${API_BASE}/responsibilities/:id/complete`, () => {
-    return HttpResponse.json({ id: 1, completed: true })
+  http.patch(`${API_BASE}/responsibilities/:id`, async ({ params, request }) => {
+    const body = await request.json()
+    const responsibility = mockResponsibilities.find((r) => r.id === Number(params.id))
+    if (!responsibility) {
+      return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+    }
+    return HttpResponse.json({ ...responsibility, ...body, updated_at: new Date().toISOString() })
+  }),
+
+  http.post(`${API_BASE}/responsibilities/:id/complete`, ({ request }) => {
+    const url = new URL(request.url)
+    const category = url.searchParams.get('category') || 'MORNING'
+    const familyMemberId = Number(url.searchParams.get('family_member_id')) || 1
+    const date = url.searchParams.get('date') || new Date().toISOString().split('T')[0]
+    return HttpResponse.json({
+      completed: true,
+      completion: {
+        id: 1,
+        responsibility_id: Number(request.url.match(/responsibilities\/(\d+)/)?.[1]) || 1,
+        family_member_id: familyMemberId,
+        completion_date: date,
+        category: category,
+      },
+    })
   }),
 
   // -------------------------------------------------------------------------

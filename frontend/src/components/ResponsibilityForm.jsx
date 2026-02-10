@@ -26,7 +26,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
 
   const [title, setTitle] = useState(initial?.title || '')
   const [description, setDescription] = useState(initial?.description || '')
-  const [category, setCategory] = useState(initial?.category || 'MORNING')
+  const [categories, setCategories] = useState(initial?.categories || ['MORNING'])
   const [assignedTo, setAssignedTo] = useState(initial?.assigned_to || null)
   const [frequency, setFrequency] = useState(
     initial?.frequency || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
@@ -60,6 +60,17 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
     loadData()
   }, [initial?.assigned_to])
 
+  const toggleCategory = (value) => {
+    if (categories.includes(value)) {
+      // Don't allow removing the last category
+      if (categories.length > 1) {
+        setCategories(categories.filter(c => c !== value))
+      }
+    } else {
+      setCategories([...categories, value])
+    }
+  }
+
   const toggleDay = (dayFull) => {
     if (frequency.includes(dayFull)) {
       setFrequency(frequency.filter(d => d !== dayFull))
@@ -72,22 +83,23 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
     e.preventDefault()
     if (!title.trim()) return
     if (frequency.length === 0) return
+    if (categories.length === 0) return
 
     if (isEditMode) {
-      // Only send editable fields in edit mode
       onSubmit({
         id: initial.id,
+        title: title.trim(),
         description: description.trim() || null,
-        category,
+        categories,
         assigned_to: assignedTo,
         frequency,
         icon_url: iconUrl,
       })
     } else {
       onSubmit({
-        title,
+        title: title.trim(),
         description: description.trim() || null,
-        category,
+        categories,
         assigned_to: assignedTo,
         frequency,
         icon_url: iconUrl,
@@ -100,28 +112,22 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
       {/* Title */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
-          Title {!isEditMode && <span className="text-red-500 dark:text-red-400">*</span>}
+          Title <span className="text-red-500 dark:text-red-400">*</span>
         </label>
-        {isEditMode ? (
-          <div className="px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-700 rounded-lg bg-warm-beige dark:bg-gray-800 text-text-secondary dark:text-gray-300 text-sm sm:text-base">
-            {title}
-          </div>
-        ) : (
-          <input
-            type="text"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            required
-            placeholder="Enter responsibility title"
-            className="
-              w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
-              rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
-              focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
-              outline-none transition text-sm sm:text-base
-              placeholder:text-text-muted dark:placeholder:text-gray-500
-            "
-          />
-        )}
+        <input
+          type="text"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          required
+          placeholder="Enter responsibility title"
+          className="
+            w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
+            rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+            focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
+            outline-none transition text-sm sm:text-base
+            placeholder:text-text-muted dark:placeholder:text-gray-500
+          "
+        />
       </div>
 
       {/* Description */}
@@ -148,27 +154,37 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
         </p>
       </div>
 
-      {/* Category */}
+      {/* Categories */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
-          Category <span className="text-red-500 dark:text-red-400">*</span>
+          Categories <span className="text-red-500 dark:text-red-400">*</span>
         </label>
-        <select
-          value={category}
-          onChange={e => setCategory(e.target.value)}
-          className="
-            w-full px-4 py-2.5 sm:py-3 border border-card-border dark:border-gray-600
-            rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
-            focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
-            outline-none transition text-sm sm:text-base
-          "
-        >
-          {CATEGORIES.map(cat => (
-            <option key={cat.value} value={cat.value}>
-              {cat.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map(cat => {
+            const isSelected = categories.includes(cat.value)
+            return (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => toggleCategory(cat.value)}
+                className={`
+                  px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                  ${isSelected
+                    ? 'bg-terracotta-500 text-white dark:bg-blue-600'
+                    : 'bg-warm-beige dark:bg-gray-700 text-text-secondary dark:text-gray-400 hover:bg-warm-sand dark:hover:bg-gray-600'
+                  }
+                `}
+              >
+                {cat.label}
+              </button>
+            )
+          })}
+        </div>
+        {categories.length === 0 && (
+          <p className="mt-2 text-sm text-red-500 dark:text-red-400">
+            Please select at least one category
+          </p>
+        )}
       </div>
 
       {/* Assigned To */}
@@ -351,7 +367,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
         </button>
         <button
           type="submit"
-          disabled={frequency.length === 0}
+          disabled={frequency.length === 0 || categories.length === 0}
           className="
             px-6 py-2.5 sm:py-2.5 bg-terracotta-500 text-white font-medium
             rounded-lg hover:bg-terracotta-600 transition-colors duration-200

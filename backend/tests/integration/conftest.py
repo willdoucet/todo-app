@@ -174,7 +174,7 @@ async def test_responsibility(db_session, test_family_member):
     responsibility = Responsibility(
         title="Make bed",
         description="Make your bed every morning",
-        category="MORNING",
+        categories=["MORNING"],
         assigned_to=test_family_member.id,
         frequency=["monday", "tuesday", "wednesday", "thursday", "friday"],
         icon_url=None,

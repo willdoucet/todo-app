@@ -84,7 +84,7 @@ class ResponsibilityBase(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, min_length=1, max_length=500)
-    category: ResponsibilityCategory
+    categories: TypingList[ResponsibilityCategory] = Field(..., min_length=1)
     assigned_to: int = Field(..., ge=1)
     frequency: TypingList[str] = Field(..., min_length=1)
     icon_url: Optional[str] = None
@@ -97,7 +97,7 @@ class ResponsibilityCreate(ResponsibilityBase):
 class ResponsibilityUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, min_length=1, max_length=500)
-    category: Optional[ResponsibilityCategory] = None
+    categories: Optional[TypingList[ResponsibilityCategory]] = None
     assigned_to: Optional[int] = Field(None, ge=1)
     frequency: Optional[TypingList[str]] = None
     icon_url: Optional[str] = None
@@ -118,6 +118,7 @@ class ResponsibilityCompletionBase(BaseModel):
     responsibility_id: int = Field(..., ge=1)
     family_member_id: int = Field(..., ge=1)
     completion_date: date
+    category: str
 
 
 class ResponsibilityCompletionCreate(BaseModel):

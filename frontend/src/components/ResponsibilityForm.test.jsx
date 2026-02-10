@@ -36,17 +36,17 @@ describe('ResponsibilityForm', () => {
       expect(screen.getByPlaceholderText('Add details about this responsibility...')).toBeInTheDocument()
     })
 
-    it('renders category dropdown with all options', async () => {
+    it('renders category buttons for all options', async () => {
       render(<ResponsibilityForm {...defaultProps} />)
 
       await waitFor(() => {
         expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
       })
 
-      expect(screen.getByRole('option', { name: /morning/i })).toBeInTheDocument()
-      expect(screen.getByRole('option', { name: /afternoon/i })).toBeInTheDocument()
-      expect(screen.getByRole('option', { name: /evening/i })).toBeInTheDocument()
-      expect(screen.getByRole('option', { name: /chore/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /morning/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /afternoon/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /evening/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /chore/i })).toBeInTheDocument()
     })
 
     it('renders day selector buttons', () => {
@@ -211,18 +211,19 @@ describe('ResponsibilityForm', () => {
       id: 1,
       title: 'Make bed',
       description: 'Every morning',
-      category: 'MORNING',
+      categories: ['MORNING'],
       assigned_to: 2,
       frequency: ['Monday', 'Wednesday', 'Friday'],
       icon_url: null,
     }
 
-    it('shows title as readonly text in edit mode', () => {
+    it('shows title as editable input in edit mode', () => {
       render(<ResponsibilityForm {...defaultProps} initial={existingResponsibility} />)
 
-      // Should show title as text, not input
-      expect(screen.getByText('Make bed')).toBeInTheDocument()
-      expect(screen.queryByPlaceholderText('Enter responsibility title')).not.toBeInTheDocument()
+      // Should show title as editable input pre-filled with existing value
+      const titleInput = screen.getByPlaceholderText('Enter responsibility title')
+      expect(titleInput).toBeInTheDocument()
+      expect(titleInput.value).toBe('Make bed')
     })
 
     it('pre-fills description from initial data', () => {
@@ -249,7 +250,7 @@ describe('ResponsibilityForm', () => {
       expect(screen.getByRole('button', { name: /save changes/i })).toBeInTheDocument()
     })
 
-    it('excludes title from submission in edit mode', async () => {
+    it('includes title in submission in edit mode', async () => {
       const onSubmit = vi.fn()
       const user = userEvent.setup()
 
@@ -264,14 +265,30 @@ describe('ResponsibilityForm', () => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 1,
-          category: 'MORNING',
+          title: 'Make bed',
+          categories: ['MORNING'],
           frequency: ['Monday', 'Wednesday', 'Friday'],
         })
       )
-      // Should not include title in edit mode
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.not.objectContaining({ title: expect.anything() })
-      )
+    })
+
+    it('includes icon_url and description in edit mode submission', async () => {
+      const onSubmit = vi.fn()
+      const user = userEvent.setup()
+
+      // Start with no icon_url — simulates a responsibility created without an icon
+      render(<ResponsibilityForm {...defaultProps} initial={existingResponsibility} onSubmit={onSubmit} />)
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading...')).not.toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+      // icon_url and description should always be included in the submitted data
+      const submittedData = onSubmit.mock.calls[0][0]
+      expect(submittedData).toHaveProperty('icon_url')
+      expect(submittedData).toHaveProperty('description')
     })
   })
 
@@ -297,7 +314,7 @@ describe('ResponsibilityForm', () => {
         expect.objectContaining({
           title: 'Brush teeth',
           description: 'Morning and night',
-          category: 'MORNING',
+          categories: ['MORNING'],
           assigned_to: 1,
           frequency: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
         })

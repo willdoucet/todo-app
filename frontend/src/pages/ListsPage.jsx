@@ -12,6 +12,16 @@ import usePageTitle from '../hooks/usePageTitle'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
+// Returns white or dark text based on background luminance (WCAG contrast)
+function getContrastText(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const toLinear = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
+  return luminance > 0.4 ? '#1f2937' : '#ffffff'
+}
+
 export default function ListsPage() {
   // Lists state
   const [lists, setLists] = useState([])
@@ -215,71 +225,78 @@ export default function ListsPage() {
       <Sidebar />
       <Header />
 
-      {/* List Panel */}
-      <ListPanel
-        lists={lists}
-        selectedListId={selectedListId}
-        onSelectList={setSelectedListId}
-        onCreateList={createList}
-        onUpdateList={updateList}
-        onDeleteList={deleteList}
-        isLoading={isLoadingLists}
-        taskCounts={taskCounts}
-      />
+      {/* Flex layout: sidebar + main content (desktop) */}
+      <div className="sm:flex sm:h-[calc(100vh-0px)]">
+        {/* List Panel (renders mobile drawer + desktop aside internally) */}
+        <ListPanel
+          lists={lists}
+          selectedListId={selectedListId}
+          onSelectList={setSelectedListId}
+          onCreateList={createList}
+          onUpdateList={updateList}
+          onDeleteList={deleteList}
+          isLoading={isLoadingLists}
+          taskCounts={taskCounts}
+        />
 
-      {/* Main content area - offset for desktop list panel, centered in remaining space */}
-      <main className="px-4 sm:px-6 lg:px-8 py-8 sm:py-10 sm:ml-52 sm:mr-4 flex justify-center">
-        <div className="w-full max-w-3xl">
-          {/* Error display */}
-          {error && (
-            <div className="mb-4 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg text-red-600 dark:text-red-400 text-sm">
-              {error}
-            </div>
-          )}
+        {/* Main content area */}
+        <main className="flex-1 sm:overflow-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+          <div className="w-full max-w-3xl">
+            {/* Error display */}
+            {error && (
+              <div className="mb-4 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
 
-          {/* Title - minimal, left-aligned with color dot */}
-          <div className="mb-6">
-            <div className="flex items-center gap-3">
-              {selectedList?.color && (
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: selectedList.color }}
-                />
+            {/* Title pill with list color */}
+            <div className="mb-6">
+              {selectedList ? (
+                <span
+                  className="inline-block px-4 py-1.5 rounded-full text-lg sm:text-xl font-semibold"
+                  style={{
+                    backgroundColor: selectedList.color || '#6B7280',
+                    color: getContrastText(selectedList.color || '#6B7280'),
+                  }}
+                >
+                  {selectedList.name}
+                </span>
+              ) : (
+                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                  My Lists
+                </h1>
               )}
-              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                {selectedList?.name || 'My Lists'}
-              </h1>
             </div>
-          </div>
 
-          {/* Task list or empty state */}
-          {!selectedListId ? (
-            <div className="text-center py-12">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {lists.length === 0
-                  ? 'Create your first list to get started'
-                  : 'Select a list to view tasks'
-                }
-              </p>
-            </div>
-          ) : (
-            <TaskListView
-              tasks={tasks}
-              isLoading={isLoadingTasks}
-              onToggle={toggleComplete}
-              onEdit={(task) => {
-                setEditingTask(task)
-                setIsOpen(true)
-              }}
-              onDelete={deleteTask}
-              onAddTask={() => {
-                setEditingTask(null)
-                setIsOpen(true)
-              }}
-            />
-          )}
-        </div>
-      </main>
+            {/* Task list or empty state */}
+            {!selectedListId ? (
+              <div className="text-center py-12">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {lists.length === 0
+                    ? 'Create your first list to get started'
+                    : 'Select a list to view tasks'
+                  }
+                </p>
+              </div>
+            ) : (
+              <TaskListView
+                tasks={tasks}
+                isLoading={isLoadingTasks}
+                onToggle={toggleComplete}
+                onEdit={(task) => {
+                  setEditingTask(task)
+                  setIsOpen(true)
+                }}
+                onDelete={deleteTask}
+                onAddTask={() => {
+                  setEditingTask(null)
+                  setIsOpen(true)
+                }}
+              />
+            )}
+          </div>
+        </main>
+      </div>
 
       {/* Floating Action Button - only show when a list is selected */}
       {selectedListId && (

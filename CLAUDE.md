@@ -124,8 +124,8 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - **FamilyMember** - Household members (has is_system flag for "Everyone", color for calendar display)
 - **List** - Task categories with color/icon
 - **Task** - Todo items assigned to members, belong to lists
-- **Responsibility** - Recurring tasks with category (MORNING/AFTERNOON/EVENING/CHORE) and frequency (days of week)
-- **ResponsibilityCompletion** - Tracks daily completion by member
+- **Responsibility** - Recurring tasks with categories array (MORNING/AFTERNOON/EVENING/CHORE) — one responsibility can appear in multiple time-of-day sections
+- **ResponsibilityCompletion** - Tracks daily completion by member and category
 - **Recipe** - Meal recipes with ingredients, instructions, times, and favorite status
 - **MealPlan** - Scheduled meals for specific dates with category (BREAKFAST/LUNCH/DINNER)
 - **CalendarEvent** - Manual events and synced external calendar events (source: MANUAL/ICLOUD/GOOGLE), with date, time range (HH:MM), all-day flag, and family member assignment

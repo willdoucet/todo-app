@@ -95,11 +95,12 @@ async def toggle_completion(
     responsibility_id: int,
     target_date: date = Query(..., alias="date"),
     family_member_id: int = Query(...),
+    category: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Toggle completion status for a responsibility on a given date."""
+    """Toggle completion status for a responsibility on a given date and category."""
     completion, created = await crud_responsibilities.toggle_completion(
-        db, responsibility_id, target_date, family_member_id
+        db, responsibility_id, target_date, family_member_id, category
     )
 
     # If both are falsy, check if responsibility exists

@@ -164,6 +164,7 @@ class TestToggleCompletion:
             responsibility_id=999,
             target_date=date.today(),
             family_member_id=1,
+            category="MORNING",
         )
 
         # Assert
@@ -201,6 +202,7 @@ class TestToggleCompletion:
             responsibility_id=1,
             target_date=date.today(),
             family_member_id=2,
+            category="MORNING",
         )
 
         # Assert
@@ -238,6 +240,7 @@ class TestToggleCompletion:
             responsibility_id=1,
             target_date=date.today(),
             family_member_id=2,
+            category="MORNING",
         )
 
         # Assert
@@ -279,6 +282,7 @@ class TestToggleCompletionEdgeCases:
             responsibility_id=1,
             target_date=target_date,
             family_member_id=family_member_id,
+            category="MORNING",
         )
 
         # Assert: The added completion should have the correct family_member_id
@@ -287,6 +291,7 @@ class TestToggleCompletionEdgeCases:
         assert added_completion.family_member_id == family_member_id
         assert added_completion.responsibility_id == 1
         assert added_completion.completion_date == target_date
+        assert added_completion.category == "MORNING"
 
     async def test_toggle_uses_correct_date(
         self, mock_db_session, mock_responsibility
@@ -313,12 +318,14 @@ class TestToggleCompletionEdgeCases:
             responsibility_id=1,
             target_date=specific_date,
             family_member_id=1,
+            category="EVENING",
         )
 
-        # Assert: The added completion should have the correct date
+        # Assert: The added completion should have the correct date and category
         add_call = mock_db_session.add.call_args
         added_completion = add_call[0][0]
         assert added_completion.completion_date == specific_date
+        assert added_completion.category == "EVENING"
 
 
 # =============================================================================
