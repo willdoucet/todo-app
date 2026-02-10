@@ -12,6 +12,16 @@ import usePageTitle from '../hooks/usePageTitle'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
+// Returns white or dark text based on background luminance (WCAG contrast)
+function getContrastText(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const toLinear = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
+  return luminance > 0.4 ? '#1f2937' : '#ffffff'
+}
+
 export default function ListsPage() {
   // Lists state
   const [lists, setLists] = useState([])
@@ -230,7 +240,7 @@ export default function ListsPage() {
         />
 
         {/* Main content area */}
-        <main className="flex-1 sm:overflow-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex justify-center">
+        <main className="flex-1 sm:overflow-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           <div className="w-full max-w-3xl">
             {/* Error display */}
             {error && (
@@ -239,19 +249,23 @@ export default function ListsPage() {
               </div>
             )}
 
-            {/* Title - minimal, left-aligned with color dot */}
+            {/* Title pill with list color */}
             <div className="mb-6">
-              <div className="flex items-center gap-3">
-                {selectedList?.color && (
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: selectedList.color }}
-                  />
-                )}
+              {selectedList ? (
+                <span
+                  className="inline-block px-4 py-1.5 rounded-full text-lg sm:text-xl font-semibold"
+                  style={{
+                    backgroundColor: selectedList.color || '#6B7280',
+                    color: getContrastText(selectedList.color || '#6B7280'),
+                  }}
+                >
+                  {selectedList.name}
+                </span>
+              ) : (
                 <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                  {selectedList?.name || 'My Lists'}
+                  My Lists
                 </h1>
-              </div>
+              )}
             </div>
 
             {/* Task list or empty state */}
