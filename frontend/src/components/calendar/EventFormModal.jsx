@@ -27,6 +27,7 @@ export default function EventFormModal({
   const [assignedTo, setAssignedTo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmAction, setConfirmAction] = useState(null) // 'save' | 'delete' | null
 
   // Reset form when modal opens
   useEffect(() => {
@@ -49,12 +50,22 @@ export default function EventFormModal({
         setAssignedTo('')
       }
       setError(null)
+      setConfirmAction(null)
     }
   }, [isOpen, initialEvent, defaultDate, defaultTime])
+
+  const isICloud = initialEvent?.source === 'ICLOUD'
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!title.trim()) return
+
+    // Show confirmation for iCloud events before saving
+    if (isICloud && confirmAction !== 'save') {
+      setConfirmAction('save')
+      return
+    }
+    setConfirmAction(null)
 
     setLoading(true)
     setError(null)
@@ -87,6 +98,14 @@ export default function EventFormModal({
 
   const handleDelete = async () => {
     if (!initialEvent) return
+
+    // Show confirmation for iCloud events before deleting
+    if (isICloud && confirmAction !== 'delete') {
+      setConfirmAction('delete')
+      return
+    }
+    setConfirmAction(null)
+
     setLoading(true)
     try {
       await axios.delete(`${API_BASE}/calendar-events/${initialEvent.id}`)
@@ -100,7 +119,7 @@ export default function EventFormModal({
     }
   }
 
-  const isEditable = !initialEvent || initialEvent.source === 'MANUAL'
+  const isEditable = !initialEvent || initialEvent.source !== 'GOOGLE'
   const isValid = title.trim().length > 0
 
   return (
@@ -137,6 +156,71 @@ export default function EventFormModal({
 
                 {/* Body */}
                 <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                  {/* iCloud sync badge */}
+                  {isICloud && (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" />
+                        </svg>
+                        Synced from iCloud
+                      </span>
+                      {initialEvent?.sync_status === 'PENDING_PUSH' && (
+                        <span className="text-xs text-text-muted dark:text-gray-400 italic">
+                          Syncing...
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Confirmation banners */}
+                  {confirmAction === 'save' && (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                        This event is synced from iCloud. Your changes will be pushed back to iCloud Calendar. Continue?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAction(null)}
+                          className="px-3 py-1.5 text-xs font-medium text-text-secondary dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                        >
+                          Save & Sync
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {confirmAction === 'delete' && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-sm text-red-800 dark:text-red-200 mb-2">
+                        This will also delete the event from iCloud Calendar. This action cannot be undone. Continue?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAction(null)}
+                          className="px-3 py-1.5 text-xs font-medium text-text-secondary dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDelete}
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                        >
+                          Delete from both
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {error && (
                     <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
                   )}

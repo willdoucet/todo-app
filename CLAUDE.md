@@ -32,7 +32,10 @@ docker-compose down            # Stop all services
 
 Services:
 - PostgreSQL on port 5433
+- Redis on port 6379
 - FastAPI on port 8000
+- Celery worker (background task processing)
+- Celery beat (periodic sync scheduler — 10-min iCloud sync interval)
 - Vite dev server on port 5173
 
 **Multi-target Dockerfile** (`backend/Dockerfile`):
@@ -42,7 +45,10 @@ Services:
 
 **Docker Compose** (`backend/docker-compose.yml`):
 - `db` — postgres:16, healthcheck, `init-test-db.sh` creates `todo_app_test` DB on first run
+- `redis` — redis:7-alpine, healthcheck
 - `api` — builds `dev` target, volume-mounts `app/`, `alembic/`, `tests/` for hot-reload, `UV_DEV_MODE` env var toggles `--reload`
+- `celery_worker` — same image as api, runs `celery -A app.celery_app worker`
+- `celery_beat` — same image as api, runs `celery -A app.celery_app beat`
 - `frontend` — builds from `../frontend`, Vite dev on 5173, anonymous volume for `node_modules`
 - `TEST_DATABASE_URL` points to `todo_app_test` DB for isolated integration tests
 
@@ -82,14 +88,20 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 
 ### Backend (`/backend`)
 - **FastAPI** with async SQLAlchemy and PostgreSQL
+- **Celery** with Redis for background task processing (iCloud sync, event push)
 - **Package manager**: uv (not pip)
 - **Structure**:
   - `app/main.py` - FastAPI app, CORS, routers
   - `app/models.py` - SQLAlchemy ORM models
   - `app/schemas.py` - Pydantic validation schemas
   - `app/database.py` - Async DB session
+  - `app/celery_app.py` - Celery app with Redis broker and beat schedule
+  - `app/tasks.py` - Celery tasks (sync, push, delete)
   - `app/crud_*.py` - CRUD operations per entity
   - `app/routes/*.py` - API endpoint handlers
+  - `app/services/caldav_client.py` - CalDAV protocol client (iCloud connection, ICS mapping)
+  - `app/services/sync_engine.py` - Two-way sync engine (pull/push/conflict resolution)
+  - `app/utils/encryption.py` - Fernet encryption for stored passwords
 
 ### Frontend (`/frontend`)
 - **React 19** with React Router v7, Vite, TailwindCSS v4
@@ -106,8 +118,8 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - Views: Month (desktop default), Week, Day — responsive at 768px breakpoint
 - 18 components in `src/components/calendar/`: CalendarPage, CalendarHeader, FamilyMemberFilter, MonthView, WeekViewDesktop, WeekViewMobile, DayView, TimeGrid, AllDaySection, CalendarItem, MonthDayPopover, QuickAddPopover, MobileDayList, EventFormModal, TaskFormModal, calendarUtils, useCalendarData, useCalendarNavigation
 - Click-to-edit: clicking any task/event opens its edit modal; task checkbox toggles completion with `stopPropagation`; MonthDayPopover closes before opening edit modal
-- CalendarEvent API: CRUD at `/calendar-events` with date-range filtering, source-based edit restrictions (only MANUAL events editable/deletable), time validation (HH:MM, end > start)
-- Two-way sync with iCloud and Google Calendar (planned — `source` enum + `external_id` ready)
+- CalendarEvent API: CRUD at `/calendar-events` with date-range filtering, source-based edit restrictions (MANUAL and ICLOUD editable, GOOGLE read-only), time validation (HH:MM, end > start)
+- Two-way sync with iCloud Calendar implemented via CalDAV + Celery background workers; Google Calendar planned
 
 ### Mealboard Feature (`/mealboard/*`)
 - **Routes**: `/mealboard/planner`, `/mealboard/recipes`, `/mealboard/shopping`, `/mealboard/finder`
@@ -128,7 +140,8 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - **ResponsibilityCompletion** - Tracks daily completion by member and category
 - **Recipe** - Meal recipes with ingredients, instructions, times, and favorite status
 - **MealPlan** - Scheduled meals for specific dates with category (BREAKFAST/LUNCH/DINNER)
-- **CalendarEvent** - Manual events and synced external calendar events (source: MANUAL/ICLOUD/GOOGLE), with date, time range (HH:MM), all-day flag, and family member assignment
+- **CalendarEvent** - Manual events and synced external calendar events (source: MANUAL/ICLOUD/GOOGLE), with date, time range (HH:MM), all-day flag, family member assignment, sync_status (SYNCED/PENDING_PUSH), etag, and calendar_integration_id FK
+- **CalendarIntegration** - External calendar connections (provider: icloud/google) with encrypted password, selected_calendars JSON, status (ACTIVE/SYNCING/ERROR), sync range config, and family member assignment
 
 ## Key Patterns
 
@@ -144,6 +157,8 @@ Backend (`.env`):
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app
 TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app_test
 UPLOAD_DIR=/app/uploads
+REDIS_URL=redis://redis:6379/0
+FERNET_KEY=<base64-encoded-fernet-key>
 ```
 
 Frontend (`.env.local`):
@@ -153,8 +168,8 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## API Base URL
 - Backend: `http://localhost:8000`
-- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`, `/calendar-events`
-- Planned: `/integrations/icloud`, `/integrations/google`
+- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`, `/calendar-events`, `/integrations`
+- Planned: `/integrations/google`
 
 ## Deployment (Planned)
 - **CI/CD**: GitHub Actions for testing and deployment

@@ -470,8 +470,8 @@ export const handlers = [
     if (!event) {
       return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
     }
-    if (event.source !== 'MANUAL') {
-      return HttpResponse.json({ detail: 'Cannot modify synced events' }, { status: 400 })
+    if (event.source === 'GOOGLE') {
+      return HttpResponse.json({ detail: 'Google Calendar events cannot be edited yet' }, { status: 400 })
     }
     return HttpResponse.json({ ...event, ...body, updated_at: new Date().toISOString() })
   }),
@@ -481,9 +481,62 @@ export const handlers = [
     if (!event) {
       return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
     }
-    if (event.source !== 'MANUAL') {
-      return HttpResponse.json({ detail: 'Cannot delete synced events' }, { status: 400 })
+    if (event.source === 'GOOGLE') {
+      return HttpResponse.json({ detail: 'Google Calendar events cannot be deleted yet' }, { status: 400 })
     }
     return HttpResponse.json(event)
+  }),
+
+  // -------------------------------------------------------------------------
+  // Integrations
+  // -------------------------------------------------------------------------
+  http.get(`${API_BASE}/integrations/`, () => {
+    return HttpResponse.json([])
+  }),
+
+  http.get(`${API_BASE}/integrations/:id`, () => {
+    return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
+  }),
+
+  http.post(`${API_BASE}/integrations/icloud/validate`, async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json([
+      { url: 'https://caldav.icloud.com/cal1', name: 'Personal', color: '#FF0000', event_count: 5, already_synced_by: null },
+      { url: 'https://caldav.icloud.com/cal2', name: 'Work', color: '#0000FF', event_count: 12, already_synced_by: null },
+    ])
+  }),
+
+  http.post(`${API_BASE}/integrations/icloud/connect`, async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: 1,
+      family_member_id: body.family_member_id,
+      provider: 'icloud',
+      email: body.email,
+      status: 'SYNCING',
+      last_sync_at: null,
+      last_error: null,
+      sync_range_past_days: 30,
+      sync_range_future_days: 90,
+      selected_calendars: body.selected_calendars,
+      family_member: mockFamilyMembers.find((m) => m.id === body.family_member_id) || null,
+      created_at: new Date().toISOString(),
+      updated_at: null,
+    }, { status: 201 })
+  }),
+
+  http.post(`${API_BASE}/integrations/:id/sync`, ({ params }) => {
+    return HttpResponse.json({
+      id: Number(params.id),
+      status: 'SYNCING',
+    })
+  }),
+
+  http.delete(`${API_BASE}/integrations/:id`, ({ params }) => {
+    return HttpResponse.json({
+      id: Number(params.id),
+      email: 'test@icloud.com',
+      status: 'ACTIVE',
+    })
   }),
 ]

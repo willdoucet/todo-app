@@ -179,7 +179,7 @@ describe('EventFormModal', () => {
       expect(screen.queryByText('Delete')).not.toBeInTheDocument()
     })
 
-    it('does not show Delete button for synced events', async () => {
+    it('shows Delete button for iCloud events', async () => {
       renderModal({
         initialEvent: {
           id: 1,
@@ -187,6 +187,23 @@ describe('EventFormModal', () => {
           date: '2026-02-07',
           all_day: true,
           source: 'ICLOUD',
+          assigned_to: null,
+        },
+      })
+      await waitFor(() => {
+        expect(screen.getByText('Edit Event')).toBeInTheDocument()
+      })
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+
+    it('does not show Delete button for Google events', async () => {
+      renderModal({
+        initialEvent: {
+          id: 1,
+          title: 'Google event',
+          date: '2026-02-07',
+          all_day: true,
+          source: 'GOOGLE',
           assigned_to: null,
         },
       })

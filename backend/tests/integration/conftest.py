@@ -299,7 +299,7 @@ async def test_all_day_event(db_session):
 
 @pytest_asyncio.fixture
 async def test_synced_event(db_session):
-    """Create a test synced (non-MANUAL) calendar event."""
+    """Create a test synced iCloud calendar event."""
     from datetime import date
 
     event = CalendarEvent(
@@ -309,6 +309,25 @@ async def test_synced_event(db_session):
         end_time="15:00",
         source="ICLOUD",
         external_id="icloud-123",
+    )
+    db_session.add(event)
+    await db_session.commit()
+    await db_session.refresh(event)
+    return event
+
+
+@pytest_asyncio.fixture
+async def test_google_event(db_session):
+    """Create a test Google Calendar event (not editable/deletable)."""
+    from datetime import date
+
+    event = CalendarEvent(
+        title="Google Event",
+        date=date(2026, 2, 10),
+        start_time="10:00",
+        end_time="11:00",
+        source="GOOGLE",
+        external_id="google-456",
     )
     db_session.add(event)
     await db_session.commit()

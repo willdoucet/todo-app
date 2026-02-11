@@ -15,6 +15,11 @@ dependencies = [
     "python-multipart>=0.0.22",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.40.0",
+    "celery[redis]>=5.4",
+    "redis>=5.0",
+    "caldav>=1.4",
+    "icalendar>=6.0",
+    "cryptography>=43.0",
 ]
 
 [project.optional-dependencies]

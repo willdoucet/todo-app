@@ -198,15 +198,25 @@ class TestUpdateCalendarEvent:
         assert response.status_code == 200
         assert response.json()["title"] == "Updated Title"
 
-    async def test_rejects_update_of_synced_event(self, client, test_synced_event):
-        """Should return 400 when trying to update a non-MANUAL event."""
+    async def test_allows_update_of_icloud_event(self, client, test_synced_event):
+        """ICLOUD events can be edited (changes pushed back to iCloud)."""
         response = await client.patch(
             f"/calendar-events/{test_synced_event.id}",
+            json={"title": "Updated iCloud Event"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["title"] == "Updated iCloud Event"
+
+    async def test_rejects_update_of_google_event(self, client, test_google_event):
+        """GOOGLE events cannot be edited yet."""
+        response = await client.patch(
+            f"/calendar-events/{test_google_event.id}",
             json={"title": "Hacked"},
         )
 
         assert response.status_code == 400
-        assert "manually created" in response.json()["detail"]
+        assert "Google" in response.json()["detail"]
 
     async def test_returns_404_when_not_found(self, client):
         """Should return 404 when event doesn't exist."""
@@ -237,14 +247,23 @@ class TestDeleteCalendarEvent:
         get_response = await client.get(f"/calendar-events/{event_id}")
         assert get_response.status_code == 404
 
-    async def test_rejects_delete_of_synced_event(self, client, test_synced_event):
-        """Should return 400 when trying to delete a non-MANUAL event."""
+    async def test_allows_delete_of_icloud_event(self, client, test_synced_event):
+        """ICLOUD events can be deleted (delete pushed to iCloud)."""
         response = await client.delete(
             f"/calendar-events/{test_synced_event.id}"
         )
 
+        assert response.status_code == 200
+        assert response.json()["id"] == test_synced_event.id
+
+    async def test_rejects_delete_of_google_event(self, client, test_google_event):
+        """GOOGLE events cannot be deleted yet."""
+        response = await client.delete(
+            f"/calendar-events/{test_google_event.id}"
+        )
+
         assert response.status_code == 400
-        assert "manually created" in response.json()["detail"]
+        assert "Google" in response.json()["detail"]
 
     async def test_returns_404_when_not_found(self, client):
         """Should return 404 when event doesn't exist."""

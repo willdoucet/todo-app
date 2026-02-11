@@ -64,6 +64,17 @@ async def update_calendar_event(
     return await get_calendar_event(db, event_id)
 
 
+async def set_sync_status(db: AsyncSession, event_id: int, sync_status: str):
+    """Set the sync_status field on a calendar event."""
+    stmt = (
+        update(models.CalendarEvent)
+        .where(models.CalendarEvent.id == event_id)
+        .values(sync_status=sync_status)
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+
 async def delete_calendar_event(db: AsyncSession, event_id: int):
     """Delete a calendar event."""
     event = await get_calendar_event(db, event_id)

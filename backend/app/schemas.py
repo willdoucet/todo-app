@@ -321,5 +321,54 @@ class CalendarEvent(CalendarEventBase):
     source: CalendarEventSource
     external_id: Optional[str] = None
     family_member: Optional[FamilyMember] = None
+    sync_status: Optional[str] = None
+    calendar_integration_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+# =============================================================================
+# CalendarIntegration Schemas
+# =============================================================================
+
+
+class IntegrationStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    ERROR = "ERROR"
+    SYNCING = "SYNCING"
+    DISCONNECTED = "DISCONNECTED"
+
+
+class CalendarIntegrationCreate(BaseModel):
+    family_member_id: int = Field(..., ge=1)
+    email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)  # Plain text — encrypted before storage
+    selected_calendars: Optional[TypingList[str]] = None
+
+
+class CalendarIntegrationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    family_member_id: int
+    provider: str
+    email: str
+    # NOTE: password is NEVER returned
+    status: IntegrationStatus
+    last_sync_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    sync_range_past_days: int
+    sync_range_future_days: int
+    selected_calendars: Optional[TypingList[str]] = None
+    family_member: FamilyMember
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ICloudCalendarInfo(BaseModel):
+    """Returned when listing available calendars from an iCloud account."""
+    url: str
+    name: str
+    color: Optional[str] = None
+    event_count: Optional[int] = None
+    already_synced_by: Optional[str] = None
