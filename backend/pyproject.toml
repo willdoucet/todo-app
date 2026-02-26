@@ -20,6 +20,7 @@ dependencies = [
     "caldav>=1.4",
     "icalendar>=6.0",
     "cryptography>=43.0",
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

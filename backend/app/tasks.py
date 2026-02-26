@@ -8,11 +8,21 @@ logger = logging.getLogger(__name__)
 
 
 def run_async(coro):
-    """Run an async function from synchronous Celery task."""
+    """Run an async function from synchronous Celery task.
+
+    Each call gets a fresh event loop. We must dispose the shared engine's
+    connection pool before closing the loop, otherwise asyncpg connections
+    from this loop leak into the next call and trigger
+    "Future attached to a different loop".
+    """
+    from .database import engine
+
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)
     finally:
+        if engine is not None:
+            loop.run_until_complete(engine.dispose())
         loop.close()
 
 

@@ -279,12 +279,6 @@ class CalendarEventBase(BaseModel):
             raise ValueError("Time must be in HH:MM format")
         return v
 
-    @model_validator(mode="after")
-    def validate_end_after_start(self):
-        if self.start_time and self.end_time and self.end_time <= self.start_time:
-            raise ValueError("end_time must be after start_time")
-        return self
-
 
 class CalendarEventCreate(CalendarEventBase):
     source: CalendarEventSource = CalendarEventSource.MANUAL
@@ -306,12 +300,6 @@ class CalendarEventUpdate(BaseModel):
         if v is not None and not _TIME_RE.match(v):
             raise ValueError("Time must be in HH:MM format")
         return v
-
-    @model_validator(mode="after")
-    def validate_end_after_start(self):
-        if self.start_time and self.end_time and self.end_time <= self.start_time:
-            raise ValueError("end_time must be after start_time")
-        return self
 
 
 class CalendarEvent(CalendarEventBase):
@@ -372,3 +360,29 @@ class ICloudCalendarInfo(BaseModel):
     color: Optional[str] = None
     event_count: Optional[int] = None
     already_synced_by: Optional[str] = None
+
+
+# =============================================================================
+# AppSettings Schemas
+# =============================================================================
+
+
+class AppSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    timezone: str
+
+
+class AppSettingsUpdate(BaseModel):
+    timezone: Optional[str] = None
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v):
+        if v is not None:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+            try:
+                ZoneInfo(v)
+            except (ZoneInfoNotFoundError, KeyError):
+                raise ValueError(f"Invalid IANA timezone: {v}")
+        return v

@@ -225,6 +225,15 @@ class CalendarEvent(Base):
     )
 
 
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timezone = Column(String, nullable=False, default="UTC")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+
 class List(Base):
     __tablename__ = "lists"
     id = Column(Integer, primary_key=True, index=True)

@@ -18,11 +18,13 @@ Fields updated from remote:
 
 import logging
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
+from ..crud_app_settings import get_settings
 from ..utils.encryption import decrypt_password
 from . import caldav_client
 
@@ -38,6 +40,10 @@ async def pull_from_icloud(db: AsyncSession, integration_id: int) -> dict:
 
     Returns: {created: int, updated: int, deleted: int, skipped: int, errors: int}
     """
+    # Load app settings for timezone
+    settings = await get_settings(db)
+    tz = ZoneInfo(settings.timezone) if settings.timezone != "UTC" else None
+
     # Load integration
     stmt = select(models.CalendarIntegration).where(
         models.CalendarIntegration.id == integration_id
@@ -65,7 +71,7 @@ async def pull_from_icloud(db: AsyncSession, integration_id: int) -> dict:
     for cal_url in selected_cals:
         try:
             calendar = caldav_client.get_calendar_by_url(principal, cal_url)
-            remote_events = caldav_client.fetch_events(calendar, start_date, end_date)
+            remote_events = caldav_client.fetch_events(calendar, start_date, end_date, tz=tz)
         except Exception:
             logger.error(
                 "Failed to fetch events from calendar %s", cal_url, exc_info=True
@@ -260,6 +266,10 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
 
     Returns: {action: "updated" | "created" | "noop", external_id: str | None}
     """
+    # Load app settings for timezone
+    settings = await get_settings(db)
+    tz = ZoneInfo(settings.timezone) if settings.timezone != "UTC" else None
+
     stmt = (
         select(models.CalendarEvent)
         .where(models.CalendarEvent.id == event_id)
@@ -307,13 +317,13 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
 
     if event.external_id:
         # Update existing remote event
-        caldav_client.update_remote_event(calendar, event.external_id, event_data)
+        caldav_client.update_remote_event(calendar, event.external_id, event_data, tz=tz)
         event.sync_status = SYNCED
         await db.commit()
         return {"action": "updated", "external_id": event.external_id}
     else:
         # Create new remote event
-        uid = caldav_client.create_remote_event(calendar, event_data)
+        uid = caldav_client.create_remote_event(calendar, event_data, tz=tz)
         event.external_id = uid
         event.sync_status = SYNCED
         await db.commit()

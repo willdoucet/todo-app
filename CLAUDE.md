@@ -99,8 +99,9 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
   - `app/tasks.py` - Celery tasks (sync, push, delete)
   - `app/crud_*.py` - CRUD operations per entity
   - `app/routes/*.py` - API endpoint handlers
-  - `app/services/caldav_client.py` - CalDAV protocol client (iCloud connection, ICS mapping)
-  - `app/services/sync_engine.py` - Two-way sync engine (pull/push/conflict resolution)
+  - `app/crud_app_settings.py` - Singleton app settings CRUD (timezone config)
+  - `app/services/caldav_client.py` - CalDAV protocol client (iCloud connection, ICS mapping, timezone-aware conversion)
+  - `app/services/sync_engine.py` - Two-way sync engine (pull/push/conflict resolution, loads timezone from AppSettings)
   - `app/utils/encryption.py` - Fernet encryption for stored passwords
 
 ### Frontend (`/frontend`)
@@ -110,6 +111,7 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
   - `src/components/` - Reusable UI components
   - `src/components/calendar/` - Calendar dashboard (18 components: views, modals, hooks, utils)
   - `src/components/mealboard/` - Mealboard feature components
+  - `src/components/settings/` - Settings components (ICloudSettings, TimezoneSettings, CalendarSelector)
   - `src/contexts/` - React context providers (DarkModeContext)
 
 ### Calendar Dashboard (`/`)
@@ -120,6 +122,7 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - Click-to-edit: clicking any task/event opens its edit modal; task checkbox toggles completion with `stopPropagation`; MonthDayPopover closes before opening edit modal
 - CalendarEvent API: CRUD at `/calendar-events` with date-range filtering, source-based edit restrictions (MANUAL and ICLOUD editable, GOOGLE read-only), time validation (HH:MM, end > start)
 - Two-way sync with iCloud Calendar implemented via CalDAV + Celery background workers; Google Calendar planned
+- User-configurable timezone (AppSettings singleton) — synced event times converted from UTC to local on pull, local to UTC on push; manual events unaffected
 
 ### Mealboard Feature (`/mealboard/*`)
 - **Routes**: `/mealboard/planner`, `/mealboard/recipes`, `/mealboard/shopping`, `/mealboard/finder`
@@ -142,6 +145,7 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - **MealPlan** - Scheduled meals for specific dates with category (BREAKFAST/LUNCH/DINNER)
 - **CalendarEvent** - Manual events and synced external calendar events (source: MANUAL/ICLOUD/GOOGLE), with date, time range (HH:MM), all-day flag, family member assignment, sync_status (SYNCED/PENDING_PUSH), etag, and calendar_integration_id FK
 - **CalendarIntegration** - External calendar connections (provider: icloud/google) with encrypted password, selected_calendars JSON, status (ACTIVE/SYNCING/ERROR), sync range config, and family member assignment
+- **AppSettings** - Singleton row storing app-wide configuration (timezone for iCloud sync display conversion)
 
 ## Key Patterns
 
@@ -168,7 +172,7 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## API Base URL
 - Backend: `http://localhost:8000`
-- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`, `/calendar-events`, `/integrations`
+- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`, `/calendar-events`, `/integrations`, `/app-settings`
 - Planned: `/integrations/google`
 
 ## Deployment (Planned)

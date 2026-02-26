@@ -7,6 +7,7 @@ they run inside Celery workers, not the async FastAPI event loop.
 
 import logging
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 import caldav
 import icalendar
@@ -80,8 +81,12 @@ def fetch_events(
     calendar: caldav.Calendar,
     start_date: date,
     end_date: date,
+    tz: ZoneInfo | None = None,
 ) -> list[dict]:
     """Fetch events from a calendar within a date range.
+
+    Args:
+        tz: If provided, timed events are converted to this timezone.
 
     Filters out recurring events (RRULE present) for v1.
     Returns a list of dicts from ics_to_event_data().
@@ -125,7 +130,7 @@ def fetch_events(
                     )
                     continue
 
-                parsed = ics_to_event_data(component)
+                parsed = ics_to_event_data(component, tz=tz)
                 if parsed:
                     # Attach the etag from the CalDAV object for change detection
                     parsed["etag"] = getattr(event_obj, "etag", None)
@@ -144,9 +149,11 @@ def fetch_events(
 # ---------------------------------------------------------------------------
 
 
-def create_remote_event(calendar: caldav.Calendar, event_data: dict) -> str:
+def create_remote_event(
+    calendar: caldav.Calendar, event_data: dict, tz: ZoneInfo | None = None
+) -> str:
     """Create an event on iCloud. Returns the UID."""
-    cal = event_data_to_ics(event_data)
+    cal = event_data_to_ics(event_data, tz=tz)
     created = calendar.save_event(cal.to_ical().decode("utf-8"))
     # Extract UID from the saved event
     parsed = icalendar.Calendar.from_ical(created.data)
@@ -156,7 +163,9 @@ def create_remote_event(calendar: caldav.Calendar, event_data: dict) -> str:
     return None
 
 
-def update_remote_event(calendar: caldav.Calendar, uid: str, event_data: dict) -> None:
+def update_remote_event(
+    calendar: caldav.Calendar, uid: str, event_data: dict, tz: ZoneInfo | None = None
+) -> None:
     """Update an existing event on iCloud by UID."""
     event_obj = calendar.event_by_uid(uid)
     with event_obj.edit_icalendar_instance() as cal:
@@ -169,7 +178,7 @@ def update_remote_event(calendar: caldav.Calendar, uid: str, event_data: dict) -
                         comp["DESCRIPTION"] = event_data["description"]
                     elif "DESCRIPTION" in comp:
                         del comp["DESCRIPTION"]
-                _apply_times_to_vevent(comp, event_data)
+                _apply_times_to_vevent(comp, event_data, tz=tz)
     event_obj.save()
 
 
@@ -189,16 +198,21 @@ def get_calendar_by_url(principal, calendar_url: str) -> caldav.Calendar:
 # ---------------------------------------------------------------------------
 
 
-def ics_to_event_data(vevent) -> dict | None:
+def ics_to_event_data(vevent, tz: ZoneInfo | None = None) -> dict | None:
     """Convert an iCalendar VEVENT component to a dict matching CalendarEventCreate fields.
+
+    Args:
+        vevent: iCalendar VEVENT component
+        tz: If provided, convert timed events to this timezone instead of UTC.
+            All-day events are unaffected.
 
     Mapping:
     - SUMMARY → title
     - DESCRIPTION → description
-    - DTSTART → date + start_time (converted to UTC)
+    - DTSTART → date + start_time (converted to tz or UTC)
     - DTEND → end_time
     - UID → external_id
-    - LAST-MODIFIED → last_modified_remote (UTC)
+    - LAST-MODIFIED → last_modified_remote (always UTC)
     - All-day: DTSTART is a date (not datetime)
     """
     uid = vevent.get("UID")
@@ -220,14 +234,16 @@ def ics_to_event_data(vevent) -> dict | None:
     # Detect all-day event: DTSTART is a date, not datetime
     is_all_day = isinstance(dtstart, date) and not isinstance(dtstart, datetime)
 
+    target_tz = tz or timezone.utc
+
     if is_all_day:
         event_date = dtstart
         start_time = None
         end_time = None
     else:
-        # Convert to UTC if timezone-aware
+        # Convert to target timezone (user's local tz, or UTC as fallback)
         if dtstart.tzinfo is not None:
-            dtstart = dtstart.astimezone(timezone.utc)
+            dtstart = dtstart.astimezone(target_tz)
         event_date = dtstart.date()
         start_time = dtstart.strftime("%H:%M")
 
@@ -236,12 +252,12 @@ def ics_to_event_data(vevent) -> dict | None:
         if dtend_prop:
             dtend = dtend_prop.dt
             if dtend.tzinfo is not None:
-                dtend = dtend.astimezone(timezone.utc)
+                dtend = dtend.astimezone(target_tz)
             end_time = dtend.strftime("%H:%M")
         else:
             end_time = None
 
-    # Parse LAST-MODIFIED
+    # Parse LAST-MODIFIED (always UTC — this is sync metadata, not display time)
     last_modified = None
     last_mod_prop = vevent.get("LAST-MODIFIED")
     if last_mod_prop:
@@ -263,8 +279,13 @@ def ics_to_event_data(vevent) -> dict | None:
     }
 
 
-def event_data_to_ics(event_data: dict) -> icalendar.Calendar:
-    """Convert CalendarEvent fields to an iCalendar object for pushing to iCloud."""
+def event_data_to_ics(event_data: dict, tz: ZoneInfo | None = None) -> icalendar.Calendar:
+    """Convert CalendarEvent fields to an iCalendar object for pushing to iCloud.
+
+    Args:
+        tz: If provided, HH:MM times in event_data are interpreted as local time
+            in this timezone and converted to UTC for the ICS.
+    """
     cal = icalendar.Calendar()
     cal.add("prodid", "-//Family Hub//familyhub.app//")
     cal.add("version", "2.0")
@@ -275,7 +296,7 @@ def event_data_to_ics(event_data: dict) -> icalendar.Calendar:
     if event_data.get("description"):
         vevent.add("description", event_data["description"])
 
-    _apply_times_to_vevent(vevent, event_data)
+    _apply_times_to_vevent(vevent, event_data, tz=tz)
 
     # UID — use existing external_id if available, otherwise generate
     if event_data.get("external_id"):
@@ -291,8 +312,14 @@ def event_data_to_ics(event_data: dict) -> icalendar.Calendar:
     return cal
 
 
-def _apply_times_to_vevent(vevent, event_data: dict) -> None:
+def _apply_times_to_vevent(
+    vevent, event_data: dict, tz: ZoneInfo | None = None
+) -> None:
     """Set DTSTART/DTEND on a VEVENT from event_data fields.
+
+    Args:
+        tz: If provided, HH:MM times are interpreted as local time in this
+            timezone and converted to UTC for the ICS output.
 
     Handles both all-day and timed events.
     """
@@ -317,27 +344,21 @@ def _apply_times_to_vevent(vevent, event_data: dict) -> None:
 
         vevent.add("dtend", event_date + timedelta(days=1))
     else:
+        # Interpret HH:MM as local time in `tz`, then convert to UTC
+        source_tz = tz or timezone.utc
         start_time = event_data.get("start_time", "00:00")
         h, m = map(int, start_time.split(":"))
-        dtstart = datetime(
-            event_date.year,
-            event_date.month,
-            event_date.day,
-            h,
-            m,
-            tzinfo=timezone.utc,
+        dtstart_local = datetime(
+            event_date.year, event_date.month, event_date.day, h, m,
+            tzinfo=source_tz,
         )
-        vevent.add("dtstart", dtstart)
+        vevent.add("dtstart", dtstart_local.astimezone(timezone.utc))
 
         end_time = event_data.get("end_time")
         if end_time:
             eh, em = map(int, end_time.split(":"))
-            dtend = datetime(
-                event_date.year,
-                event_date.month,
-                event_date.day,
-                eh,
-                em,
-                tzinfo=timezone.utc,
+            dtend_local = datetime(
+                event_date.year, event_date.month, event_date.day, eh, em,
+                tzinfo=source_tz,
             )
-            vevent.add("dtend", dtend)
+            vevent.add("dtend", dtend_local.astimezone(timezone.utc))
