@@ -43,6 +43,16 @@ export default function useCalendarData(startDate, endDate, activeMembers = null
     fetchData()
   }, [fetchData])
 
+  // Auto-refetch while any event has PENDING_PUSH (iCloud sync in progress).
+  // The Celery push task runs ~30s after save; poll every 10s until resolved.
+  useEffect(() => {
+    const hasPending = events.some((e) => e.sync_status === 'PENDING_PUSH')
+    if (!hasPending) return
+
+    const timer = setTimeout(fetchData, 10000)
+    return () => clearTimeout(timer)
+  }, [events, fetchData])
+
   // Client-side filtering by active members
   const filteredTasks = activeMembers
     ? tasks.filter((t) => t.assigned_to === null || activeMembers.has(t.assigned_to))
