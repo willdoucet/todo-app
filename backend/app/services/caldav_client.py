@@ -308,7 +308,7 @@ def event_data_to_ics(event_data: dict, tz: ZoneInfo | None = None) -> icalendar
 
     Args:
         tz: If provided, HH:MM times in event_data are interpreted as local time
-            in this timezone and converted to UTC for the ICS.
+            in this timezone and kept with TZID in the ICS (not converted to UTC).
     """
     cal = icalendar.Calendar()
     cal.add("prodid", "-//Family Hub//familyhub.app//")
@@ -343,7 +343,8 @@ def _apply_times_to_vevent(
 
     Args:
         tz: If provided, HH:MM times are interpreted as local time in this
-            timezone and converted to UTC for the ICS output.
+            timezone and kept with TZID in the ICS output (not converted to UTC).
+            This ensures iCloud's Edit Event modal shows the correct local time.
 
     Handles both all-day and timed events.
     """
@@ -376,7 +377,7 @@ def _apply_times_to_vevent(
             event_date.year, event_date.month, event_date.day, h, m,
             tzinfo=source_tz,
         )
-        vevent.add("dtstart", dtstart_local.astimezone(timezone.utc))
+        vevent.add("dtstart", dtstart_local)
 
         end_time = event_data.get("end_time")
         if end_time:
@@ -385,4 +386,4 @@ def _apply_times_to_vevent(
                 event_date.year, event_date.month, event_date.day, eh, em,
                 tzinfo=source_tz,
             )
-            vevent.add("dtend", dtend_local.astimezone(timezone.utc))
+            vevent.add("dtend", dtend_local)

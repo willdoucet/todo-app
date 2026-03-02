@@ -363,6 +363,140 @@ class TestUpdateRemoteEventFallback:
         mock_event.save.assert_called_once()
 
 
+class TestPushPreservesLocalTimezone:
+    """Regression tests: pushed events must use TZID notation, not UTC Z-suffix.
+
+    Bug: _apply_times_to_vevent converted local times to UTC before adding to
+    VEVENT, producing DTSTART:20260310T190000Z. iCloud's Edit Event modal then
+    showed the raw UTC time (7:00 PM) instead of the local time (12:00 PM).
+    Fix: keep times in the user's local timezone so icalendar produces
+    DTSTART;TZID=America/...:20260310T120000.
+    """
+
+    def test_event_data_to_ics_preserves_timezone(self):
+        """event_data_to_ics with tz should produce TZID, not UTC Z-suffix."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/New_York")
+        data = {
+            "title": "Test Time Sync",
+            "date": date(2026, 3, 10),
+            "start_time": "12:00",
+            "end_time": "15:00",
+            "all_day": False,
+            "external_id": "tz-push-test",
+        }
+        cal = event_data_to_ics(data, tz=tz)
+        ical_str = cal.to_ical().decode()
+
+        # Must NOT contain UTC Z-suffix for timed event
+        # (Z-suffix means iCloud shows raw UTC in Edit Event modal)
+        assert "T120000Z" not in ical_str, (
+            "DTSTART should not be in UTC Z notation — iCloud Edit Event modal "
+            "shows raw UTC times when Z-suffix is used"
+        )
+
+        # Must contain TZID reference to preserve local time display
+        assert "TZID" in ical_str, (
+            "DTSTART should include TZID so iCloud Edit Event modal "
+            "shows the correct local time"
+        )
+
+        # Parse back and verify the local time is preserved (not shifted)
+        parsed = icalendar.Calendar.from_ical(cal.to_ical())
+        for comp in parsed.walk():
+            if comp.name == "VEVENT":
+                dtstart = comp.get("DTSTART").dt
+                assert dtstart.hour == 12, f"Expected 12:00 local, got {dtstart.hour}:00"
+                assert dtstart.minute == 0
+                dtend = comp.get("DTEND").dt
+                assert dtend.hour == 15, f"Expected 15:00 local, got {dtend.hour}:00"
+
+    def test_update_remote_event_preserves_timezone(self):
+        """update_remote_event with tz should write TZID times, not UTC."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/Los_Angeles")
+
+        # Build a VEVENT that simulates what iCloud returns (with TZID)
+        cal = icalendar.Calendar()
+        vevent = icalendar.Event()
+        vevent.add("uid", "push-tz-uid")
+        vevent.add("summary", "Original")
+        vevent.add("dtstart", datetime(2026, 3, 10, 12, 0, tzinfo=tz))
+        vevent.add("dtend", datetime(2026, 3, 10, 13, 0, tzinfo=tz))
+        cal.add_component(vevent)
+
+        mock_event = MagicMock()
+        mock_event.icalendar_instance = cal
+
+        mock_cal = MagicMock(spec=caldav.Calendar)
+        mock_cal.event_by_uid.return_value = mock_event
+
+        update_remote_event(
+            mock_cal, "push-tz-uid",
+            {
+                "title": "Updated",
+                "date": date(2026, 3, 10),
+                "start_time": "12:00",
+                "end_time": "15:00",
+                "all_day": False,
+            },
+            tz=tz,
+        )
+
+        # Check the ICS output has TZID, not UTC Z-suffix
+        ical_str = cal.to_ical().decode()
+        assert "T120000Z" not in ical_str, (
+            "Updated DTSTART should not use UTC Z notation"
+        )
+        assert "TZID" in ical_str, (
+            "Updated DTSTART should include TZID for correct iCloud display"
+        )
+
+    def test_round_trip_with_timezone_preserves_local_times(self):
+        """Pull (UTC→local) then push (local→ICS) should produce correct local times."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/New_York")
+
+        # Simulate pull: iCloud has event at 17:00 UTC = 12:00 EST (Jan, no DST)
+        vevent_pull = icalendar.Event()
+        vevent_pull.add("uid", "rt-tz-uid")
+        vevent_pull.add("summary", "Round Trip TZ")
+        vevent_pull.add("dtstart", datetime(2026, 1, 15, 17, 0, tzinfo=timezone.utc))
+        vevent_pull.add("dtend", datetime(2026, 1, 15, 20, 0, tzinfo=timezone.utc))
+
+        pulled = ics_to_event_data(vevent_pull, tz=tz)
+        assert pulled["start_time"] == "12:00"  # 17:00 UTC → 12:00 EST
+        assert pulled["end_time"] == "15:00"    # 20:00 UTC → 15:00 EST
+
+        # Simulate push: send pulled data back to iCloud
+        push_data = {
+            "title": pulled["title"],
+            "date": pulled["date"],
+            "start_time": pulled["start_time"],
+            "end_time": pulled["end_time"],
+            "all_day": False,
+            "external_id": pulled["external_id"],
+        }
+        cal = event_data_to_ics(push_data, tz=tz)
+
+        # Parse the pushed ICS and verify times match original UTC
+        parsed = icalendar.Calendar.from_ical(cal.to_ical())
+        for comp in parsed.walk():
+            if comp.name == "VEVENT":
+                dtstart = comp.get("DTSTART").dt
+                # Convert back to UTC to verify round-trip correctness
+                dtstart_utc = dtstart.astimezone(timezone.utc)
+                assert dtstart_utc.hour == 17, (
+                    f"Round-trip should preserve 17:00 UTC, got {dtstart_utc.hour}:00"
+                )
+                dtend = comp.get("DTEND").dt
+                dtend_utc = dtend.astimezone(timezone.utc)
+                assert dtend_utc.hour == 20
+
+
 class TestDeleteRemoteEventFallback:
     """Tests for iCloud 412 fallback in delete_remote_event."""
 
