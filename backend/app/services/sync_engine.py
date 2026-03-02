@@ -299,11 +299,9 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
     password = decrypt_password(integration.encrypted_password)
     client, principal = caldav_client.connect_icloud(integration.email, password)
 
-    # Use the first selected calendar for push (or the calendar the event came from)
     selected_cals = integration.selected_calendars or []
     if not selected_cals:
         raise ValueError("No calendars selected for integration")
-    calendar = caldav_client.get_calendar_by_url(principal, selected_cals[0])
 
     event_data = {
         "title": event.title,
@@ -316,13 +314,30 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
     }
 
     if event.external_id:
-        # Update existing remote event
-        caldav_client.update_remote_event(calendar, event.external_id, event_data, tz=tz)
-        event.sync_status = SYNCED
-        await db.commit()
-        return {"action": "updated", "external_id": event.external_id}
+        # Update existing remote event — try each calendar to find it
+        for cal_url in selected_cals:
+            calendar = caldav_client.get_calendar_by_url(principal, cal_url)
+            try:
+                caldav_client.update_remote_event(
+                    calendar, event.external_id, event_data, tz=tz
+                )
+                event.sync_status = SYNCED
+                await db.commit()
+                return {"action": "updated", "external_id": event.external_id}
+            except Exception as e:
+                logger.info(
+                    "Event UID=%s not in calendar %s (%s), trying next",
+                    event.external_id,
+                    cal_url,
+                    e,
+                )
+                continue
+        raise ValueError(
+            f"Could not find event UID={event.external_id} in any selected calendar"
+        )
     else:
-        # Create new remote event
+        # Create new remote event — use first selected calendar
+        calendar = caldav_client.get_calendar_by_url(principal, selected_cals[0])
         uid = caldav_client.create_remote_event(calendar, event_data, tz=tz)
         event.external_id = uid
         event.sync_status = SYNCED

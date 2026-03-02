@@ -1,14 +1,23 @@
 """Unit tests for CalDAV client ICS ↔ CalendarEvent mapping.
 
 Tests ics_to_event_data and event_data_to_ics without connecting to any CalDAV server.
+Also tests fallback logic when event_by_uid fails (iCloud 412 workaround).
 """
 
 import pytest
 from datetime import date, datetime, timezone, timedelta
+from unittest.mock import MagicMock, patch, call
 
+import caldav
+import caldav.lib.error
 import icalendar
 
-from app.services.caldav_client import ics_to_event_data, event_data_to_ics
+from app.services.caldav_client import (
+    ics_to_event_data,
+    event_data_to_ics,
+    update_remote_event,
+    delete_remote_event,
+)
 
 
 # =============================================================================
@@ -242,3 +251,144 @@ class TestRoundTrip:
                 assert result["all_day"] is True
                 assert result["start_time"] is None
                 assert result["end_time"] is None
+
+
+# =============================================================================
+# update_remote_event / delete_remote_event fallback tests
+# =============================================================================
+
+
+def _make_mock_calendar(url="https://caldav.icloud.com/cal/test-cal/"):
+    """Build a mock caldav.Calendar with event_by_uid that raises ReportError."""
+    mock_cal = MagicMock(spec=caldav.Calendar)
+    mock_cal.url = url
+    mock_cal.event_by_uid.side_effect = caldav.lib.error.ReportError(
+        "412 Precondition Failed"
+    )
+    return mock_cal
+
+
+class TestUpdateRemoteEventModifiesICS:
+    """Tests that update_remote_event correctly modifies ICS data via icalendar_instance."""
+
+    def test_updates_summary_and_saves(self):
+        """Should modify VEVENT SUMMARY via icalendar_instance property and save."""
+        # Build a real icalendar object
+        cal = icalendar.Calendar()
+        vevent = icalendar.Event()
+        vevent.add("uid", "test-uid")
+        vevent.add("summary", "Original Title")
+        vevent.add("dtstart", datetime(2026, 3, 15, 10, 0, tzinfo=timezone.utc))
+        vevent.add("dtend", datetime(2026, 3, 15, 11, 0, tzinfo=timezone.utc))
+        cal.add_component(vevent)
+
+        mock_event = MagicMock()
+        mock_event.icalendar_instance = cal
+
+        mock_cal = MagicMock(spec=caldav.Calendar)
+        mock_cal.event_by_uid.return_value = mock_event
+
+        update_remote_event(
+            mock_cal, "test-uid",
+            {"title": "Updated Title", "date": date(2026, 3, 15), "start_time": "10:00", "all_day": False},
+        )
+
+        # Verify the VEVENT was modified
+        for comp in cal.subcomponents:
+            if comp.name == "VEVENT":
+                assert str(comp["SUMMARY"]) == "Updated Title"
+
+        # Verify icalendar_instance was written back and save called
+        assert mock_event.icalendar_instance == cal
+        mock_event.save.assert_called_once()
+
+    def test_does_not_use_edit_icalendar_instance(self):
+        """Should NOT call edit_icalendar_instance (doesn't exist in caldav 2.2.6)."""
+        cal = icalendar.Calendar()
+        vevent = icalendar.Event()
+        vevent.add("uid", "test-uid-2")
+        vevent.add("summary", "Test")
+        vevent.add("dtstart", date(2026, 1, 1))
+        cal.add_component(vevent)
+
+        mock_event = MagicMock()
+        mock_event.icalendar_instance = cal
+
+        mock_cal = MagicMock(spec=caldav.Calendar)
+        mock_cal.event_by_uid.return_value = mock_event
+
+        update_remote_event(mock_cal, "test-uid-2", {"title": "New", "date": date(2026, 1, 1), "all_day": True})
+
+        # edit_icalendar_instance should never be called
+        mock_event.edit_icalendar_instance.assert_not_called()
+
+
+class TestUpdateRemoteEventFallback:
+    """Tests for iCloud 412 fallback in update_remote_event."""
+
+    def test_falls_back_to_direct_url_on_report_error(self):
+        """When event_by_uid raises ReportError, should use direct URL access."""
+        mock_cal = _make_mock_calendar()
+        uid = "71E273EE-C0F3-48FB-A953-26D2C82388D7"
+        event_data = {"title": "Updated Golf", "date": date(2026, 2, 26)}
+
+        mock_event = MagicMock()
+        with patch("app.services.caldav_client.caldav.Event", return_value=mock_event) as mock_cls:
+            update_remote_event(mock_cal, uid, event_data)
+
+            # Verify event_by_uid was attempted first
+            mock_cal.event_by_uid.assert_called_once_with(uid)
+
+            # Verify fallback constructed direct URL
+            expected_url = f"https://caldav.icloud.com/cal/test-cal/{uid}.ics"
+            mock_cls.assert_called_once_with(
+                client=mock_cal.client, url=expected_url, parent=mock_cal
+            )
+            mock_event.load.assert_called_once()
+            mock_event.save.assert_called_once()
+
+    def test_uses_event_by_uid_when_available(self):
+        """When event_by_uid succeeds, should use it normally (no fallback)."""
+        mock_cal = MagicMock(spec=caldav.Calendar)
+        mock_event = MagicMock()
+        mock_cal.event_by_uid.return_value = mock_event
+        uid = "normal-uid"
+        event_data = {"title": "Normal Update", "date": date(2026, 3, 1)}
+
+        with patch("app.services.caldav_client.caldav.Event") as mock_cls:
+            update_remote_event(mock_cal, uid, event_data)
+            mock_cls.assert_not_called()  # No fallback needed
+
+        mock_cal.event_by_uid.assert_called_once_with(uid)
+        mock_event.save.assert_called_once()
+
+
+class TestDeleteRemoteEventFallback:
+    """Tests for iCloud 412 fallback in delete_remote_event."""
+
+    def test_falls_back_to_direct_url_on_report_error(self):
+        """When event_by_uid raises ReportError, should delete via direct URL."""
+        mock_cal = _make_mock_calendar()
+        uid = "delete-test-uid"
+
+        mock_event = MagicMock()
+        with patch("app.services.caldav_client.caldav.Event", return_value=mock_event) as mock_cls:
+            delete_remote_event(mock_cal, uid)
+
+            expected_url = f"https://caldav.icloud.com/cal/test-cal/{uid}.ics"
+            mock_cls.assert_called_once_with(
+                client=mock_cal.client, url=expected_url, parent=mock_cal
+            )
+            mock_event.delete.assert_called_once()
+
+    def test_uses_event_by_uid_when_available(self):
+        """When event_by_uid succeeds, should delete normally."""
+        mock_cal = MagicMock(spec=caldav.Calendar)
+        mock_event = MagicMock()
+        mock_cal.event_by_uid.return_value = mock_event
+
+        with patch("app.services.caldav_client.caldav.Event") as mock_cls:
+            delete_remote_event(mock_cal, "normal-uid")
+            mock_cls.assert_not_called()
+
+        mock_event.delete.assert_called_once()

@@ -5,6 +5,15 @@ import { formatDateKey } from './calendarUtils'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
+function extractErrorMessage(err, fallback) {
+  const detail = err.response?.data?.detail
+  if (Array.isArray(detail)) {
+    return detail.map((d) => d.msg || JSON.stringify(d)).join('; ')
+  }
+  if (typeof detail === 'string') return detail
+  return fallback
+}
+
 /**
  * Modal for creating/editing calendar events.
  * Follows AddMealModal Dialog pattern.
@@ -90,7 +99,7 @@ export default function EventFormModal({
       onClose()
     } catch (err) {
       console.error('Error saving event:', err)
-      setError(err.response?.data?.detail || 'Failed to save event')
+      setError(extractErrorMessage(err, 'Failed to save event'))
     } finally {
       setLoading(false)
     }
@@ -113,7 +122,7 @@ export default function EventFormModal({
       onClose()
     } catch (err) {
       console.error('Error deleting event:', err)
-      setError(err.response?.data?.detail || 'Failed to delete event')
+      setError(extractErrorMessage(err, 'Failed to delete event'))
     } finally {
       setLoading(false)
     }

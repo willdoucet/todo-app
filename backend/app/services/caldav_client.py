@@ -163,28 +163,52 @@ def create_remote_event(
     return None
 
 
+def _get_event_by_uid(calendar: caldav.Calendar, uid: str):
+    """Look up a CalDAV event by UID with fallback for iCloud 412 errors.
+
+    iCloud sometimes returns 412 Precondition Failed on REPORT queries
+    used by event_by_uid(). When that happens, fall back to direct URL
+    access at {calendar_url}/{uid}.ics (standard CalDAV convention).
+    """
+    try:
+        return calendar.event_by_uid(uid)
+    except Exception as e:
+        base = str(calendar.url).rstrip("/")
+        url = f"{base}/{uid}.ics"
+        logger.warning(
+            "event_by_uid failed for UID=%s (%s), trying direct URL: %s",
+            uid,
+            e,
+            url,
+        )
+        event_obj = caldav.Event(client=calendar.client, url=url, parent=calendar)
+        event_obj.load()
+        return event_obj
+
+
 def update_remote_event(
     calendar: caldav.Calendar, uid: str, event_data: dict, tz: ZoneInfo | None = None
 ) -> None:
     """Update an existing event on iCloud by UID."""
-    event_obj = calendar.event_by_uid(uid)
-    with event_obj.edit_icalendar_instance() as cal:
-        for comp in cal.subcomponents:
-            if comp.name == "VEVENT":
-                if "title" in event_data:
-                    comp["SUMMARY"] = event_data["title"]
-                if "description" in event_data:
-                    if event_data["description"]:
-                        comp["DESCRIPTION"] = event_data["description"]
-                    elif "DESCRIPTION" in comp:
-                        del comp["DESCRIPTION"]
-                _apply_times_to_vevent(comp, event_data, tz=tz)
+    event_obj = _get_event_by_uid(calendar, uid)
+    cal = event_obj.icalendar_instance
+    for comp in cal.subcomponents:
+        if comp.name == "VEVENT":
+            if "title" in event_data:
+                comp["SUMMARY"] = event_data["title"]
+            if "description" in event_data:
+                if event_data["description"]:
+                    comp["DESCRIPTION"] = event_data["description"]
+                elif "DESCRIPTION" in comp:
+                    del comp["DESCRIPTION"]
+            _apply_times_to_vevent(comp, event_data, tz=tz)
+    event_obj.icalendar_instance = cal
     event_obj.save()
 
 
 def delete_remote_event(calendar: caldav.Calendar, uid: str) -> None:
     """Delete an event from iCloud by UID."""
-    event_obj = calendar.event_by_uid(uid)
+    event_obj = _get_event_by_uid(calendar, uid)
     event_obj.delete()
 
 

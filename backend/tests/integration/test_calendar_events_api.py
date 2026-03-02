@@ -208,6 +208,46 @@ class TestUpdateCalendarEvent:
         assert response.status_code == 200
         assert response.json()["title"] == "Updated iCloud Event"
 
+    async def test_updates_event_with_date_field(self, client, test_calendar_event):
+        """Should accept date in PATCH payload (regression: Pydantic name shadowing)."""
+        response = await client.patch(
+            f"/calendar-events/{test_calendar_event.id}",
+            json={
+                "title": "Updated",
+                "date": "2026-03-15",
+                "all_day": False,
+                "start_time": "10:00",
+                "end_time": "11:00",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["date"] == "2026-03-15"
+        assert data["title"] == "Updated"
+
+    async def test_updates_icloud_event_with_full_payload(
+        self, client, test_synced_event
+    ):
+        """Should update iCloud event with all fields the frontend sends."""
+        response = await client.patch(
+            f"/calendar-events/{test_synced_event.id}",
+            json={
+                "title": "Golf",
+                "description": None,
+                "date": "2026-02-26",
+                "all_day": False,
+                "start_time": "18:00",
+                "end_time": "19:00",
+                "assigned_to": None,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == "Golf"
+        assert data["date"] == "2026-02-26"
+
     async def test_rejects_update_of_google_event(self, client, test_google_event):
         """GOOGLE events cannot be edited yet."""
         response = await client.patch(

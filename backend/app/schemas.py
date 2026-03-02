@@ -1,7 +1,7 @@
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from datetime import datetime, date
+from datetime import datetime, date as _Date
 from typing import Optional, List as TypingList
 from enum import Enum
 
@@ -117,12 +117,12 @@ class ResponsibilityCompletionBase(BaseModel):
 
     responsibility_id: int = Field(..., ge=1)
     family_member_id: int = Field(..., ge=1)
-    completion_date: date
+    completion_date: _Date
     category: str
 
 
 class ResponsibilityCompletionCreate(BaseModel):
-    completion_date: date
+    completion_date: _Date
 
 
 class ResponsibilityCompletion(ResponsibilityCompletionBase):
@@ -218,7 +218,7 @@ class Recipe(RecipeBase):
 class MealPlanBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    date: date
+    date: _Date
     category: MealCategory
     recipe_id: Optional[int] = Field(None, ge=1)
     custom_meal_name: Optional[str] = Field(None, max_length=200)
@@ -231,7 +231,7 @@ class MealPlanCreate(MealPlanBase):
 
 
 class MealPlanUpdate(BaseModel):
-    date: Optional[date] = None
+    date: Optional[_Date] = None
     category: Optional[MealCategory] = None
     recipe_id: Optional[int] = Field(None, ge=1)
     custom_meal_name: Optional[str] = Field(None, max_length=200)
@@ -266,7 +266,7 @@ class CalendarEventBase(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=500)
-    date: date
+    date: _Date
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     all_day: bool = False
@@ -288,7 +288,7 @@ class CalendarEventCreate(CalendarEventBase):
 class CalendarEventUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=500)
-    date: Optional[date] = None
+    date: Optional[_Date] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     all_day: Optional[bool] = None
