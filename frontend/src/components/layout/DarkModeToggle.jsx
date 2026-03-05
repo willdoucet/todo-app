@@ -1,4 +1,4 @@
-import { useDarkMode } from '../contexts/DarkModeContext'
+import { useDarkMode } from '../../contexts/DarkModeContext'
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 
 export default function DarkModeToggle() {

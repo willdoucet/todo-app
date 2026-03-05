@@ -1,5 +1,5 @@
 import TaskItem from './TaskItem'
-import { EmptyTasksState } from './EmptyState'
+import { EmptyTasksState } from '../shared/EmptyState'
 
 export default function TaskListView({
   tasks,

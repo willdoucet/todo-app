@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import ResponsibilityCard from './ResponsibilityCard'
-import { EmptyDailyViewState } from './EmptyState'
+import { EmptyDailyViewState } from '../shared/EmptyState'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 

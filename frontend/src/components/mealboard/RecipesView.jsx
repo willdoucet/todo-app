@@ -4,7 +4,7 @@ import axios from 'axios'
 import MealboardNav from './MealboardNav'
 import RecipeCard from './RecipeCard'
 import RecipeFormModal from './RecipeFormModal'
-import ConfirmDialog from '../ConfirmDialog'
+import ConfirmDialog from '../shared/ConfirmDialog'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 

@@ -15,6 +15,7 @@ Family task and responsibility management app with a FastAPI backend and React f
 | [TECH_STACK.md](./.claude/TECH_STACK.md) | All dependencies locked to exact versions |
 | [FRONTEND_GUIDELINES.md](./.claude/FRONTEND_GUIDELINES.md) | Design system, colors, spacing, component patterns |
 | [BACKEND_STRUCTURE.md](./.claude/BACKEND_STRUCTURE.md) | Database schema, API contracts, code organization |
+| [FRONTEND_STRUCTURE.md](./.claude/FRONTEND_STRUCTURE.md) | Frontend directory layout, component inventory |
 | [IMPLEMENTATION_PLAN.md](./.claude/IMPLEMENTATION_PLAN.md) | Step-by-step build sequence for remaining features |
 | [tasks/lessons.md](./.claude/tasks/lessons.md) | Patterns and mistakes to avoid (self-improvement log) |
 
@@ -83,104 +84,6 @@ docker-compose exec frontend npm run test:coverage         # With coverage repor
 ```
 
 CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
-
-## Architecture
-
-### Backend (`/backend`)
-- **FastAPI** with async SQLAlchemy and PostgreSQL
-- **Celery** with Redis for background task processing (iCloud sync, event push)
-- **Package manager**: uv (not pip)
-- **Structure**:
-  - `app/main.py` - FastAPI app, CORS, routers
-  - `app/models.py` - SQLAlchemy ORM models
-  - `app/schemas.py` - Pydantic validation schemas
-  - `app/database.py` - Async DB session
-  - `app/celery_app.py` - Celery app with Redis broker and beat schedule
-  - `app/tasks.py` - Celery tasks (sync, push, delete)
-  - `app/crud_*.py` - CRUD operations per entity
-  - `app/routes/*.py` - API endpoint handlers
-  - `app/crud_app_settings.py` - Singleton app settings CRUD (timezone config)
-  - `app/services/caldav_client.py` - CalDAV protocol client (iCloud connection, ICS mapping, timezone-aware conversion)
-  - `app/services/sync_engine.py` - Two-way sync engine (pull/push/conflict resolution, loads timezone from AppSettings)
-  - `app/utils/encryption.py` - Fernet encryption for stored passwords
-
-### Frontend (`/frontend`)
-- **React 19** with React Router v7, Vite, TailwindCSS v4
-- **Structure**:
-  - `src/pages/` - Route-level components
-  - `src/components/` - Reusable UI components
-  - `src/components/calendar/` - Calendar dashboard (18 components: views, modals, hooks, utils)
-  - `src/components/mealboard/` - Mealboard feature components
-  - `src/components/settings/` - Settings components (ICloudSettings, TimezoneSettings, CalendarSelector)
-  - `src/contexts/` - React context providers (DarkModeContext)
-
-### Calendar Dashboard (`/`)
-- **Home page** with unified calendar view (complete — backend + frontend + tests)
-- Shows tasks with due dates and manual calendar events (meal plans are separate in Mealboard)
-- Views: Month (desktop default), Week, Day — responsive at 768px breakpoint
-- 18 components in `src/components/calendar/`: CalendarPage, CalendarHeader, FamilyMemberFilter, MonthView, WeekViewDesktop, WeekViewMobile, DayView, TimeGrid, AllDaySection, CalendarItem, MonthDayPopover, QuickAddPopover, MobileDayList, EventFormModal, TaskFormModal, calendarUtils, useCalendarData, useCalendarNavigation
-- Click-to-edit: clicking any task/event opens its edit modal; task checkbox toggles completion with `stopPropagation`; MonthDayPopover closes before opening edit modal
-- CalendarEvent API: CRUD at `/calendar-events` with date-range filtering, source-based edit restrictions (MANUAL and ICLOUD editable, GOOGLE read-only), time validation (HH:MM, end > start)
-- Two-way sync with iCloud Calendar implemented via CalDAV + Celery background workers; Google Calendar planned
-- User-configurable timezone (AppSettings singleton) — synced event times converted from UTC to local on pull, local to UTC on push; manual events unaffected
-
-### Mealboard Feature (`/mealboard/*`)
-- **Routes**: `/mealboard/planner`, `/mealboard/recipes`, `/mealboard/shopping`, `/mealboard/finder`
-- **Components**:
-  - `MealboardPage.jsx` - Main layout with responsive navigation
-  - `MealboardNav.jsx` - Left panel (>=1200px) or dropdown menu (<1200px)
-  - `MealPlannerView.jsx` - Weekly calendar view with meal slots
-  - `RecipesView.jsx` - Recipe catalog with filtering and sorting
-  - `ShoppingListView.jsx` - Shopping list linked from existing lists
-  - `RecipeFinderView.jsx` - Placeholder for AI-powered recipe discovery
-- **Responsive Breakpoint**: 1200px (xl:) for desktop vs mobile layout
-
-### Data Model
-- **FamilyMember** - Household members (has is_system flag for "Everyone", color for calendar display)
-- **List** - Task categories with color/icon
-- **Task** - Todo items assigned to members, belong to lists
-- **Responsibility** - Recurring tasks with categories array (MORNING/AFTERNOON/EVENING/CHORE) — one responsibility can appear in multiple time-of-day sections
-- **ResponsibilityCompletion** - Tracks daily completion by member and category
-- **Recipe** - Meal recipes with ingredients, instructions, times, and favorite status
-- **MealPlan** - Scheduled meals for specific dates with category (BREAKFAST/LUNCH/DINNER)
-- **CalendarEvent** - Manual events and synced external calendar events (source: MANUAL/ICLOUD/GOOGLE), with date, time range (HH:MM), all-day flag, family member assignment, sync_status (SYNCED/PENDING_PUSH), etag, and calendar_integration_id FK
-- **CalendarIntegration** - External calendar connections (provider: icloud/google) with encrypted password, selected_calendars JSON, status (ACTIVE/SYNCING/ERROR), sync range config, and family member assignment
-- **AppSettings** - Singleton row storing app-wide configuration (timezone for iCloud sync display conversion)
-
-## Key Patterns
-
-- All backend DB operations use `AsyncSession` with `selectinload()` for relationships
-- Frontend uses Axios for API calls, TanStack Query available but not fully integrated
-- Custom Tailwind theme colors defined in `frontend/src/index.css` via `@theme` directive
-- Dark mode via class toggle on document root (`dark` class)
-
-## Environment Variables
-
-Backend (`.env`):
-```
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app
-TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app_test
-UPLOAD_DIR=/app/uploads
-REDIS_URL=redis://redis:6379/0
-FERNET_KEY=<base64-encoded-fernet-key>
-```
-
-Frontend (`.env.local`):
-```
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-## API Base URL
-- Backend: `http://localhost:8000`
-- Endpoints: `/tasks`, `/lists`, `/responsibilities`, `/family-members`, `/upload`, `/recipes`, `/meal-plans`, `/calendar-events`, `/integrations`, `/app-settings`
-- Planned: `/integrations/google`
-
-## Deployment (Planned)
-- **CI/CD**: GitHub Actions for testing and deployment
-- **Hosting**: Fly.io or Railway (containerized)
-- **Database**: Managed PostgreSQL
-- **Files**: S3-compatible storage for uploads
-- **User Access**: Public URL, no Docker setup required for end users
 
 ## Workflow Orchestration
 
