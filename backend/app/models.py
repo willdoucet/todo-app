@@ -38,6 +38,13 @@ class CalendarEventSource(PyEnum):
     GOOGLE = "GOOGLE"
 
 
+class IntegrationStatus(PyEnum):
+    ACTIVE = "ACTIVE"
+    ERROR = "ERROR"
+    SYNCING = "SYNCING"
+    DISCONNECTED = "DISCONNECTED"
+
+
 class FamilyMember(Base):
     __tablename__ = "family_members"
     id = Column(Integer, primary_key=True, index=True)
@@ -48,6 +55,7 @@ class FamilyMember(Base):
 
     tasks = relationship("Task", back_populates="family_member")
     responsibilities = relationship("Responsibility", back_populates="family_member")
+    calendar_integrations = relationship("CalendarIntegration", back_populates="family_member")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
@@ -152,6 +160,59 @@ class MealPlan(Base):
     recipe = relationship("Recipe", back_populates="meal_plans")
 
 
+class CalendarIntegration(Base):
+    __tablename__ = "calendar_integrations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    family_member_id = Column(Integer, ForeignKey("family_members.id"), nullable=False)
+    provider = Column(String, nullable=False, default="icloud")
+    email = Column(String, nullable=False)
+    encrypted_password = Column(String, nullable=False)
+    status = Column(
+        SQLEnum(IntegrationStatus),
+        default=IntegrationStatus.ACTIVE,
+        nullable=False,
+    )
+    last_sync_at = Column(DateTime, nullable=True)
+    last_error = Column(String, nullable=True)
+    sync_range_past_days = Column(Integer, default=30)
+    sync_range_future_days = Column(Integer, default=90)
+    selected_calendars = Column(JSON, nullable=True)  # Legacy — migrating to Calendar table
+
+    family_member = relationship("FamilyMember", back_populates="calendar_integrations")
+    calendars = relationship("Calendar", back_populates="integration", cascade="all, delete-orphan")
+    calendar_events = relationship("CalendarEvent", back_populates="integration")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+
+class Calendar(Base):
+    __tablename__ = "calendars"
+
+    id = Column(Integer, primary_key=True, index=True)
+    calendar_integration_id = Column(
+        Integer,
+        ForeignKey("calendar_integrations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    calendar_url = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    color = Column(String, nullable=True)
+
+    integration = relationship("CalendarIntegration", back_populates="calendars")
+    events = relationship("CalendarEvent", back_populates="calendar")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "calendar_integration_id",
+            "calendar_url",
+            name="uq_calendar_integration_url",
+        ),
+    )
+
+
 class CalendarEvent(Base):
     __tablename__ = "calendar_events"
 
@@ -167,9 +228,43 @@ class CalendarEvent(Base):
         default=CalendarEventSource.MANUAL,
         nullable=False,
     )
-    external_id = Column(String, nullable=True, unique=True)
+    external_id = Column(String, nullable=True)
     assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=True)
     family_member = relationship("FamilyMember")
+    timezone = Column(String, nullable=True)  # IANA timezone name, null for all-day events
+    # Sync metadata columns
+    etag = Column(String, nullable=True)
+    last_modified_remote = Column(DateTime, nullable=True)
+    sync_status = Column(String, nullable=True)  # SYNCED, PENDING_PUSH, CONFLICT
+    calendar_integration_id = Column(
+        Integer,
+        ForeignKey("calendar_integrations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    calendar_id = Column(
+        Integer,
+        ForeignKey("calendars.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    integration = relationship("CalendarIntegration", back_populates="calendar_events")
+    calendar = relationship("Calendar", back_populates="events")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_id",
+            "calendar_integration_id",
+            name="uq_calendar_event_external_integration",
+        ),
+    )
+
+
+class AppSettings(Base):
+    __tablename__ = "app_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timezone = Column(String, nullable=False, default="UTC")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 

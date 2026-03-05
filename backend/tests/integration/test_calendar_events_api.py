@@ -180,6 +180,45 @@ class TestCreateCalendarEvent:
         response = await client.post("/calendar-events/", json=bad_event)
         assert response.status_code == 422
 
+    async def test_timed_event_gets_timezone_from_app_settings(
+        self, client, db_session, test_family_member
+    ):
+        """POST timed manual event should auto-populate timezone from AppSettings."""
+        from app.models import AppSettings
+
+        # Create AppSettings with a non-UTC timezone
+        settings = AppSettings(timezone="America/New_York")
+        db_session.add(settings)
+        await db_session.commit()
+
+        new_event = {
+            "title": "Timed Event",
+            "date": "2026-03-15",
+            "start_time": "14:00",
+            "end_time": "15:00",
+            "assigned_to": test_family_member.id,
+        }
+
+        response = await client.post("/calendar-events/", json=new_event)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["timezone"] == "America/New_York"
+
+    async def test_all_day_event_has_null_timezone(self, client):
+        """POST all-day event should have timezone=null."""
+        new_event = {
+            "title": "All Day",
+            "date": "2026-03-20",
+            "all_day": True,
+        }
+
+        response = await client.post("/calendar-events/", json=new_event)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["timezone"] is None
+
 
 # =============================================================================
 # PATCH /calendar-events/{id} - Update event
@@ -198,15 +237,65 @@ class TestUpdateCalendarEvent:
         assert response.status_code == 200
         assert response.json()["title"] == "Updated Title"
 
-    async def test_rejects_update_of_synced_event(self, client, test_synced_event):
-        """Should return 400 when trying to update a non-MANUAL event."""
+    async def test_allows_update_of_icloud_event(self, client, test_synced_event):
+        """ICLOUD events can be edited (changes pushed back to iCloud)."""
         response = await client.patch(
             f"/calendar-events/{test_synced_event.id}",
+            json={"title": "Updated iCloud Event"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["title"] == "Updated iCloud Event"
+
+    async def test_updates_event_with_date_field(self, client, test_calendar_event):
+        """Should accept date in PATCH payload (regression: Pydantic name shadowing)."""
+        response = await client.patch(
+            f"/calendar-events/{test_calendar_event.id}",
+            json={
+                "title": "Updated",
+                "date": "2026-03-15",
+                "all_day": False,
+                "start_time": "10:00",
+                "end_time": "11:00",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["date"] == "2026-03-15"
+        assert data["title"] == "Updated"
+
+    async def test_updates_icloud_event_with_full_payload(
+        self, client, test_synced_event
+    ):
+        """Should update iCloud event with all fields the frontend sends."""
+        response = await client.patch(
+            f"/calendar-events/{test_synced_event.id}",
+            json={
+                "title": "Golf",
+                "description": None,
+                "date": "2026-02-26",
+                "all_day": False,
+                "start_time": "18:00",
+                "end_time": "19:00",
+                "assigned_to": None,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["title"] == "Golf"
+        assert data["date"] == "2026-02-26"
+
+    async def test_rejects_update_of_google_event(self, client, test_google_event):
+        """GOOGLE events cannot be edited yet."""
+        response = await client.patch(
+            f"/calendar-events/{test_google_event.id}",
             json={"title": "Hacked"},
         )
 
         assert response.status_code == 400
-        assert "manually created" in response.json()["detail"]
+        assert "Google" in response.json()["detail"]
 
     async def test_returns_404_when_not_found(self, client):
         """Should return 404 when event doesn't exist."""
@@ -237,14 +326,23 @@ class TestDeleteCalendarEvent:
         get_response = await client.get(f"/calendar-events/{event_id}")
         assert get_response.status_code == 404
 
-    async def test_rejects_delete_of_synced_event(self, client, test_synced_event):
-        """Should return 400 when trying to delete a non-MANUAL event."""
+    async def test_allows_delete_of_icloud_event(self, client, test_synced_event):
+        """ICLOUD events can be deleted (delete pushed to iCloud)."""
         response = await client.delete(
             f"/calendar-events/{test_synced_event.id}"
         )
 
+        assert response.status_code == 200
+        assert response.json()["id"] == test_synced_event.id
+
+    async def test_rejects_delete_of_google_event(self, client, test_google_event):
+        """GOOGLE events cannot be deleted yet."""
+        response = await client.delete(
+            f"/calendar-events/{test_google_event.id}"
+        )
+
         assert response.status_code == 400
-        assert "manually created" in response.json()["detail"]
+        assert "Google" in response.json()["detail"]
 
     async def test_returns_404_when_not_found(self, client):
         """Should return 404 when event doesn't exist."""

@@ -41,7 +41,7 @@ export default function CalendarPage() {
   // Active member filter (all members active by default)
   const [activeMembers, setActiveMembers] = useState(null) // null = not initialized yet
 
-  const { tasks, events, familyMembers, loading, error, refetch } = useCalendarData(
+  const { tasks, events, displayEvents, displayTimezone, familyMembers, calendars, loading, error, refetch } = useCalendarData(
     nav.startDate,
     nav.endDate,
     activeMembers
@@ -107,7 +107,9 @@ export default function CalendarPage() {
   }
 
   const handleEditEvent = (event) => {
-    setEditEvent(event)
+    // Look up raw (unconverted) event for the edit modal
+    const raw = events.find((e) => e.id === event.id) || event
+    setEditEvent(raw)
     setEventModalOpen(true)
   }
 
@@ -168,7 +170,7 @@ export default function CalendarPage() {
               <MonthView
                 currentDate={nav.currentDate}
                 tasks={tasks}
-                events={events}
+                events={displayEvents}
                 familyMembers={familyMembers}
                 selectedDate={nav.selectedDate}
                 onSelectDate={nav.setSelectedDate}
@@ -186,7 +188,7 @@ export default function CalendarPage() {
               <WeekViewDesktop
                 weekDates={weekDates}
                 tasks={tasks}
-                events={events}
+                events={displayEvents}
                 familyMembers={familyMembers}
                 onQuickAddTask={handleQuickAddTask}
                 onQuickAddEvent={handleQuickAddEvent}
@@ -200,7 +202,7 @@ export default function CalendarPage() {
               <WeekViewMobile
                 weekDates={weekDates}
                 tasks={tasks}
-                events={events}
+                events={displayEvents}
                 familyMembers={familyMembers}
                 selectedDate={nav.selectedDate}
                 onSelectDate={nav.setSelectedDate}
@@ -216,7 +218,7 @@ export default function CalendarPage() {
               <DayView
                 date={nav.currentDate}
                 tasks={tasks}
-                events={events}
+                events={displayEvents}
                 familyMembers={familyMembers}
                 onQuickAddTask={handleQuickAddTask}
                 onQuickAddEvent={handleQuickAddEvent}
@@ -245,7 +247,9 @@ export default function CalendarPage() {
         defaultDate={quickAddDate}
         defaultTime={quickAddTime}
         familyMembers={familyMembers}
+        calendars={calendars}
         initialEvent={editEvent}
+        displayTimezone={displayTimezone}
       />
     </div>
   )
