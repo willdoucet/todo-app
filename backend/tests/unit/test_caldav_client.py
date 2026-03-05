@@ -17,7 +17,48 @@ from app.services.caldav_client import (
     event_data_to_ics,
     update_remote_event,
     delete_remote_event,
+    _extract_tzid,
 )
+
+
+# =============================================================================
+# _extract_tzid tests
+# =============================================================================
+
+
+class TestExtractTzid:
+    """Tests for _extract_tzid helper."""
+
+    def test_zoneinfo(self):
+        """Should extract .key from ZoneInfo objects."""
+        from zoneinfo import ZoneInfo
+
+        dt = datetime(2026, 1, 15, 10, 0, tzinfo=ZoneInfo("America/New_York"))
+        assert _extract_tzid(dt) == "America/New_York"
+
+    def test_utc_timezone(self):
+        """Should return 'UTC' for stdlib timezone.utc."""
+        dt = datetime(2026, 1, 15, 10, 0, tzinfo=timezone.utc)
+        assert _extract_tzid(dt) == "UTC"
+
+    def test_naive_datetime(self):
+        """Should return 'UTC' for naive datetimes."""
+        dt = datetime(2026, 1, 15, 10, 0)
+        assert _extract_tzid(dt) == "UTC"
+
+    def test_pytz_zone(self):
+        """Should extract .zone from pytz-like objects."""
+        from datetime import tzinfo as _tzinfo
+
+        class FakePytzZone(_tzinfo):
+            """Simulate a pytz-like tzinfo with .zone but no .key."""
+            zone = "Europe/London"
+            def utcoffset(self, dt): return None
+            def tzname(self, dt): return "GMT"
+            def dst(self, dt): return None
+
+        dt = datetime(2026, 1, 15, 10, 0, tzinfo=FakePytzZone())
+        assert _extract_tzid(dt) == "Europe/London"
 
 
 # =============================================================================
@@ -36,7 +77,7 @@ class TestIcsToEventData:
         return vevent
 
     def test_timed_event_utc(self):
-        """Timed event with UTC times should parse correctly."""
+        """Timed event with UTC times should parse correctly and extract UTC timezone."""
         vevent = self._make_vevent(
             uid="test-123",
             summary="Team Meeting",
@@ -53,13 +94,14 @@ class TestIcsToEventData:
         assert result["start_time"] == "14:00"
         assert result["end_time"] == "15:30"
         assert result["all_day"] is False
+        assert result["timezone"] == "UTC"
 
-    def test_timed_event_with_timezone_conversion(self):
-        """Event in US/Eastern should be converted to UTC."""
+    def test_timed_event_preserves_source_timezone(self):
+        """Event in US/Eastern should keep times in Eastern (no conversion)."""
         from zoneinfo import ZoneInfo
 
         eastern = ZoneInfo("US/Eastern")
-        # 10:00 AM Eastern = 15:00 UTC (during EST, UTC-5)
+        # 10:00 AM Eastern — should be stored as-is, not converted
         vevent = self._make_vevent(
             uid="tz-test",
             summary="Eastern Meeting",
@@ -68,9 +110,10 @@ class TestIcsToEventData:
         )
         result = ics_to_event_data(vevent)
 
-        assert result["start_time"] == "15:00"
-        assert result["end_time"] == "16:00"
+        assert result["start_time"] == "10:00"
+        assert result["end_time"] == "11:00"
         assert result["date"] == date(2026, 1, 15)
+        assert result["timezone"] == "US/Eastern"
 
     def test_all_day_event(self):
         """All-day event (DTSTART is a date, not datetime)."""
@@ -86,6 +129,7 @@ class TestIcsToEventData:
         assert result["date"] == date(2026, 12, 25)
         assert result["start_time"] is None
         assert result["end_time"] is None
+        assert result["timezone"] is None
 
     def test_missing_uid_returns_none(self):
         """VEVENT without UID should be skipped."""
@@ -209,6 +253,9 @@ class TestRoundTrip:
     """Test that event_data_to_ics → ics_to_event_data preserves data."""
 
     def test_timed_event_round_trip(self):
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/New_York")
         original = {
             "title": "Round Trip",
             "description": "Test desc",
@@ -218,7 +265,7 @@ class TestRoundTrip:
             "all_day": False,
             "external_id": "rt-uid-1",
         }
-        cal = event_data_to_ics(original)
+        cal = event_data_to_ics(original, tz=tz)
 
         # Parse back
         parsed = icalendar.Calendar.from_ical(cal.to_ical())
@@ -232,6 +279,7 @@ class TestRoundTrip:
                 assert result["end_time"] == "10:45"
                 assert result["all_day"] is False
                 assert result["external_id"] == "rt-uid-1"
+                assert result["timezone"] == "America/New_York"
 
     def test_all_day_round_trip(self):
         original = {
@@ -251,6 +299,7 @@ class TestRoundTrip:
                 assert result["all_day"] is True
                 assert result["start_time"] is None
                 assert result["end_time"] is None
+                assert result["timezone"] is None
 
 
 # =============================================================================
@@ -455,23 +504,24 @@ class TestPushPreservesLocalTimezone:
         )
 
     def test_round_trip_with_timezone_preserves_local_times(self):
-        """Pull (UTC→local) then push (local→ICS) should produce correct local times."""
+        """Pull then push should preserve times correctly with per-event timezone."""
         from zoneinfo import ZoneInfo
 
         tz = ZoneInfo("America/New_York")
 
-        # Simulate pull: iCloud has event at 17:00 UTC = 12:00 EST (Jan, no DST)
+        # Simulate pull: iCloud has event at 12:00 EST (stored in VEVENT as 12:00 with TZID)
         vevent_pull = icalendar.Event()
         vevent_pull.add("uid", "rt-tz-uid")
         vevent_pull.add("summary", "Round Trip TZ")
-        vevent_pull.add("dtstart", datetime(2026, 1, 15, 17, 0, tzinfo=timezone.utc))
-        vevent_pull.add("dtend", datetime(2026, 1, 15, 20, 0, tzinfo=timezone.utc))
+        vevent_pull.add("dtstart", datetime(2026, 1, 15, 12, 0, tzinfo=tz))
+        vevent_pull.add("dtend", datetime(2026, 1, 15, 15, 0, tzinfo=tz))
 
-        pulled = ics_to_event_data(vevent_pull, tz=tz)
-        assert pulled["start_time"] == "12:00"  # 17:00 UTC → 12:00 EST
-        assert pulled["end_time"] == "15:00"    # 20:00 UTC → 15:00 EST
+        pulled = ics_to_event_data(vevent_pull)
+        assert pulled["start_time"] == "12:00"  # Preserved as-is in event's tz
+        assert pulled["end_time"] == "15:00"
+        assert pulled["timezone"] == "America/New_York"
 
-        # Simulate push: send pulled data back to iCloud
+        # Simulate push: send pulled data back to iCloud using event's timezone
         push_data = {
             "title": pulled["title"],
             "date": pulled["date"],
@@ -482,19 +532,19 @@ class TestPushPreservesLocalTimezone:
         }
         cal = event_data_to_ics(push_data, tz=tz)
 
-        # Parse the pushed ICS and verify times match original UTC
+        # Parse the pushed ICS and verify times match original
         parsed = icalendar.Calendar.from_ical(cal.to_ical())
         for comp in parsed.walk():
             if comp.name == "VEVENT":
                 dtstart = comp.get("DTSTART").dt
-                # Convert back to UTC to verify round-trip correctness
+                assert dtstart.hour == 12, (
+                    f"Round-trip should preserve 12:00 local, got {dtstart.hour}:00"
+                )
+                # Convert to UTC to verify semantic correctness
                 dtstart_utc = dtstart.astimezone(timezone.utc)
                 assert dtstart_utc.hour == 17, (
-                    f"Round-trip should preserve 17:00 UTC, got {dtstart_utc.hour}:00"
+                    f"12:00 EST should be 17:00 UTC, got {dtstart_utc.hour}:00"
                 )
-                dtend = comp.get("DTEND").dt
-                dtend_utc = dtend.astimezone(timezone.utc)
-                assert dtend_utc.hour == 20
 
 
 class TestDeleteRemoteEventFallback:

@@ -233,6 +233,35 @@ def push_delete_to_icloud(external_id: str, integration_id: int):
         return {"error": str(e)}
 
 
+@celery_app.task(
+    name="app.tasks.move_event_on_icloud",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+)
+def move_event_on_icloud(self, event_id: int, old_calendar_id: int, new_calendar_id: int):
+    """Move an event between calendars on the same iCloud account.
+
+    Retries with exponential backoff (10s, 20s, 40s).
+    """
+
+    async def _move():
+        from .services.sync_engine import move_event_on_icloud as _move_fn
+
+        async with AsyncSessionLocal() as db:
+            return await _move_fn(db, event_id, old_calendar_id, new_calendar_id)
+
+    try:
+        result = run_async(_move())
+        logger.info("Moved event %d: %s", event_id, result)
+        return result
+    except Exception as e:
+        logger.error(
+            "Failed to move event %d: %s", event_id, str(e), exc_info=True
+        )
+        raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
+
+
 @celery_app.task(name="app.tasks.delete_events_for_integration")
 def delete_events_for_integration(integration_id: int):
     """Delete all local events for a disconnected integration."""

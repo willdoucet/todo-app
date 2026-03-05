@@ -22,9 +22,10 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .. import models
-from ..crud_app_settings import get_settings
+from ..crud_calendars import get_or_create_calendar, get_calendar
 from ..utils.encryption import decrypt_password
 from . import caldav_client
 
@@ -40,10 +41,6 @@ async def pull_from_icloud(db: AsyncSession, integration_id: int) -> dict:
 
     Returns: {created: int, updated: int, deleted: int, skipped: int, errors: int}
     """
-    # Load app settings for timezone
-    settings = await get_settings(db)
-    tz = ZoneInfo(settings.timezone) if settings.timezone != "UTC" else None
-
     # Load integration
     stmt = select(models.CalendarIntegration).where(
         models.CalendarIntegration.id == integration_id
@@ -67,11 +64,27 @@ async def pull_from_icloud(db: AsyncSession, integration_id: int) -> dict:
     # Track all remote UIDs we see (for detecting remote deletions)
     seen_external_ids = set()
 
-    selected_cals = integration.selected_calendars or []
-    for cal_url in selected_cals:
+    # Use Calendar table rows; fall back to legacy selected_calendars JSON
+    cal_rows = await _get_calendar_rows(db, integration)
+    for cal_row in cal_rows:
+        cal_url = cal_row.calendar_url
         try:
             calendar = caldav_client.get_calendar_by_url(principal, cal_url)
-            remote_events = caldav_client.fetch_events(calendar, start_date, end_date, tz=tz)
+            remote_events = caldav_client.fetch_events(calendar, start_date, end_date)
+
+            # Update Calendar name/color from iCloud metadata
+            try:
+                cal_info = next(
+                    (c for c in caldav_client.list_calendars(principal) if c["url"] == cal_url),
+                    None,
+                )
+                if cal_info:
+                    if cal_info["name"] and cal_info["name"] != cal_row.name:
+                        cal_row.name = cal_info["name"]
+                    if cal_info.get("color") != cal_row.color:
+                        cal_row.color = cal_info.get("color")
+            except Exception:
+                pass  # Non-critical: metadata update is best-effort
         except Exception:
             logger.error(
                 "Failed to fetch events from calendar %s", cal_url, exc_info=True
@@ -85,7 +98,7 @@ async def pull_from_icloud(db: AsyncSession, integration_id: int) -> dict:
 
             try:
                 await _sync_single_event(
-                    db, integration, remote, stats
+                    db, integration, remote, stats, calendar_id=cal_row.id
                 )
             except Exception:
                 logger.error(
@@ -108,6 +121,7 @@ async def _sync_single_event(
     integration: models.CalendarIntegration,
     remote: dict,
     stats: dict,
+    calendar_id: int | None = None,
 ) -> None:
     """Sync a single remote event into the local DB."""
     external_id = remote["external_id"]
@@ -129,6 +143,7 @@ async def _sync_single_event(
             start_time=remote["start_time"],
             end_time=remote["end_time"],
             all_day=remote["all_day"],
+            timezone=remote.get("timezone"),
             source=models.CalendarEventSource.ICLOUD,
             external_id=external_id,
             assigned_to=integration.family_member_id,
@@ -136,10 +151,15 @@ async def _sync_single_event(
             last_modified_remote=remote.get("last_modified_remote"),
             sync_status=SYNCED,
             calendar_integration_id=integration.id,
+            calendar_id=calendar_id,
         )
         db.add(db_event)
         stats["created"] += 1
         return
+
+    # Update calendar_id if it changed (event may have moved)
+    if calendar_id and local_event.calendar_id != calendar_id:
+        local_event.calendar_id = calendar_id
 
     # Existing event — check if we need to update
     if local_event.sync_status == PENDING_PUSH:
@@ -175,6 +195,7 @@ def _update_local_from_remote(local_event: models.CalendarEvent, remote: dict) -
     local_event.start_time = remote["start_time"]
     local_event.end_time = remote["end_time"]
     local_event.all_day = remote["all_day"]
+    local_event.timezone = remote.get("timezone")
     local_event.etag = remote.get("etag")
     local_event.last_modified_remote = remote.get("last_modified_remote")
     local_event.sync_status = SYNCED
@@ -266,10 +287,6 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
 
     Returns: {action: "updated" | "created" | "noop", external_id: str | None}
     """
-    # Load app settings for timezone
-    settings = await get_settings(db)
-    tz = ZoneInfo(settings.timezone) if settings.timezone != "UTC" else None
-
     stmt = (
         select(models.CalendarEvent)
         .where(models.CalendarEvent.id == event_id)
@@ -278,6 +295,9 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
     event = result.scalar_one_or_none()
     if not event:
         raise ValueError(f"Event {event_id} not found")
+
+    # Use the event's own timezone for push (not AppSettings)
+    tz = ZoneInfo(event.timezone) if event.timezone else None
 
     if event.sync_status != PENDING_PUSH:
         return {"action": "noop", "external_id": event.external_id}
@@ -299,9 +319,21 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
     password = decrypt_password(integration.encrypted_password)
     client, principal = caldav_client.connect_icloud(integration.email, password)
 
+    # Determine target calendar URL from calendar_id or fall back to legacy
+    target_cal_url = None
+    if event.calendar_id:
+        cal_row = await get_calendar(db, event.calendar_id)
+        if cal_row:
+            target_cal_url = cal_row.calendar_url
+
+    # Fall back to selected_calendars or Calendar table rows
     selected_cals = integration.selected_calendars or []
-    if not selected_cals:
-        raise ValueError("No calendars selected for integration")
+    if not target_cal_url and not selected_cals:
+        # Try Calendar table rows
+        cal_rows = await _get_calendar_rows(db, integration)
+        selected_cals = [c.calendar_url for c in cal_rows]
+    if not target_cal_url and not selected_cals:
+        raise ValueError("No calendars available for integration")
 
     event_data = {
         "title": event.title,
@@ -314,8 +346,9 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
     }
 
     if event.external_id:
-        # Update existing remote event — try each calendar to find it
-        for cal_url in selected_cals:
+        # Update existing remote event — try target calendar first, then all
+        cals_to_try = [target_cal_url] if target_cal_url else selected_cals
+        for cal_url in cals_to_try:
             calendar = caldav_client.get_calendar_by_url(principal, cal_url)
             try:
                 caldav_client.update_remote_event(
@@ -336,8 +369,9 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
             f"Could not find event UID={event.external_id} in any selected calendar"
         )
     else:
-        # Create new remote event — use first selected calendar
-        calendar = caldav_client.get_calendar_by_url(principal, selected_cals[0])
+        # Create new remote event — use target calendar or first available
+        create_url = target_cal_url or selected_cals[0]
+        calendar = caldav_client.get_calendar_by_url(principal, create_url)
         uid = caldav_client.create_remote_event(calendar, event_data, tz=tz)
         event.external_id = uid
         event.sync_status = SYNCED
@@ -346,7 +380,8 @@ async def push_to_icloud(db: AsyncSession, event_id: int) -> dict:
 
 
 async def push_delete_to_icloud(
-    db: AsyncSession, external_id: str, integration_id: int
+    db: AsyncSession, external_id: str, integration_id: int,
+    calendar_url: str | None = None,
 ) -> dict:
     """Push a delete to iCloud when user deletes a synced event locally.
 
@@ -354,8 +389,10 @@ async def push_delete_to_icloud(
     Returns: {action: "deleted"}
     """
     # Load integration
-    stmt = select(models.CalendarIntegration).where(
-        models.CalendarIntegration.id == integration_id
+    stmt = (
+        select(models.CalendarIntegration)
+        .options(selectinload(models.CalendarIntegration.calendars))
+        .where(models.CalendarIntegration.id == integration_id)
     )
     result = await db.execute(stmt)
     integration = result.scalar_one_or_none()
@@ -365,9 +402,20 @@ async def push_delete_to_icloud(
     password = decrypt_password(integration.encrypted_password)
     client, principal = caldav_client.connect_icloud(integration.email, password)
 
-    # Try each selected calendar to find and delete the event
-    selected_cals = integration.selected_calendars or []
-    for cal_url in selected_cals:
+    # Build list of calendar URLs to try: specific one first, then all
+    cal_urls = []
+    if calendar_url:
+        cal_urls.append(calendar_url)
+    # Add Calendar table URLs
+    for c in (integration.calendars or []):
+        if c.calendar_url not in cal_urls:
+            cal_urls.append(c.calendar_url)
+    # Legacy fallback
+    for url in (integration.selected_calendars or []):
+        if url not in cal_urls:
+            cal_urls.append(url)
+
+    for cal_url in cal_urls:
         try:
             calendar = caldav_client.get_calendar_by_url(principal, cal_url)
             caldav_client.delete_remote_event(calendar, external_id)
@@ -385,3 +433,80 @@ async def push_delete_to_icloud(
         external_id,
     )
     return {"action": "not_found"}
+
+
+async def move_event_on_icloud(
+    db: AsyncSession, event_id: int, old_calendar_id: int, new_calendar_id: int
+) -> dict:
+    """Move an event from one iCloud calendar to another (same account).
+
+    Returns: {action: "moved"}
+    """
+    stmt = (
+        select(models.CalendarEvent)
+        .where(models.CalendarEvent.id == event_id)
+    )
+    result = await db.execute(stmt)
+    event = result.scalar_one_or_none()
+    if not event:
+        raise ValueError(f"Event {event_id} not found")
+
+    if not event.external_id:
+        raise ValueError(f"Event {event_id} has no external_id, cannot move")
+
+    old_cal = await get_calendar(db, old_calendar_id)
+    new_cal = await get_calendar(db, new_calendar_id)
+    if not old_cal or not new_cal:
+        raise ValueError("Source or destination calendar not found")
+
+    if old_cal.calendar_integration_id != new_cal.calendar_integration_id:
+        raise ValueError("Cannot move between different integrations")
+
+    # Load integration for credentials
+    stmt = select(models.CalendarIntegration).where(
+        models.CalendarIntegration.id == old_cal.calendar_integration_id
+    )
+    result = await db.execute(stmt)
+    integration = result.scalar_one_or_none()
+    if not integration:
+        raise ValueError(f"Integration not found")
+
+    password = decrypt_password(integration.encrypted_password)
+    client, principal = caldav_client.connect_icloud(integration.email, password)
+
+    caldav_client.move_event(
+        principal, old_cal.calendar_url, new_cal.calendar_url, event.external_id
+    )
+
+    event.calendar_id = new_calendar_id
+    event.sync_status = SYNCED
+    await db.commit()
+
+    logger.info(
+        "Moved event %d from calendar %d to %d", event_id, old_calendar_id, new_calendar_id
+    )
+    return {"action": "moved"}
+
+
+async def _get_calendar_rows(
+    db: AsyncSession, integration: models.CalendarIntegration
+) -> list[models.Calendar]:
+    """Get Calendar rows for an integration, creating from legacy JSON if needed."""
+    stmt = select(models.Calendar).where(
+        models.Calendar.calendar_integration_id == integration.id
+    )
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+
+    if rows:
+        return list(rows)
+
+    # Fall back: create from selected_calendars JSON
+    selected_cals = integration.selected_calendars or []
+    new_rows = []
+    for cal_url in selected_cals:
+        name = cal_url.rstrip("/").rsplit("/", 1)[-1] or cal_url
+        row = await get_or_create_calendar(db, integration.id, cal_url, name)
+        new_rows.append(row)
+
+    return new_rows

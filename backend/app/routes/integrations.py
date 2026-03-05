@@ -129,6 +129,22 @@ async def connect_icloud(
             detail="Could not connect to iCloud. Check your credentials.",
         )
 
+    # If no calendar_details provided but selected_calendars are, populate details
+    # from the validate step's calendar listing (re-fetch since we just validated)
+    if payload.selected_calendars and not payload.calendar_details:
+        try:
+            client, principal = await asyncio.to_thread(
+                caldav_client.connect_icloud, payload.email, payload.password
+            )
+            all_cals = await asyncio.to_thread(caldav_client.list_calendars, principal)
+            selected_set = set(payload.selected_calendars)
+            payload.calendar_details = [
+                {"url": c["url"], "name": c["name"], "color": c.get("color")}
+                for c in all_cals if c["url"] in selected_set
+            ]
+        except Exception:
+            pass  # Fall back to URL-based naming
+
     # Create integration (password encrypted in CRUD layer)
     integration = await crud_calendar_integrations.create_integration(db, payload)
 

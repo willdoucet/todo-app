@@ -17,6 +17,28 @@ logger = logging.getLogger(__name__)
 ICLOUD_CALDAV_URL = "https://caldav.icloud.com/"
 
 
+def _extract_tzid(dt: datetime) -> str:
+    """Extract IANA timezone name from a datetime's tzinfo.
+
+    Tries .key (ZoneInfo), .zone (pytz), then falls back to "UTC".
+    Returns "UTC" for naive datetimes or unrecognised tzinfo.
+    """
+    if dt.tzinfo is None:
+        return "UTC"
+    # ZoneInfo objects have a .key attribute
+    key = getattr(dt.tzinfo, "key", None)
+    if key:
+        return key
+    # pytz zones have a .zone attribute
+    zone = getattr(dt.tzinfo, "zone", None)
+    if zone:
+        return zone
+    # stdlib timezone.utc
+    if dt.tzinfo == timezone.utc:
+        return "UTC"
+    return "UTC"
+
+
 # ---------------------------------------------------------------------------
 # Connection
 # ---------------------------------------------------------------------------
@@ -81,12 +103,8 @@ def fetch_events(
     calendar: caldav.Calendar,
     start_date: date,
     end_date: date,
-    tz: ZoneInfo | None = None,
 ) -> list[dict]:
     """Fetch events from a calendar within a date range.
-
-    Args:
-        tz: If provided, timed events are converted to this timezone.
 
     Filters out recurring events (RRULE present) for v1.
     Returns a list of dicts from ics_to_event_data().
@@ -130,7 +148,7 @@ def fetch_events(
                     )
                     continue
 
-                parsed = ics_to_event_data(component, tz=tz)
+                parsed = ics_to_event_data(component)
                 if parsed:
                     # Attach the etag from the CalDAV object for change detection
                     parsed["etag"] = getattr(event_obj, "etag", None)
@@ -212,6 +230,33 @@ def delete_remote_event(calendar: caldav.Calendar, uid: str) -> None:
     event_obj.delete()
 
 
+def move_event(
+    principal,
+    source_cal_url: str,
+    dest_cal_url: str,
+    uid: str,
+) -> None:
+    """Move an event from one calendar to another on the same iCloud account.
+
+    Tries HTTP MOVE first; falls back to delete+create if MOVE fails.
+    """
+    source_cal = get_calendar_by_url(principal, source_cal_url)
+    dest_cal = get_calendar_by_url(principal, dest_cal_url)
+
+    event_obj = _get_event_by_uid(source_cal, uid)
+    ical_data = event_obj.data
+
+    try:
+        # Try to save the event data to the destination calendar
+        dest_cal.save_event(ical_data)
+        # Delete from source
+        event_obj.delete()
+        logger.info("Moved event UID=%s via save+delete", uid)
+    except Exception as e:
+        logger.error("Failed to move event UID=%s: %s", uid, e, exc_info=True)
+        raise
+
+
 def get_calendar_by_url(principal, calendar_url: str) -> caldav.Calendar:
     """Get a specific calendar object by its URL."""
     return principal.calendar(cal_id=calendar_url)
@@ -222,22 +267,21 @@ def get_calendar_by_url(principal, calendar_url: str) -> caldav.Calendar:
 # ---------------------------------------------------------------------------
 
 
-def ics_to_event_data(vevent, tz: ZoneInfo | None = None) -> dict | None:
+def ics_to_event_data(vevent) -> dict | None:
     """Convert an iCalendar VEVENT component to a dict matching CalendarEventCreate fields.
 
-    Args:
-        vevent: iCalendar VEVENT component
-        tz: If provided, convert timed events to this timezone instead of UTC.
-            All-day events are unaffected.
+    Times are stored as-is in the VEVENT's own timezone. The timezone name is
+    extracted and included in the returned dict so it can be stored per-event.
 
     Mapping:
     - SUMMARY → title
     - DESCRIPTION → description
-    - DTSTART → date + start_time (converted to tz or UTC)
+    - DTSTART → date + start_time (in event's own timezone)
     - DTEND → end_time
     - UID → external_id
     - LAST-MODIFIED → last_modified_remote (always UTC)
     - All-day: DTSTART is a date (not datetime)
+    - timezone: IANA name extracted from DTSTART's tzinfo
     """
     uid = vevent.get("UID")
     if not uid:
@@ -258,16 +302,16 @@ def ics_to_event_data(vevent, tz: ZoneInfo | None = None) -> dict | None:
     # Detect all-day event: DTSTART is a date, not datetime
     is_all_day = isinstance(dtstart, date) and not isinstance(dtstart, datetime)
 
-    target_tz = tz or timezone.utc
-
     if is_all_day:
         event_date = dtstart
         start_time = None
         end_time = None
+        event_tz = None
     else:
-        # Convert to target timezone (user's local tz, or UTC as fallback)
-        if dtstart.tzinfo is not None:
-            dtstart = dtstart.astimezone(target_tz)
+        # Extract timezone from the VEVENT's own DTSTART
+        event_tz = _extract_tzid(dtstart)
+
+        # Use the time as-is in its own timezone (no conversion)
         event_date = dtstart.date()
         start_time = dtstart.strftime("%H:%M")
 
@@ -275,8 +319,6 @@ def ics_to_event_data(vevent, tz: ZoneInfo | None = None) -> dict | None:
         dtend_prop = vevent.get("DTEND")
         if dtend_prop:
             dtend = dtend_prop.dt
-            if dtend.tzinfo is not None:
-                dtend = dtend.astimezone(target_tz)
             end_time = dtend.strftime("%H:%M")
         else:
             end_time = None
@@ -299,6 +341,7 @@ def ics_to_event_data(vevent, tz: ZoneInfo | None = None) -> dict | None:
         "start_time": start_time,
         "end_time": end_time,
         "all_day": is_all_day,
+        "timezone": event_tz,
         "last_modified_remote": last_modified,
     }
 

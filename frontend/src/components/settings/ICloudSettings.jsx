@@ -332,7 +332,7 @@ function IntegrationCard({ integration, onSync, onDisconnect }) {
             </span>
           </div>
           <p className="text-xs text-text-muted dark:text-gray-400">
-            {memberName} &middot; {integration.selected_calendars?.length || 0} calendar{(integration.selected_calendars?.length || 0) !== 1 ? 's' : ''}
+            {memberName} &middot; {integration.calendars?.length || integration.selected_calendars?.length || 0} calendar{(integration.calendars?.length || integration.selected_calendars?.length || 0) !== 1 ? 's' : ''}
           </p>
           {integration.last_sync_at && (
             <p className="text-xs text-text-muted dark:text-gray-400 mt-0.5">

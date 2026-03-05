@@ -180,6 +180,45 @@ class TestCreateCalendarEvent:
         response = await client.post("/calendar-events/", json=bad_event)
         assert response.status_code == 422
 
+    async def test_timed_event_gets_timezone_from_app_settings(
+        self, client, db_session, test_family_member
+    ):
+        """POST timed manual event should auto-populate timezone from AppSettings."""
+        from app.models import AppSettings
+
+        # Create AppSettings with a non-UTC timezone
+        settings = AppSettings(timezone="America/New_York")
+        db_session.add(settings)
+        await db_session.commit()
+
+        new_event = {
+            "title": "Timed Event",
+            "date": "2026-03-15",
+            "start_time": "14:00",
+            "end_time": "15:00",
+            "assigned_to": test_family_member.id,
+        }
+
+        response = await client.post("/calendar-events/", json=new_event)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["timezone"] == "America/New_York"
+
+    async def test_all_day_event_has_null_timezone(self, client):
+        """POST all-day event should have timezone=null."""
+        new_event = {
+            "title": "All Day",
+            "date": "2026-03-20",
+            "all_day": True,
+        }
+
+        response = await client.post("/calendar-events/", json=new_event)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["timezone"] is None
+
 
 # =============================================================================
 # PATCH /calendar-events/{id} - Update event

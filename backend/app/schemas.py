@@ -271,6 +271,7 @@ class CalendarEventBase(BaseModel):
     end_time: Optional[str] = None
     all_day: bool = False
     assigned_to: Optional[int] = Field(None, ge=1)
+    timezone: Optional[str] = None
 
     @field_validator("start_time", "end_time")
     @classmethod
@@ -283,6 +284,7 @@ class CalendarEventBase(BaseModel):
 class CalendarEventCreate(CalendarEventBase):
     source: CalendarEventSource = CalendarEventSource.MANUAL
     external_id: Optional[str] = None
+    calendar_id: Optional[int] = None
 
 
 class CalendarEventUpdate(BaseModel):
@@ -293,6 +295,7 @@ class CalendarEventUpdate(BaseModel):
     end_time: Optional[str] = None
     all_day: Optional[bool] = None
     assigned_to: Optional[int] = Field(None, ge=1)
+    calendar_id: Optional[int] = None
 
     @field_validator("start_time", "end_time")
     @classmethod
@@ -300,6 +303,18 @@ class CalendarEventUpdate(BaseModel):
         if v is not None and not _TIME_RE.match(v):
             raise ValueError("Time must be in HH:MM format")
         return v
+
+
+class CalendarResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    calendar_integration_id: int
+    calendar_url: str
+    name: str
+    color: Optional[str] = None
+    family_member_name: Optional[str] = None
+    integration_email: Optional[str] = None
 
 
 class CalendarEvent(CalendarEventBase):
@@ -311,6 +326,8 @@ class CalendarEvent(CalendarEventBase):
     family_member: Optional[FamilyMember] = None
     sync_status: Optional[str] = None
     calendar_integration_id: Optional[int] = None
+    calendar_id: Optional[int] = None
+    calendar: Optional[CalendarResponse] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -332,6 +349,7 @@ class CalendarIntegrationCreate(BaseModel):
     email: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)  # Plain text — encrypted before storage
     selected_calendars: Optional[TypingList[str]] = None
+    calendar_details: Optional[TypingList[dict]] = None  # [{url, name, color}] from validate step
 
 
 class CalendarIntegrationResponse(BaseModel):
@@ -348,6 +366,7 @@ class CalendarIntegrationResponse(BaseModel):
     sync_range_past_days: int
     sync_range_future_days: int
     selected_calendars: Optional[TypingList[str]] = None
+    calendars: Optional[TypingList[CalendarResponse]] = None
     family_member: FamilyMember
     created_at: datetime
     updated_at: Optional[datetime] = None

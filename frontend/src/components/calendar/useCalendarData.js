@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import axios from 'axios'
+import { convertEventForDisplay } from './calendarUtils'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -14,30 +15,47 @@ export default function useCalendarData(startDate, endDate, activeMembers = null
   const [tasks, setTasks] = useState([])
   const [events, setEvents] = useState([])
   const [familyMembers, setFamilyMembers] = useState([])
+  const [calendars, setCalendars] = useState([])
+  const [displayTimezone, setDisplayTimezone] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Pad query range ±1 day to catch events that shift dates after tz conversion
+  const paddedRange = useMemo(() => {
+    if (!startDate || !endDate) return { start: startDate, end: endDate }
+    const s = new Date(startDate + 'T00:00:00')
+    const e = new Date(endDate + 'T00:00:00')
+    s.setDate(s.getDate() - 1)
+    e.setDate(e.getDate() + 1)
+    const pad = (d) => d.toISOString().slice(0, 10)
+    return { start: pad(s), end: pad(e) }
+  }, [startDate, endDate])
+
   const fetchData = useCallback(async () => {
-    if (!startDate || !endDate) return
+    if (!paddedRange.start || !paddedRange.end) return
     setLoading(true)
     setError(null)
 
     try {
-      const [tasksRes, eventsRes, membersRes] = await Promise.all([
+      const [tasksRes, eventsRes, membersRes, settingsRes, calendarsRes] = await Promise.all([
         axios.get(`${API_BASE}/tasks?start_date=${startDate}&end_date=${endDate}`),
-        axios.get(`${API_BASE}/calendar-events?start_date=${startDate}&end_date=${endDate}`),
+        axios.get(`${API_BASE}/calendar-events?start_date=${paddedRange.start}&end_date=${paddedRange.end}`),
         axios.get(`${API_BASE}/family-members`),
+        axios.get(`${API_BASE}/app-settings/`),
+        axios.get(`${API_BASE}/calendars/`),
       ])
       setTasks(tasksRes.data)
       setEvents(eventsRes.data)
       setFamilyMembers(membersRes.data)
+      setDisplayTimezone(settingsRes.data.timezone || 'UTC')
+      setCalendars(calendarsRes.data)
     } catch (err) {
       console.error('Error fetching calendar data:', err)
       setError(err)
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate])
+  }, [startDate, endDate, paddedRange.start, paddedRange.end])
 
   useEffect(() => {
     fetchData()
@@ -62,10 +80,19 @@ export default function useCalendarData(startDate, endDate, activeMembers = null
     ? events.filter((e) => e.assigned_to === null || activeMembers.has(e.assigned_to))
     : events
 
+  // Convert events to display timezone
+  const displayEvents = useMemo(() => {
+    if (!displayTimezone) return filteredEvents
+    return filteredEvents.map((e) => convertEventForDisplay(e, displayTimezone))
+  }, [filteredEvents, displayTimezone])
+
   return {
     tasks: filteredTasks,
     events: filteredEvents,
+    displayEvents,
+    displayTimezone,
     familyMembers,
+    calendars,
     loading,
     error,
     refetch: fetchData,

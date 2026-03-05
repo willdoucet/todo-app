@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import axios from 'axios'
-import { formatDateKey } from './calendarUtils'
+import { formatDateKey, convertTime } from './calendarUtils'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -26,6 +26,8 @@ export default function EventFormModal({
   defaultDate = null,
   defaultTime = null,
   familyMembers = [],
+  calendars = [],
+  displayTimezone = null,
 }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -34,21 +36,40 @@ export default function EventFormModal({
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
+  const [selectedCalendarId, setSelectedCalendarId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [confirmAction, setConfirmAction] = useState(null) // 'save' | 'delete' | null
+  const [confirmAction, setConfirmAction] = useState(null) // 'save' | 'delete' | 'sync-to-icloud' | 'remove-from-icloud' | null
+
+  // Whether the event's timezone differs from display timezone
+  const hasTzDiff = initialEvent?.timezone && displayTimezone && initialEvent.timezone !== displayTimezone
 
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
       if (initialEvent) {
+        const rawDate = String(initialEvent.date).slice(0, 10)
+        const rawStart = initialEvent.start_time || ''
+        const rawEnd = initialEvent.end_time || ''
+
+        // If event timezone differs from display timezone, convert for display
+        if (hasTzDiff && rawStart) {
+          const startConverted = convertTime(rawDate, rawStart, initialEvent.timezone, displayTimezone)
+          const endConverted = rawEnd ? convertTime(rawDate, rawEnd, initialEvent.timezone, displayTimezone) : { date: rawDate, time: '' }
+          setDate(startConverted.date)
+          setStartTime(startConverted.time)
+          setEndTime(endConverted.time)
+        } else {
+          setDate(rawDate)
+          setStartTime(rawStart)
+          setEndTime(rawEnd)
+        }
+
         setTitle(initialEvent.title || '')
         setDescription(initialEvent.description || '')
-        setDate(String(initialEvent.date).slice(0, 10))
         setAllDay(initialEvent.all_day || false)
-        setStartTime(initialEvent.start_time || '')
-        setEndTime(initialEvent.end_time || '')
         setAssignedTo(initialEvent.assigned_to ?? '')
+        setSelectedCalendarId(initialEvent.calendar_id ?? '')
       } else {
         setTitle('')
         setDescription('')
@@ -57,20 +78,34 @@ export default function EventFormModal({
         setStartTime(defaultTime || '')
         setEndTime(defaultTime ? addOneHour(defaultTime) : '')
         setAssignedTo('')
+        setSelectedCalendarId('')
       }
       setError(null)
       setConfirmAction(null)
     }
-  }, [isOpen, initialEvent, defaultDate, defaultTime])
+  }, [isOpen, initialEvent, defaultDate, defaultTime, hasTzDiff, displayTimezone])
 
   const isICloud = initialEvent?.source === 'ICLOUD'
+  const calIdNum = selectedCalendarId ? parseInt(selectedCalendarId) : null
+  const oldCalId = initialEvent?.calendar_id ?? null
+  const isAddingToICloud = !oldCalId && calIdNum
+  const isRemovingFromICloud = oldCalId && !calIdNum
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!title.trim()) return
 
+    // Show confirmation for source transitions
+    if (isAddingToICloud && confirmAction !== 'sync-to-icloud') {
+      setConfirmAction('sync-to-icloud')
+      return
+    }
+    if (isRemovingFromICloud && confirmAction !== 'remove-from-icloud') {
+      setConfirmAction('remove-from-icloud')
+      return
+    }
     // Show confirmation for iCloud events before saving
-    if (isICloud && confirmAction !== 'save') {
+    if (isICloud && !isAddingToICloud && !isRemovingFromICloud && confirmAction !== 'save') {
       setConfirmAction('save')
       return
     }
@@ -79,14 +114,30 @@ export default function EventFormModal({
     setLoading(true)
     setError(null)
 
+    // Build payload — convert times back to event timezone if needed
+    let payloadDate = date
+    let payloadStart = allDay ? null : startTime || null
+    let payloadEnd = allDay ? null : endTime || null
+
+    if (hasTzDiff && initialEvent && payloadStart) {
+      const startBack = convertTime(date, payloadStart, displayTimezone, initialEvent.timezone)
+      payloadDate = startBack.date
+      payloadStart = startBack.time
+      if (payloadEnd) {
+        const endBack = convertTime(date, payloadEnd, displayTimezone, initialEvent.timezone)
+        payloadEnd = endBack.time
+      }
+    }
+
     const payload = {
       title: title.trim(),
       description: description.trim() || null,
-      date,
+      date: payloadDate,
       all_day: allDay,
-      start_time: allDay ? null : startTime || null,
-      end_time: allDay ? null : endTime || null,
+      start_time: payloadStart,
+      end_time: payloadEnd,
       assigned_to: assignedTo ? parseInt(assignedTo) : null,
+      calendar_id: calIdNum,
     }
 
     try {
@@ -182,7 +233,60 @@ export default function EventFormModal({
                     </div>
                   )}
 
+                  {/* Timezone info (read-only) */}
+                  {hasTzDiff && (
+                    <p className="text-xs text-text-muted dark:text-gray-400">
+                      Event timezone: {initialEvent.timezone}
+                    </p>
+                  )}
+
                   {/* Confirmation banners */}
+                  {confirmAction === 'sync-to-icloud' && (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                        This event will be synced to iCloud Calendar. Continue?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAction(null)}
+                          className="px-3 py-1.5 text-xs font-medium text-text-secondary dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                        >
+                          Sync to iCloud
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {confirmAction === 'remove-from-icloud' && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+                        This event will be removed from iCloud Calendar but kept locally. Continue?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAction(null)}
+                          className="px-3 py-1.5 text-xs font-medium text-text-secondary dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-3 py-1.5 text-xs font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+                        >
+                          Remove from iCloud
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {confirmAction === 'save' && (
                     <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                       <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
@@ -264,6 +368,37 @@ export default function EventFormModal({
                       className="w-full px-4 py-2.5 border border-card-border dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 placeholder-text-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500 resize-none disabled:opacity-50"
                     />
                   </div>
+
+                  {/* Calendar (iCloud sync target) */}
+                  {calendars.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary dark:text-gray-200 mb-1.5">
+                        Calendar
+                      </label>
+                      <select
+                        value={selectedCalendarId}
+                        onChange={(e) => setSelectedCalendarId(e.target.value)}
+                        disabled={!isEditable}
+                        className="w-full px-4 py-2.5 border border-card-border dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500 disabled:opacity-50"
+                      >
+                        <option value="">App only (no sync)</option>
+                        {calendars.map((cal) => {
+                          // Disable cross-integration calendars when editing iCloud events
+                          const isCrossIntegration = isICloud && initialEvent?.calendar_integration_id &&
+                            cal.calendar_integration_id !== initialEvent.calendar_integration_id
+                          return (
+                            <option
+                              key={cal.id}
+                              value={cal.id}
+                              disabled={isCrossIntegration}
+                            >
+                              {cal.name} ({cal.family_member_name}'s iCloud)
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Date */}
                   <div>

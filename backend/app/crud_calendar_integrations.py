@@ -12,7 +12,7 @@ async def get_integrations(
     """List all integrations, optionally filtered by family member."""
     stmt = (
         select(models.CalendarIntegration)
-        .options(selectinload(models.CalendarIntegration.family_member))
+        .options(selectinload(models.CalendarIntegration.family_member), selectinload(models.CalendarIntegration.calendars))
     )
     if family_member_id is not None:
         stmt = stmt.where(
@@ -26,7 +26,7 @@ async def get_integration(db: AsyncSession, integration_id: int):
     """Get a single integration by ID."""
     stmt = (
         select(models.CalendarIntegration)
-        .options(selectinload(models.CalendarIntegration.family_member))
+        .options(selectinload(models.CalendarIntegration.family_member), selectinload(models.CalendarIntegration.calendars))
         .where(models.CalendarIntegration.id == integration_id)
     )
     result = await db.execute(stmt)
@@ -48,7 +48,7 @@ async def get_active_integrations(db: AsyncSession):
 async def create_integration(
     db: AsyncSession, integration: schemas.CalendarIntegrationCreate
 ):
-    """Create a new integration with encrypted password."""
+    """Create a new integration with encrypted password and Calendar rows."""
     db_integration = models.CalendarIntegration(
         family_member_id=integration.family_member_id,
         provider="icloud",
@@ -57,6 +57,28 @@ async def create_integration(
         selected_calendars=integration.selected_calendars,
     )
     db.add(db_integration)
+    await db.flush()  # Get the ID before creating Calendar rows
+
+    # Create Calendar rows from calendar_details (preferred) or selected_calendars URLs
+    cal_details = integration.calendar_details
+    if cal_details:
+        for detail in cal_details:
+            cal = models.Calendar(
+                calendar_integration_id=db_integration.id,
+                calendar_url=detail["url"],
+                name=detail.get("name", detail["url"].rstrip("/").rsplit("/", 1)[-1]),
+                color=detail.get("color"),
+            )
+            db.add(cal)
+    elif integration.selected_calendars:
+        for cal_url in integration.selected_calendars:
+            cal = models.Calendar(
+                calendar_integration_id=db_integration.id,
+                calendar_url=cal_url,
+                name=cal_url.rstrip("/").rsplit("/", 1)[-1] or cal_url,
+            )
+            db.add(cal)
+
     await db.commit()
     return await get_integration(db, db_integration.id)
 

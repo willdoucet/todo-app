@@ -16,7 +16,7 @@ async def get_calendar_events(
     """Get calendar events for a date range, optionally filtered by member."""
     stmt = (
         select(models.CalendarEvent)
-        .options(selectinload(models.CalendarEvent.family_member))
+        .options(selectinload(models.CalendarEvent.family_member), selectinload(models.CalendarEvent.calendar))
         .where(models.CalendarEvent.date >= start_date)
         .where(models.CalendarEvent.date <= end_date)
     )
@@ -31,7 +31,7 @@ async def get_calendar_event(db: AsyncSession, event_id: int):
     """Get a single calendar event by ID."""
     stmt = (
         select(models.CalendarEvent)
-        .options(selectinload(models.CalendarEvent.family_member))
+        .options(selectinload(models.CalendarEvent.family_member), selectinload(models.CalendarEvent.calendar))
         .where(models.CalendarEvent.id == event_id)
     )
     result = await db.execute(stmt)
@@ -70,6 +70,34 @@ async def set_sync_status(db: AsyncSession, event_id: int, sync_status: str):
         update(models.CalendarEvent)
         .where(models.CalendarEvent.id == event_id)
         .values(sync_status=sync_status)
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+
+async def set_integration_fields(
+    db: AsyncSession,
+    event_id: int,
+    integration_id: int | None,
+    calendar_id: int | None,
+    sync_status: str | None,
+    source: models.CalendarEventSource | None = None,
+    clear_external_id: bool = False,
+):
+    """Set integration-related fields on a calendar event."""
+    values = {
+        "calendar_integration_id": integration_id,
+        "calendar_id": calendar_id,
+        "sync_status": sync_status,
+    }
+    if source is not None:
+        values["source"] = source
+    if clear_external_id:
+        values["external_id"] = None
+    stmt = (
+        update(models.CalendarEvent)
+        .where(models.CalendarEvent.id == event_id)
+        .values(**values)
     )
     await db.execute(stmt)
     await db.commit()

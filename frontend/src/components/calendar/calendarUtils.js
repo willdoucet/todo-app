@@ -130,3 +130,136 @@ export function groupByDate(items, dateKey) {
   }
   return map
 }
+
+// ---------------------------------------------------------------------------
+// Timezone conversion utilities
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a time from one IANA timezone to another on a specific date.
+ * Uses native Intl.DateTimeFormat — no external dependencies.
+ *
+ * @param {string} dateStr - "YYYY-MM-DD"
+ * @param {string} timeStr - "HH:MM"
+ * @param {string} fromTz  - IANA timezone (e.g. "America/Los_Angeles")
+ * @param {string} toTz    - IANA timezone (e.g. "America/New_York")
+ * @returns {{ date: string, time: string }} - converted date + time
+ */
+export function convertTime(dateStr, timeStr, fromTz, toTz) {
+  if (!dateStr || !timeStr || !fromTz || !toTz || fromTz === toTz) {
+    return { date: dateStr, time: timeStr }
+  }
+
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const [hour, minute] = timeStr.split(':').map(Number)
+
+  // Build a Date in the source timezone by using formatToParts to find the
+  // UTC offset, then construct a proper UTC timestamp.
+  // Step 1: Create a rough UTC date (may be wrong by tz offset)
+  const roughUtc = new Date(Date.UTC(year, month - 1, day, hour, minute))
+
+  // Step 2: Find what the "fromTz" offset is at this rough time
+  const fromOffset = getTimezoneOffsetMinutes(roughUtc, fromTz)
+
+  // Step 3: Actual UTC = rough - offset (since offset is UTC→local, we subtract)
+  const actualUtc = new Date(roughUtc.getTime() - fromOffset * 60000)
+
+  // Step 4: Format in the target timezone
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: toTz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(actualUtc)
+
+  const p = {}
+  for (const { type, value } of parts) {
+    p[type] = value
+  }
+
+  const convertedDate = `${p.year}-${p.month}-${p.day}`
+  // Handle midnight edge case: some locales format hour 0 as "24"
+  const h = p.hour === '24' ? '00' : p.hour
+  const convertedTime = `${h}:${p.minute}`
+
+  return { date: convertedDate, time: convertedTime }
+}
+
+/**
+ * Get the UTC offset in minutes for a timezone at a given instant.
+ * Positive = ahead of UTC (e.g. +60 for CET), negative = behind (e.g. -300 for EST).
+ */
+function getTimezoneOffsetMinutes(utcDate, tz) {
+  // Format the date in the target tz to extract components
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(utcDate)
+
+  const p = {}
+  for (const { type, value } of parts) {
+    p[type] = value
+  }
+
+  const h = p.hour === '24' ? 0 : Number(p.hour)
+  const localInTz = new Date(
+    Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), h, Number(p.minute), Number(p.second))
+  )
+
+  // Offset = local representation - actual UTC (in minutes)
+  return (localInTz.getTime() - utcDate.getTime()) / 60000
+}
+
+/**
+ * Convert a calendar event's times for display in a target timezone.
+ * All-day events and same-timezone events pass through unchanged.
+ *
+ * @param {object} event - calendar event with date, start_time, end_time, timezone, all_day
+ * @param {string} displayTz - IANA timezone to display in
+ * @returns {object} - new event object with converted date/times
+ */
+export function convertEventForDisplay(event, displayTz) {
+  // All-day events have no timezone — pass through
+  if (event.all_day || !event.timezone || !displayTz) {
+    return event
+  }
+
+  // Same timezone — no conversion needed
+  if (event.timezone === displayTz) {
+    return event
+  }
+
+  const dateStr = String(event.date).slice(0, 10)
+  let convertedDate = dateStr
+  let convertedStart = event.start_time
+  let convertedEnd = event.end_time
+
+  if (event.start_time) {
+    const result = convertTime(dateStr, event.start_time, event.timezone, displayTz)
+    convertedDate = result.date
+    convertedStart = result.time
+  }
+
+  if (event.end_time) {
+    const result = convertTime(dateStr, event.end_time, event.timezone, displayTz)
+    convertedEnd = result.time
+    // Use the start_time's converted date (end_time date shift is rare and
+    // would only matter for multi-day events which we don't support yet)
+  }
+
+  return {
+    ...event,
+    date: convertedDate,
+    start_time: convertedStart,
+    end_time: convertedEnd,
+  }
+}

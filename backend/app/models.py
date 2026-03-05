@@ -177,12 +177,40 @@ class CalendarIntegration(Base):
     last_error = Column(String, nullable=True)
     sync_range_past_days = Column(Integer, default=30)
     sync_range_future_days = Column(Integer, default=90)
-    selected_calendars = Column(JSON, nullable=True)
+    selected_calendars = Column(JSON, nullable=True)  # Legacy — migrating to Calendar table
 
     family_member = relationship("FamilyMember", back_populates="calendar_integrations")
+    calendars = relationship("Calendar", back_populates="integration", cascade="all, delete-orphan")
     calendar_events = relationship("CalendarEvent", back_populates="integration")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+
+class Calendar(Base):
+    __tablename__ = "calendars"
+
+    id = Column(Integer, primary_key=True, index=True)
+    calendar_integration_id = Column(
+        Integer,
+        ForeignKey("calendar_integrations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    calendar_url = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    color = Column(String, nullable=True)
+
+    integration = relationship("CalendarIntegration", back_populates="calendars")
+    events = relationship("CalendarEvent", back_populates="calendar")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "calendar_integration_id",
+            "calendar_url",
+            name="uq_calendar_integration_url",
+        ),
+    )
 
 
 class CalendarEvent(Base):
@@ -203,6 +231,7 @@ class CalendarEvent(Base):
     external_id = Column(String, nullable=True)
     assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=True)
     family_member = relationship("FamilyMember")
+    timezone = Column(String, nullable=True)  # IANA timezone name, null for all-day events
     # Sync metadata columns
     etag = Column(String, nullable=True)
     last_modified_remote = Column(DateTime, nullable=True)
@@ -212,7 +241,13 @@ class CalendarEvent(Base):
         ForeignKey("calendar_integrations.id", ondelete="SET NULL"),
         nullable=True,
     )
+    calendar_id = Column(
+        Integer,
+        ForeignKey("calendars.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     integration = relationship("CalendarIntegration", back_populates="calendar_events")
+    calendar = relationship("Calendar", back_populates="events")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 

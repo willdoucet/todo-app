@@ -35,6 +35,7 @@ class TestUpdateLocalFromRemote:
             start_time="09:00",
             end_time="10:00",
             all_day=False,
+            timezone="America/New_York",
             etag="old-etag",
             last_modified_remote=None,
             sync_status=PENDING_PUSH,
@@ -48,6 +49,7 @@ class TestUpdateLocalFromRemote:
             "start_time": "14:00",
             "end_time": "15:00",
             "all_day": False,
+            "timezone": "America/Los_Angeles",
             "etag": "new-etag",
             "last_modified_remote": datetime(2026, 1, 2, 12, 0),
         }
@@ -59,6 +61,7 @@ class TestUpdateLocalFromRemote:
         assert local.date == date(2026, 1, 2)
         assert local.start_time == "14:00"
         assert local.end_time == "15:00"
+        assert local.timezone == "America/Los_Angeles"
         assert local.etag == "new-etag"
         assert local.sync_status == SYNCED
 
@@ -67,6 +70,7 @@ class TestUpdateLocalFromRemote:
         local = FakeEvent(
             title="X", description=None, date=date(2026, 1, 1),
             start_time=None, end_time=None, all_day=True,
+            timezone=None,
             etag=None, last_modified_remote=None, sync_status=SYNCED,
             assigned_to=99,
             calendar_integration_id=5,
@@ -75,12 +79,33 @@ class TestUpdateLocalFromRemote:
             "title": "Y", "description": None,
             "date": date(2026, 1, 1),
             "start_time": None, "end_time": None, "all_day": True,
+            "timezone": None,
         }
 
         _update_local_from_remote(local, remote)
 
         assert local.assigned_to == 99
         assert local.calendar_integration_id == 5
+
+    def test_updates_timezone_field(self):
+        """timezone should be updated from remote data."""
+        local = FakeEvent(
+            title="X", description=None, date=date(2026, 1, 1),
+            start_time="10:00", end_time="11:00", all_day=False,
+            timezone="America/New_York",
+            etag=None, last_modified_remote=None, sync_status=SYNCED,
+            assigned_to=1, calendar_integration_id=1,
+        )
+        remote = {
+            "title": "X", "description": None,
+            "date": date(2026, 1, 1),
+            "start_time": "10:00", "end_time": "11:00", "all_day": False,
+            "timezone": "America/Los_Angeles",
+        }
+
+        _update_local_from_remote(local, remote)
+
+        assert local.timezone == "America/Los_Angeles"
 
 
 class TestResolveConflict:
@@ -91,6 +116,7 @@ class TestResolveConflict:
             title="Local Edit",
             description=None, date=date(2026, 1, 1),
             start_time=None, end_time=None, all_day=True,
+            timezone=None,
             etag=None, last_modified_remote=None,
             sync_status=PENDING_PUSH,
             updated_at=datetime(2026, 1, 1, 10, 0),
@@ -101,6 +127,7 @@ class TestResolveConflict:
             "description": None,
             "date": date(2026, 1, 1),
             "start_time": None, "end_time": None, "all_day": True,
+            "timezone": None,
             "last_modified_remote": datetime(2026, 1, 1, 12, 0),  # Newer
         }
         stats = {"updated": 0, "skipped": 0}
@@ -117,6 +144,7 @@ class TestResolveConflict:
             title="Local Edit",
             description=None, date=date(2026, 1, 1),
             start_time=None, end_time=None, all_day=True,
+            timezone=None,
             etag=None, last_modified_remote=None,
             sync_status=PENDING_PUSH,
             updated_at=datetime(2026, 1, 1, 14, 0),  # Newer
@@ -127,6 +155,7 @@ class TestResolveConflict:
             "description": None,
             "date": date(2026, 1, 1),
             "start_time": None, "end_time": None, "all_day": True,
+            "timezone": None,
             "last_modified_remote": datetime(2026, 1, 1, 10, 0),
         }
         stats = {"updated": 0, "skipped": 0}
@@ -143,6 +172,7 @@ class TestResolveConflict:
             title="Local",
             description=None, date=date(2026, 1, 1),
             start_time=None, end_time=None, all_day=True,
+            timezone=None,
             etag=None, last_modified_remote=None,
             sync_status=PENDING_PUSH,
             updated_at=None,
@@ -153,6 +183,7 @@ class TestResolveConflict:
             "description": None,
             "date": date(2026, 1, 1),
             "start_time": None, "end_time": None, "all_day": True,
+            "timezone": None,
             "last_modified_remote": None,
         }
         stats = {"updated": 0, "skipped": 0}
