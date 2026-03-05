@@ -7,8 +7,8 @@ import {
   XMarkIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
-import ConfirmDialog from './ConfirmDialog'
-import { TruncatedText } from './Tooltip'
+import ConfirmDialog from '../shared/ConfirmDialog'
+import { TruncatedText } from '../shared/Tooltip'
 
 export default function ListPanel({
   lists,

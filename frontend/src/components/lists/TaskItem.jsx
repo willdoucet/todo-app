@@ -1,5 +1,5 @@
 // components/TaskItem.jsx
-import SwipeableItem from './SwipeableItem'
+import SwipeableItem from '../shared/SwipeableItem'
 
 // Custom circle checkbox with animation
 function CustomCheckbox({ checked, onChange }) {

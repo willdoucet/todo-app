@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import ScheduleView from '../../src/components/ScheduleView'
+import ScheduleView from '../../src/components/responsibilities/ScheduleView'
 
 describe('ScheduleView', () => {
   // Wednesday so all responsibilities with weekday frequency show up
