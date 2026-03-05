@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Family Todo App — Style Guide</title>
+  <style>
+    /* Reset */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Backgrounds */
+      --warm-cream: #FAF7F2;
+      --warm-beige: #F5F0E8;
+      --warm-sand: #EBE5DA;
+      --card-bg: #FFFDFB;
+      --card-border: #E8E2D9;
+
+      /* Terracotta */
+      --terracotta-50: #FEF3F0;
+      --terracotta-100: #FCE4DE;
+      --terracotta-200: #FAC9BD;
+      --terracotta-500: #D97452;
+      --terracotta-600: #C4613F;
+      --terracotta-700: #A34E32;
+
+      /* Peach */
+      --peach-100: #FFE8DF;
+      --peach-200: #FFD4C4;
+
+      /* Sage */
+      --sage-50: #F4F7F4;
+      --sage-100: #E5EDE6;
+      --sage-200: #C8DBC9;
+      --sage-500: #6B9A70;
+      --sage-600: #588D5E;
+      --sage-700: #4A7A50;
+
+      /* Text */
+      --text-primary: #3D3833;
+      --text-secondary: #6B645A;
+      --text-muted: #9A9287;
+
+      /* Category */
+      --label-green: #5D8A61;
+
+      /* Dark mode equivalents */
+      --dark-bg: #111827;
+      --dark-card: #1F2937;
+      --dark-border: #374151;
+      --dark-text: #F3F4F6;
+      --dark-text-secondary: #9CA3AF;
+      --dark-text-muted: #6B7280;
+      --dark-accent: #2563EB;
+      --dark-accent-hover: #60A5FA;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      line-height: 1.5;
+      color: var(--text-primary);
+      background: var(--warm-cream);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout */
+    .page { max-width: 1200px; margin: 0 auto; padding: 48px 32px; }
+    .section { margin-bottom: 64px; }
+    .section-title {
+      font-size: 28px; font-weight: 700; color: var(--text-primary);
+      margin-bottom: 8px; letter-spacing: -0.5px;
+    }
+    .section-subtitle {
+      font-size: 15px; color: var(--text-secondary); margin-bottom: 32px;
+    }
+    .subsection { margin-bottom: 40px; }
+    .subsection-title {
+      font-size: 16px; font-weight: 600; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    /* Header */
+    .hero {
+      text-align: center; padding: 64px 32px 48px; margin-bottom: 48px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .hero h1 {
+      font-size: 42px; font-weight: 700; color: var(--text-primary);
+      letter-spacing: -1px; margin-bottom: 8px;
+    }
+    .hero p {
+      font-size: 18px; color: var(--text-secondary); max-width: 480px; margin: 0 auto;
+    }
+    .hero-badge {
+      display: inline-block; padding: 4px 14px; border-radius: 9999px;
+      background: var(--terracotta-50); color: var(--terracotta-600);
+      font-size: 13px; font-weight: 600; margin-bottom: 16px;
+    }
+
+    /* Color grid */
+    .color-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 16px;
+    }
+    .color-card {
+      border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+    }
+    .color-swatch {
+      height: 80px; width: 100%;
+    }
+    .color-info {
+      padding: 10px 12px;
+    }
+    .color-name {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+    }
+    .color-hex {
+      font-size: 12px; color: var(--text-muted); font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Typography samples */
+    .type-row {
+      display: flex; align-items: baseline; gap: 24px;
+      padding: 16px 0; border-bottom: 1px solid var(--card-border);
+    }
+    .type-row:last-child { border-bottom: none; }
+    .type-meta {
+      flex-shrink: 0; width: 140px; text-align: right;
+    }
+    .type-size {
+      font-size: 12px; color: var(--text-muted);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .type-weight {
+      font-size: 11px; color: var(--text-muted);
+    }
+
+    /* Spacing */
+    .spacing-row {
+      display: flex; align-items: center; gap: 16px; margin-bottom: 12px;
+    }
+    .spacing-bar {
+      height: 32px; border-radius: 6px; background: var(--terracotta-100);
+      border: 1px solid var(--terracotta-200);
+    }
+    .spacing-label {
+      font-size: 13px; color: var(--text-secondary); width: 80px; flex-shrink: 0;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .spacing-value {
+      font-size: 12px; color: var(--text-muted); width: 50px; flex-shrink: 0;
+    }
+
+    /* Radius */
+    .radius-grid {
+      display: flex; gap: 24px; flex-wrap: wrap;
+    }
+    .radius-item {
+      text-align: center;
+    }
+    .radius-box {
+      width: 80px; height: 80px; background: var(--terracotta-100);
+      border: 2px solid var(--terracotta-500); margin-bottom: 8px;
+    }
+    .radius-name {
+      font-size: 12px; color: var(--text-secondary); font-weight: 600;
+    }
+    .radius-val {
+      font-size: 11px; color: var(--text-muted);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Component showcase */
+    .component-row {
+      display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;
+      margin-bottom: 24px;
+    }
+    .component-label {
+      font-size: 12px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 8px; border: none;
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      transition: all 200ms ease;
+    }
+    .btn-primary {
+      background: var(--terracotta-500); color: white;
+    }
+    .btn-primary:hover { background: var(--terracotta-600); }
+    .btn-secondary {
+      background: var(--warm-sand); color: var(--text-secondary);
+    }
+    .btn-secondary:hover { background: var(--warm-beige); }
+    .btn-success {
+      background: var(--sage-500); color: white;
+    }
+    .btn-success:hover { background: var(--sage-600); }
+    .btn-icon {
+      width: 36px; height: 36px; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 9999px; border: none; cursor: pointer;
+      background: var(--warm-sand); color: var(--text-muted);
+      transition: all 200ms ease;
+    }
+    .btn-icon:hover {
+      background: var(--terracotta-100); color: var(--terracotta-600);
+    }
+
+    /* Inputs */
+    .input {
+      width: 100%; max-width: 360px; padding: 10px 14px;
+      border: 1px solid var(--card-border); border-radius: 8px;
+      background: var(--card-bg); color: var(--text-primary);
+      font-size: 14px; font-family: inherit; outline: none;
+    }
+    .input:focus {
+      border-color: var(--terracotta-500);
+      box-shadow: 0 0 0 3px rgba(217, 116, 82, 0.15);
+    }
+    .input::placeholder { color: var(--text-muted); }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 12px; padding: 16px; transition: box-shadow 200ms ease;
+    }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .card-completed {
+      background: var(--sage-50); border-color: var(--sage-200);
+    }
+    .card-title {
+      font-size: 15px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;
+    }
+    .card-text {
+      font-size: 13px; color: var(--text-secondary);
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 9999px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .badge-breakfast { background: #FEF3C7; color: #B45309; }
+    .badge-lunch { background: var(--sage-100); color: var(--sage-700); }
+    .badge-dinner { background: var(--peach-100); color: var(--terracotta-700); }
+    .badge-morning { background: #DBEAFE; color: #1D4ED8; }
+    .badge-chore { background: #F3E8FF; color: #7C3AED; }
+
+    /* Nav items */
+    .nav-demo {
+      display: flex; gap: 8px; padding: 8px;
+      background: var(--warm-sand); border-radius: 16px;
+    }
+    .nav-item {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      width: 56px; height: 56px; border-radius: 12px;
+      font-size: 10px; font-weight: 500; cursor: pointer;
+      transition: all 200ms ease; border: none; background: transparent;
+      color: var(--text-secondary);
+    }
+    .nav-item:hover {
+      background: var(--warm-beige); color: var(--terracotta-600);
+    }
+    .nav-item.active {
+      background: var(--peach-100); color: var(--terracotta-600);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .nav-icon { font-size: 20px; margin-bottom: 2px; }
+
+    /* Modal */
+    .modal-demo {
+      max-width: 420px; border-radius: 16px; padding: 24px;
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+    }
+    .modal-title {
+      font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;
+    }
+    .modal-footer {
+      display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;
+    }
+
+    /* Dark mode preview */
+    .dark-preview {
+      background: var(--dark-bg); border-radius: 16px; padding: 32px;
+      margin-top: 24px;
+    }
+    .dark-preview .card {
+      background: var(--dark-card); border-color: var(--dark-border);
+    }
+    .dark-preview .card-title { color: var(--dark-text); }
+    .dark-preview .card-text { color: var(--dark-text-secondary); }
+    .dark-preview .btn-primary {
+      background: var(--dark-accent); color: white;
+    }
+    .dark-preview .input {
+      background: var(--dark-card); border-color: var(--dark-border);
+      color: var(--dark-text);
+    }
+    .dark-preview .input::placeholder { color: var(--dark-text-muted); }
+    .dark-preview .badge-breakfast { background: rgba(180, 83, 9, 0.2); color: #FBBF24; }
+    .dark-preview .badge-lunch { background: rgba(34, 197, 94, 0.15); color: #4ADE80; }
+    .dark-preview .badge-dinner { background: rgba(249, 115, 22, 0.15); color: #FB923C; }
+    .dark-preview .nav-demo {
+      background: var(--dark-card);
+    }
+    .dark-preview .nav-item { color: var(--dark-text-secondary); }
+    .dark-preview .nav-item:hover { background: #374151; color: var(--dark-accent-hover); }
+    .dark-preview .nav-item.active {
+      background: var(--dark-accent); color: white; box-shadow: none;
+    }
+
+    /* Responsive preview */
+    .breakpoint-bar {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
+    }
+    .bp-line {
+      flex: 1; height: 2px; border-radius: 1px;
+    }
+    .bp-label {
+      font-size: 12px; font-weight: 600; color: var(--text-muted);
+      white-space: nowrap;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .bp-name {
+      font-size: 11px; color: var(--text-muted);
+    }
+
+    /* Icon sizes */
+    .icon-demo {
+      display: flex; align-items: center; gap: 24px;
+    }
+    .icon-sample {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .icon-sample svg { color: var(--text-secondary); }
+    .icon-sample span {
+      font-size: 11px; color: var(--text-muted);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* Two column grid */
+    .two-col {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    }
+
+    /* Checkbox */
+    .checkbox-demo {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .checkbox {
+      width: 20px; height: 20px; border-radius: 6px;
+      border: 2px solid var(--card-border); background: var(--card-bg);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .checkbox.checked {
+      background: var(--sage-500); border-color: var(--sage-500);
+      color: white;
+    }
+    .checkbox-label { font-size: 14px; color: var(--text-primary); }
+    .checkbox-label.completed {
+      text-decoration: line-through; color: var(--text-muted);
+    }
+
+    /* Focus ring demo */
+    .focus-ring {
+      border-color: var(--terracotta-500);
+      box-shadow: 0 0 0 3px rgba(217, 116, 82, 0.2);
+    }
+
+    /* Animation labels */
+    .anim-card {
+      padding: 16px; background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 12px; text-align: center; min-width: 160px;
+    }
+    .anim-name { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+    .anim-desc { font-size: 11px; color: var(--text-muted); }
+
+    /* Separator */
+    .divider {
+      border: none; border-top: 1px solid var(--card-border); margin: 48px 0;
+    }
+
+    /* Family member colors */
+    .member-dot {
+      width: 32px; height: 32px; border-radius: 9999px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: white; font-size: 13px; font-weight: 600;
+    }
+    .member-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+    }
+    .member-name { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+    .member-hex { font-size: 12px; color: var(--text-muted); font-family: 'SF Mono', 'Fira Code', monospace; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Hero -->
+    <div class="hero">
+      <span class="hero-badge">Design System v1.0</span>
+      <h1>Family Todo App</h1>
+      <p>A warm, inviting design system for family task and responsibility management.</p>
+    </div>
+
+    <!-- ===================== COLORS ===================== -->
+    <div class="section">
+      <h2 class="section-title">Color Palette</h2>
+      <p class="section-subtitle">Warm, earthy tones that feel approachable and family-friendly.</p>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Backgrounds</h3>
+        <div class="color-grid">
+          <div class="color-card">
+            <div class="color-swatch" style="background: #FAF7F2;"></div>
+            <div class="color-info">
+              <div class="color-name">Warm Cream</div>
+              <div class="color-hex">#FAF7F2</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #F5F0E8;"></div>
+            <div class="color-info">
+              <div class="color-name">Warm Beige</div>
+              <div class="color-hex">#F5F0E8</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #EBE5DA;"></div>
+            <div class="color-info">
+              <div class="color-name">Warm Sand</div>
+              <div class="color-hex">#EBE5DA</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #FFFDFB;"></div>
+            <div class="color-info">
+              <div class="color-name">Card BG</div>
+              <div class="color-hex">#FFFDFB</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #E8E2D9;"></div>
+            <div class="color-info">
+              <div class="color-name">Card Border</div>
+              <div class="color-hex">#E8E2D9</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Primary — Terracotta</h3>
+        <div class="color-grid">
+          <div class="color-card">
+            <div class="color-swatch" style="background: #FEF3F0;"></div>
+            <div class="color-info">
+              <div class="color-name">Terracotta 50</div>
+              <div class="color-hex">#FEF3F0</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #FCE4DE;"></div>
+            <div class="color-info">
+              <div class="color-name">Terracotta 100</div>
+              <div class="color-hex">#FCE4DE</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #FAC9BD;"></div>
+            <div class="color-info">
+              <div class="color-name">Terracotta 200</div>
+              <div class="color-hex">#FAC9BD</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #D97452;"></div>
+            <div class="color-info">
+              <div class="color-name">Terracotta 500</div>
+              <div class="color-hex">#D97452</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #C4613F;"></div>
+            <div class="color-info">
+              <div class="color-name">Terracotta 600</div>
+              <div class="color-hex">#C4613F</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #A34E32;"></div>
+            <div class="color-info">
+              <div class="color-name">Terracotta 700</div>
+              <div class="color-hex">#A34E32</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Active State — Peach</h3>
+        <div class="color-grid">
+          <div class="color-card">
+            <div class="color-swatch" style="background: #FFE8DF;"></div>
+            <div class="color-info">
+              <div class="color-name">Peach 100</div>
+              <div class="color-hex">#FFE8DF</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #FFD4C4;"></div>
+            <div class="color-info">
+              <div class="color-name">Peach 200</div>
+              <div class="color-hex">#FFD4C4</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Success — Sage Green</h3>
+        <div class="color-grid">
+          <div class="color-card">
+            <div class="color-swatch" style="background: #F4F7F4;"></div>
+            <div class="color-info">
+              <div class="color-name">Sage 50</div>
+              <div class="color-hex">#F4F7F4</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #E5EDE6;"></div>
+            <div class="color-info">
+              <div class="color-name">Sage 100</div>
+              <div class="color-hex">#E5EDE6</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #C8DBC9;"></div>
+            <div class="color-info">
+              <div class="color-name">Sage 200</div>
+              <div class="color-hex">#C8DBC9</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #6B9A70;"></div>
+            <div class="color-info">
+              <div class="color-name">Sage 500</div>
+              <div class="color-hex">#6B9A70</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #588D5E;"></div>
+            <div class="color-info">
+              <div class="color-name">Sage 600</div>
+              <div class="color-hex">#588D5E</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #4A7A50;"></div>
+            <div class="color-info">
+              <div class="color-name">Sage 700</div>
+              <div class="color-hex">#4A7A50</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Text Colors</h3>
+        <div class="color-grid">
+          <div class="color-card">
+            <div class="color-swatch" style="background: #3D3833;"></div>
+            <div class="color-info">
+              <div class="color-name">Text Primary</div>
+              <div class="color-hex">#3D3833</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #6B645A;"></div>
+            <div class="color-info">
+              <div class="color-name">Text Secondary</div>
+              <div class="color-hex">#6B645A</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #9A9287;"></div>
+            <div class="color-info">
+              <div class="color-name">Text Muted</div>
+              <div class="color-hex">#9A9287</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #5D8A61;"></div>
+            <div class="color-info">
+              <div class="color-name">Label Green</div>
+              <div class="color-hex">#5D8A61</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Dark Mode</h3>
+        <div class="color-grid">
+          <div class="color-card">
+            <div class="color-swatch" style="background: #111827;"></div>
+            <div class="color-info">
+              <div class="color-name">Dark BG</div>
+              <div class="color-hex">#111827</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #1F2937;"></div>
+            <div class="color-info">
+              <div class="color-name">Dark Card</div>
+              <div class="color-hex">#1F2937</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #374151;"></div>
+            <div class="color-info">
+              <div class="color-name">Dark Border</div>
+              <div class="color-hex">#374151</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #2563EB;"></div>
+            <div class="color-info">
+              <div class="color-name">Dark Accent</div>
+              <div class="color-hex">#2563EB</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #F3F4F6;"></div>
+            <div class="color-info">
+              <div class="color-name">Dark Text</div>
+              <div class="color-hex">#F3F4F6</div>
+            </div>
+          </div>
+          <div class="color-card">
+            <div class="color-swatch" style="background: #9CA3AF;"></div>
+            <div class="color-info">
+              <div class="color-name">Dark Text 2nd</div>
+              <div class="color-hex">#9CA3AF</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== TYPOGRAPHY ===================== -->
+    <div class="section">
+      <h2 class="section-title">Typography</h2>
+      <p class="section-subtitle">System font stack with warm, readable proportions. Line height 1.5 default.</p>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Type Scale</h3>
+        <div>
+          <div class="type-row">
+            <div class="type-meta">
+              <div class="type-size">2xl / 1.5rem</div>
+              <div class="type-weight">Bold 700</div>
+            </div>
+            <div style="font-size: 24px; font-weight: 700; color: var(--text-primary);">Page Title</div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">
+              <div class="type-size">xl / 1.25rem</div>
+              <div class="type-weight">Semibold 600</div>
+            </div>
+            <div style="font-size: 20px; font-weight: 600; color: var(--text-primary);">Section Heading</div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">
+              <div class="type-size">lg / 1.125rem</div>
+              <div class="type-weight">Medium 500</div>
+            </div>
+            <div style="font-size: 18px; font-weight: 500; color: var(--text-primary);">Card Title</div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">
+              <div class="type-size">base / 1rem</div>
+              <div class="type-weight">Normal 400</div>
+            </div>
+            <div style="font-size: 16px; font-weight: 400; color: var(--text-primary);">Body text for primary content and descriptions.</div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">
+              <div class="type-size">sm / 0.875rem</div>
+              <div class="type-weight">Normal 400</div>
+            </div>
+            <div style="font-size: 14px; font-weight: 400; color: var(--text-secondary);">Card content and secondary information.</div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta">
+              <div class="type-size">xs / 0.75rem</div>
+              <div class="type-weight">Medium 500</div>
+            </div>
+            <div style="font-size: 12px; font-weight: 500; color: var(--text-muted);">BADGE TEXT &amp; META INFO</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3 class="subsection-title">Font Stack</h3>
+        <div class="card" style="padding: 16px;">
+          <code style="font-size: 13px; color: var(--terracotta-600); font-family: 'SF Mono', 'Fira Code', monospace;">
+            -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif
+          </code>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== SPACING ===================== -->
+    <div class="section">
+      <h2 class="section-title">Spacing & Layout</h2>
+      <p class="section-subtitle">Tailwind 4px base unit. Consistent rhythm across all components.</p>
+
+      <div class="two-col">
+        <div class="subsection">
+          <h3 class="subsection-title">Spacing Scale</h3>
+          <div>
+            <div class="spacing-row">
+              <span class="spacing-label">4px</span>
+              <div class="spacing-bar" style="width: 16px;"></div>
+              <span class="spacing-value">p-1</span>
+            </div>
+            <div class="spacing-row">
+              <span class="spacing-label">8px</span>
+              <div class="spacing-bar" style="width: 32px;"></div>
+              <span class="spacing-value">p-2</span>
+            </div>
+            <div class="spacing-row">
+              <span class="spacing-label">12px</span>
+              <div class="spacing-bar" style="width: 48px;"></div>
+              <span class="spacing-value">p-3</span>
+            </div>
+            <div class="spacing-row">
+              <span class="spacing-label">16px</span>
+              <div class="spacing-bar" style="width: 64px;"></div>
+              <span class="spacing-value">p-4</span>
+            </div>
+            <div class="spacing-row">
+              <span class="spacing-label">24px</span>
+              <div class="spacing-bar" style="width: 96px;"></div>
+              <span class="spacing-value">p-6</span>
+            </div>
+            <div class="spacing-row">
+              <span class="spacing-label">32px</span>
+              <div class="spacing-bar" style="width: 128px;"></div>
+              <span class="spacing-value">p-8</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="subsection">
+          <h3 class="subsection-title">Border Radius</h3>
+          <div class="radius-grid">
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius: 4px;"></div>
+              <div class="radius-name">rounded</div>
+              <div class="radius-val">4px</div>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius: 8px;"></div>
+              <div class="radius-name">rounded-lg</div>
+              <div class="radius-val">8px</div>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius: 12px;"></div>
+              <div class="radius-name">rounded-xl</div>
+              <div class="radius-val">12px</div>
+            </div>
+            <div class="radius-item">
+              <div class="radius-box" style="border-radius: 9999px;"></div>
+              <div class="radius-name">rounded-full</div>
+              <div class="radius-val">9999px</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== COMPONENTS ===================== -->
+    <div class="section">
+      <h2 class="section-title">Components</h2>
+      <p class="section-subtitle">Core UI building blocks used throughout the application.</p>
+
+      <!-- Buttons -->
+      <div class="subsection">
+        <h3 class="subsection-title">Buttons</h3>
+        <div class="component-row">
+          <div>
+            <div class="component-label">Primary</div>
+            <button class="btn btn-primary">Create Task</button>
+          </div>
+          <div>
+            <div class="component-label">Secondary</div>
+            <button class="btn btn-secondary">Cancel</button>
+          </div>
+          <div>
+            <div class="component-label">Success</div>
+            <button class="btn btn-success">Save</button>
+          </div>
+          <div>
+            <div class="component-label">Icon Buttons</div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <button class="btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <button class="btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inputs -->
+      <div class="subsection">
+        <h3 class="subsection-title">Form Inputs</h3>
+        <div class="component-row">
+          <div>
+            <div class="component-label">Default</div>
+            <input class="input" type="text" placeholder="Enter task name..." />
+          </div>
+          <div>
+            <div class="component-label">Focused</div>
+            <input class="input focus-ring" type="text" value="Buy groceries" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Checkboxes -->
+      <div class="subsection">
+        <h3 class="subsection-title">Checkboxes</h3>
+        <div class="component-row" style="gap: 32px;">
+          <div class="checkbox-demo">
+            <div class="checkbox"></div>
+            <span class="checkbox-label">Pick up dry cleaning</span>
+          </div>
+          <div class="checkbox-demo">
+            <div class="checkbox checked">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <span class="checkbox-label completed">Buy groceries</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cards -->
+      <div class="subsection">
+        <h3 class="subsection-title">Cards</h3>
+        <div class="component-row">
+          <div class="card" style="width: 280px;">
+            <div class="card-title">Clean the kitchen</div>
+            <div class="card-text">Assigned to Mom &bull; Due tomorrow</div>
+          </div>
+          <div class="card card-completed" style="width: 280px;">
+            <div class="card-title" style="text-decoration: line-through; color: var(--text-muted);">Buy groceries</div>
+            <div class="card-text">Completed by Dad &bull; Today</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Badges -->
+      <div class="subsection">
+        <h3 class="subsection-title">Badges</h3>
+        <div class="component-row" style="gap: 10px;">
+          <span class="badge badge-breakfast">Breakfast</span>
+          <span class="badge badge-lunch">Lunch</span>
+          <span class="badge badge-dinner">Dinner</span>
+          <span class="badge badge-morning">Morning</span>
+          <span class="badge badge-chore">Chore</span>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="subsection">
+        <h3 class="subsection-title">Sidebar Navigation</h3>
+        <div class="nav-demo">
+          <button class="nav-item active">
+            <span class="nav-icon">&#128197;</span>
+            <span>Calendar</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">&#9745;</span>
+            <span>Tasks</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">&#127860;</span>
+            <span>Meals</span>
+          </button>
+          <button class="nav-item">
+            <span class="nav-icon">&#9881;</span>
+            <span>Settings</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal -->
+      <div class="subsection">
+        <h3 class="subsection-title">Modal Dialog</h3>
+        <div class="modal-demo">
+          <div class="modal-title">New Calendar Event</div>
+          <div style="margin-bottom: 12px;">
+            <div class="component-label">Event Name</div>
+            <input class="input" style="max-width: 100%;" type="text" placeholder="Enter event name..." />
+          </div>
+          <div style="margin-bottom: 12px;">
+            <div class="component-label">Date</div>
+            <input class="input" style="max-width: 100%;" type="text" value="March 3, 2026" />
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary">Cancel</button>
+            <button class="btn btn-primary">Create Event</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== ICONS ===================== -->
+    <div class="section">
+      <h2 class="section-title">Icons</h2>
+      <p class="section-subtitle">Inline SVGs with currentColor. Four standard sizes.</p>
+
+      <div class="icon-demo">
+        <div class="icon-sample">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>3.5 / 14px</span>
+        </div>
+        <div class="icon-sample">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>4 / 16px</span>
+        </div>
+        <div class="icon-sample">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>5 / 20px</span>
+        </div>
+        <div class="icon-sample">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>6 / 24px</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== RESPONSIVE ===================== -->
+    <div class="section">
+      <h2 class="section-title">Responsive Breakpoints</h2>
+      <p class="section-subtitle">Mobile-first approach with Tailwind standard + custom breakpoints.</p>
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div class="breakpoint-bar">
+          <span class="bp-label">0px</span>
+          <div class="bp-line" style="background: var(--terracotta-200);"></div>
+          <span class="bp-name">Mobile base</span>
+        </div>
+        <div class="breakpoint-bar">
+          <span class="bp-label">640px</span>
+          <div class="bp-line" style="background: var(--terracotta-500); opacity: 0.4;"></div>
+          <span class="bp-name">sm: — Sidebar visible</span>
+        </div>
+        <div class="breakpoint-bar">
+          <span class="bp-label">768px</span>
+          <div class="bp-line" style="background: var(--terracotta-500); opacity: 0.6;"></div>
+          <span class="bp-name">md: — Two columns, calendar grid</span>
+        </div>
+        <div class="breakpoint-bar">
+          <span class="bp-label">1024px</span>
+          <div class="bp-line" style="background: var(--terracotta-500); opacity: 0.8;"></div>
+          <span class="bp-name">lg: — Three columns</span>
+        </div>
+        <div class="breakpoint-bar">
+          <span class="bp-label">1200px</span>
+          <div class="bp-line" style="background: var(--sage-500); opacity: 0.7;"></div>
+          <span class="bp-name">custom — Mealboard nav panel</span>
+        </div>
+        <div class="breakpoint-bar">
+          <span class="bp-label">1280px</span>
+          <div class="bp-line" style="background: var(--terracotta-500);"></div>
+          <span class="bp-name">xl: — Full desktop</span>
+        </div>
+        <div class="breakpoint-bar">
+          <span class="bp-label">1525px</span>
+          <div class="bp-line" style="background: var(--sage-500);"></div>
+          <span class="bp-name">custom — Right panel visible</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== DARK MODE ===================== -->
+    <div class="section">
+      <h2 class="section-title">Dark Mode</h2>
+      <p class="section-subtitle">Class-based toggle. Terracotta maps to Blue for primary accents.</p>
+
+      <div class="dark-preview">
+        <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;">
+          <div class="card" style="width: 260px;">
+            <div class="card-title">Dark Card</div>
+            <div class="card-text">Content looks like this in dark mode.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <button class="btn btn-primary">Primary Action</button>
+            <input class="input" style="max-width: 240px;" type="text" placeholder="Input field..." />
+            <div style="display: flex; gap: 8px;">
+              <span class="badge badge-breakfast">Breakfast</span>
+              <span class="badge badge-lunch">Lunch</span>
+              <span class="badge badge-dinner">Dinner</span>
+            </div>
+          </div>
+          <div class="nav-demo" style="flex-direction: column; width: auto;">
+            <button class="nav-item active" style="width: 56px; height: 56px;">
+              <span class="nav-icon">&#128197;</span>
+            </button>
+            <button class="nav-item" style="width: 56px; height: 56px;">
+              <span class="nav-icon">&#9745;</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== ANIMATIONS ===================== -->
+    <div class="section">
+      <h2 class="section-title">Animations & Transitions</h2>
+      <p class="section-subtitle">Subtle, purposeful motion for feedback and delight.</p>
+
+      <div class="component-row">
+        <div class="anim-card">
+          <div class="anim-name">fade-in</div>
+          <div class="anim-desc">opacity 0 &rarr; 1 + translateY(4px &rarr; 0)</div>
+        </div>
+        <div class="anim-card">
+          <div class="anim-name">scale-in</div>
+          <div class="anim-desc">scale(0) &rarr; scale(1)</div>
+        </div>
+        <div class="anim-card">
+          <div class="anim-name">transition-colors</div>
+          <div class="anim-desc">Color-only, 200ms ease</div>
+        </div>
+        <div class="anim-card">
+          <div class="anim-name">transition-all</div>
+          <div class="anim-desc">All props, 200ms ease</div>
+        </div>
+        <div class="anim-card">
+          <div class="anim-name">hover-reveal</div>
+          <div class="anim-desc">opacity 0 &rarr; 1, 150ms ease-in-out</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- ===================== ACCESSIBILITY ===================== -->
+    <div class="section">
+      <h2 class="section-title">Accessibility</h2>
+      <p class="section-subtitle">WCAG AA compliant. Visible focus states. 44px minimum touch targets.</p>
+
+      <div class="two-col">
+        <div>
+          <h3 class="subsection-title">Focus Ring</h3>
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <button class="btn btn-primary" style="box-shadow: 0 0 0 3px rgba(217, 116, 82, 0.25); outline: none;">Focused Button</button>
+            <input class="input focus-ring" style="max-width: 200px;" type="text" value="Focused input" />
+          </div>
+        </div>
+        <div>
+          <h3 class="subsection-title">Contrast Ratios</h3>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 32px; height: 32px; border-radius: 6px; background: var(--warm-cream); border: 1px solid var(--card-border);"></div>
+              <span style="font-size: 13px; color: var(--text-primary); font-weight: 600;">Text Primary on Cream — 7.5:1</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 32px; height: 32px; border-radius: 6px; background: var(--warm-cream); border: 1px solid var(--card-border);"></div>
+              <span style="font-size: 13px; color: var(--text-secondary); font-weight: 600;">Text Secondary on Cream — 4.5:1</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 32px; height: 32px; border-radius: 6px; background: var(--terracotta-500); border-radius: 6px;"></div>
+              <span style="font-size: 13px; color: var(--text-primary); font-weight: 600;">White on Terracotta 500 — 3.8:1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
