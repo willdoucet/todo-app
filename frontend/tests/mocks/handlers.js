@@ -32,9 +32,9 @@ const API_BASE = 'http://localhost:8000'
 // =============================================================================
 
 const mockFamilyMembers = [
-  { id: 1, name: 'Everyone', is_system: true, photo_url: null, color: '#D97452' },
-  { id: 2, name: 'Alice', is_system: false, photo_url: null, color: '#3B82F6' },
-  { id: 3, name: 'Bob', is_system: false, photo_url: null, color: '#EF4444' },
+  { id: 1, name: 'Everyone', is_system: true, photo_url: null, color: '#D4695A' },
+  { id: 2, name: 'Alice', is_system: false, photo_url: null, color: '#5A80B0' },
+  { id: 3, name: 'Bob', is_system: false, photo_url: null, color: '#D4915A' },
 ]
 
 const mockLists = [

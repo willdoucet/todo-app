@@ -19,10 +19,24 @@ class MealCategory(str, Enum):
     DINNER = "DINNER"
 
 
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _validate_hex_color(v: Optional[str]) -> Optional[str]:
+    if v is not None and not _HEX_COLOR_RE.match(v):
+        raise ValueError("Color must be a valid hex color (e.g. #FF0000)")
+    return v
+
+
 class FamilyMemberBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
     photo_url: Optional[str] = None
     color: Optional[str] = None
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v):
+        return _validate_hex_color(v)
 
 
 class FamilyMemberCreate(FamilyMemberBase):
@@ -33,6 +47,11 @@ class FamilyMemberUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=50)
     photo_url: Optional[str] = None
     color: Optional[str] = None
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v):
+        return _validate_hex_color(v)
 
 
 class FamilyMember(FamilyMemberBase):

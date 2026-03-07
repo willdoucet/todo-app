@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import ResponsibilityCard from './ResponsibilityCard'
 import { EmptyDailyViewState } from '../shared/EmptyState'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import MemberAvatar from '../shared/MemberAvatar'
 
 // Category definitions with icons
 const CATEGORIES = [
@@ -125,7 +124,7 @@ export default function ScheduleView({
         {/* Member Header */}
         <div className="p-4 pb-3">
           <div className="flex items-center gap-3 mb-3">
-            <MemberAvatar name={member.name} photoUrl={member.photo_url} size="xl" />
+            <MemberAvatar name={member.name} photoUrl={member.photo_url} color={member.color} size="xl" />
             <h3 className="text-lg font-semibold text-text-primary dark:text-gray-100">
               {member.name}
             </h3>
@@ -285,6 +284,7 @@ export default function ScheduleView({
                 <MemberAvatar
                   name={member.name}
                   photoUrl={member.photo_url}
+                  color={member.color}
                   size="sm"
                   className={selectedMemberId === member.id ? 'ring-2 ring-terracotta-500 dark:ring-white' : ''}
                 />
@@ -309,46 +309,6 @@ export default function ScheduleView({
       {familyMembers.length === 0 && (
         <EmptyDailyViewState />
       )}
-    </div>
-  )
-}
-
-// Avatar component that shows photo if available, otherwise shows initial
-function MemberAvatar({ name, photoUrl, size = 'md', className = '' }) {
-  const initial = name.charAt(0).toUpperCase()
-  const colors = [
-    { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-600 dark:text-blue-400' },
-    { bg: 'bg-pink-100 dark:bg-pink-900/40', text: 'text-pink-600 dark:text-pink-400' },
-    { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-600 dark:text-green-400' },
-    { bg: 'bg-purple-100 dark:bg-purple-900/40', text: 'text-purple-600 dark:text-purple-400' },
-    { bg: 'bg-orange-100 dark:bg-orange-900/40', text: 'text-orange-600 dark:text-orange-400' },
-  ]
-  const colorIndex = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length
-  const color = colors[colorIndex]
-
-  const sizeClasses = {
-    sm: 'w-6 h-6 text-xs',
-    md: 'w-8 h-8 text-sm',
-    lg: 'w-10 h-10 text-base',
-    xl: 'w-16 h-16 text-xl',
-  }
-
-  // If there's a photo URL, show the image
-  if (photoUrl) {
-    const imageSrc = photoUrl.startsWith('http') ? photoUrl : `${API_BASE}${photoUrl}`
-    return (
-      <img
-        src={imageSrc}
-        alt={name}
-        className={`${sizeClasses[size].split(' ').slice(0, 2).join(' ')} rounded-full object-cover ${className}`}
-      />
-    )
-  }
-
-  // Otherwise show the initial
-  return (
-    <div className={`flex items-center justify-center rounded-full ${sizeClasses[size]} ${color.bg} ${className}`}>
-      <span className={`font-semibold ${color.text}`}>{initial}</span>
     </div>
   )
 }

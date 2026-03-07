@@ -1,33 +1,54 @@
-import { getMemberColor } from './calendarUtils'
+import MemberAvatar from '../shared/MemberAvatar'
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 /**
- * Horizontal row of family member avatar circles for filtering calendar items.
+ * Horizontal row of family member pill buttons for filtering calendar items.
  */
 export default function FamilyMemberFilter({ familyMembers, activeMembers, onToggle }) {
   if (!familyMembers || familyMembers.length === 0) return null
 
+  const visibleMembers = familyMembers.filter((m) => !m.is_system)
+
+  if (visibleMembers.length === 0) return null
+
   return (
-    <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1">
-      {familyMembers.map((member) => {
+    <div className="mb-4 flex items-center gap-5 overflow-x-auto pb-1">
+      {visibleMembers.map((member) => {
         const isActive = activeMembers.has(member.id)
-        const color = getMemberColor(member)
-        const initial = (member.name || '?')[0].toUpperCase()
 
         return (
           <button
             key={member.id}
             onClick={() => onToggle(member.id)}
-            className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
+            className={`flex items-center gap-2 transition-all ${
               isActive
-                ? 'ring-2 ring-offset-2 ring-terracotta-500 dark:ring-blue-500 dark:ring-offset-gray-900'
-                : 'opacity-40'
+                ? 'text-text-primary dark:text-gray-100'
+                : 'text-text-secondary dark:text-gray-300 opacity-40'
             }`}
-            style={{ backgroundColor: color }}
             title={member.name}
             aria-label={`${isActive ? 'Hide' : 'Show'} ${member.name}`}
             aria-pressed={isActive}
           >
-            <span className="text-white drop-shadow-sm">{initial}</span>
+            <MemberAvatar
+              name={member.name}
+              photoUrl={member.photo_url}
+              color={member.color}
+              size="md"
+            />
+            <span
+              className="rounded-lg bg-card-bg dark:bg-gray-700 px-3 py-1.5 text-sm font-medium"
+              style={{
+                borderRight: `4px solid ${member.color || '#9CA3AF'}`,
+              }}
+            >
+              {member.name}
+            </span>
           </button>
         )
       })}

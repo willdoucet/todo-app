@@ -1,5 +1,6 @@
 // components/TaskItem.jsx
 import SwipeableItem from '../shared/SwipeableItem'
+import MemberAvatar from '../shared/MemberAvatar'
 
 // Custom circle checkbox with animation
 function CustomCheckbox({ checked, onChange }) {
@@ -34,47 +35,16 @@ function CustomCheckbox({ checked, onChange }) {
   )
 }
 
-// Icon component for assigned_to - smaller, cleaner styling
-function AssignedIcon({ familyMember }) {
-  // Handle "Everyone" (system member) with group icon
-  if (familyMember?.is_system || familyMember?.name === 'Everyone') {
-    return (
-      <div
-        className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800"
-        title="Assigned to Everyone"
-      >
-        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      </div>
-    )
-  }
-
-  // For individual family members, show first letter avatar
-  const name = familyMember?.name || '?'
-  const initial = name.charAt(0).toUpperCase()
-
-  // Lighter, more subtle color palette
-  const colors = [
-    { bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-500 dark:text-blue-400' },
-    { bg: 'bg-pink-50 dark:bg-pink-900/30', text: 'text-pink-500 dark:text-pink-400' },
-    { bg: 'bg-green-50 dark:bg-green-900/30', text: 'text-green-500 dark:text-green-400' },
-    { bg: 'bg-purple-50 dark:bg-purple-900/30', text: 'text-purple-500 dark:text-purple-400' },
-    { bg: 'bg-orange-50 dark:bg-orange-900/30', text: 'text-orange-500 dark:text-orange-400' },
-  ]
-
-  // Simple hash to pick a consistent color
-  const colorIndex = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length
-  const color = colors[colorIndex]
-
+// "Everyone" group icon for system member assignments
+function EveryoneIcon() {
   return (
     <div
-      className={`flex items-center justify-center w-6 h-6 rounded-full ${color.bg}`}
-      title={`Assigned to ${name}`}
+      className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800"
+      title="Assigned to Everyone"
     >
-      <span className={`text-xs font-medium ${color.text}`}>
-        {initial}
-      </span>
+      <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
     </div>
   )
 }
@@ -188,7 +158,17 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete }) {
         {/* Assigned to icon - in 32px wrapper for alignment */}
         {task.family_member && (
           <div className="w-8 h-8 flex items-center justify-center">
-            <AssignedIcon familyMember={task.family_member} />
+            {task.family_member.is_system || task.family_member.name === 'Everyone' ? (
+              <EveryoneIcon />
+            ) : (
+              <MemberAvatar
+                name={task.family_member.name}
+                photoUrl={task.family_member.photo_url}
+                color={task.family_member.color}
+                size="sm"
+                title={`Assigned to ${task.family_member.name}`}
+              />
+            )}
           </div>
         )}
 

@@ -34,32 +34,67 @@ class TestFamilyMemberCreate:
     """Tests for FamilyMemberCreate schema validation."""
 
     def test_valid_family_member(self):
-        """Should accept valid family member data."""
+        """Should accept valid family member data with or without color."""
+        member = FamilyMemberCreate(name="Alice", color="#D4695A")
+        assert member.name == "Alice"
+        assert member.color == "#D4695A"
+        assert member.photo_url is None
+
+    def test_valid_family_member_no_color(self):
+        """Should accept family member without color (11th member edge case)."""
         member = FamilyMemberCreate(name="Alice")
         assert member.name == "Alice"
-        assert member.photo_url is None
+        assert member.color is None
 
     def test_valid_with_photo_url(self):
         """Should accept family member with photo URL."""
-        member = FamilyMemberCreate(name="Bob", photo_url="/uploads/bob.jpg")
+        member = FamilyMemberCreate(name="Bob", photo_url="/uploads/bob.jpg", color="#5A80B0")
         assert member.name == "Bob"
         assert member.photo_url == "/uploads/bob.jpg"
+
+    def test_valid_with_hex_color(self):
+        """Should accept valid hex colors."""
+        member = FamilyMemberCreate(name="Eve", color="#aaBBcc")
+        assert member.color == "#aaBBcc"
+
+    def test_rejects_invalid_hex(self):
+        """Should reject non-hex color strings."""
+        with pytest.raises(ValidationError) as exc_info:
+            FamilyMemberCreate(name="Alice", color="red")
+
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("color",) for e in errors)
+
+    def test_rejects_short_hex(self):
+        """Should reject 3-digit hex (only 6-digit supported)."""
+        with pytest.raises(ValidationError) as exc_info:
+            FamilyMemberCreate(name="Alice", color="#F00")
+
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("color",) for e in errors)
+
+    def test_rejects_no_hash(self):
+        """Should reject hex without leading #."""
+        with pytest.raises(ValidationError) as exc_info:
+            FamilyMemberCreate(name="Alice", color="D4695A")
+
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("color",) for e in errors)
 
     def test_rejects_empty_name(self):
         """Should reject empty name (min_length=1)."""
         with pytest.raises(ValidationError) as exc_info:
-            FamilyMemberCreate(name="")
+            FamilyMemberCreate(name="", color="#D4695A")
 
         errors = exc_info.value.errors()
-        assert len(errors) == 1
-        assert errors[0]["loc"] == ("name",)
-        assert "String should have at least 1 character" in errors[0]["msg"]
+        assert any(e["loc"] == ("name",) for e in errors)
+        assert any("String should have at least 1 character" in e["msg"] for e in errors)
 
     def test_rejects_name_too_long(self):
         """Should reject name over 50 characters."""
         long_name = "A" * 51
         with pytest.raises(ValidationError) as exc_info:
-            FamilyMemberCreate(name=long_name)
+            FamilyMemberCreate(name=long_name, color="#D4695A")
 
         errors = exc_info.value.errors()
         assert errors[0]["loc"] == ("name",)
@@ -68,7 +103,7 @@ class TestFamilyMemberCreate:
     def test_rejects_missing_name(self):
         """Should reject when name is not provided."""
         with pytest.raises(ValidationError) as exc_info:
-            FamilyMemberCreate()
+            FamilyMemberCreate(color="#D4695A")
 
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("name",) for e in errors)
@@ -76,7 +111,7 @@ class TestFamilyMemberCreate:
     def test_accepts_max_length_name(self):
         """Should accept name at exactly 50 characters."""
         name = "A" * 50
-        member = FamilyMemberCreate(name=name)
+        member = FamilyMemberCreate(name=name, color="#D4695A")
         assert len(member.name) == 50
 
 
@@ -378,6 +413,21 @@ class TestUpdateSchemas:
 
         with pytest.raises(ValidationError):
             FamilyMemberUpdate(name="A" * 51)  # too long
+
+    def test_family_member_update_accepts_valid_color(self):
+        """FamilyMemberUpdate should accept valid hex color."""
+        update = FamilyMemberUpdate(color="#D4695A")
+        assert update.color == "#D4695A"
+
+    def test_family_member_update_accepts_none_color(self):
+        """FamilyMemberUpdate should accept None color (no change)."""
+        update = FamilyMemberUpdate()
+        assert update.color is None
+
+    def test_family_member_update_rejects_invalid_color(self):
+        """FamilyMemberUpdate should reject invalid hex color."""
+        with pytest.raises(ValidationError):
+            FamilyMemberUpdate(color="not-a-color")
 
     def test_responsibility_update_validates_categories(self):
         """ResponsibilityUpdate should validate categories if provided."""
