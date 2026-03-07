@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import PhotoUpload from '../shared/PhotoUpload'
+import MemberAvatar from '../shared/MemberAvatar'
+import ColorPicker from '../shared/ColorPicker'
+import { getFirstUnusedColor } from '../../constants/familyColors'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -13,7 +16,15 @@ export default function FamilyMemberManager() {
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
   const [editingPhotoUrl, setEditingPhotoUrl] = useState(null)
+  const [editingColor, setEditingColor] = useState('')
+  const [newMemberColor, setNewMemberColor] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Auto-select first unused color when family members change
+  useEffect(() => {
+    const existingColors = familyMembers.map(m => m.color).filter(Boolean)
+    setNewMemberColor(getFirstUnusedColor(existingColors))
+  }, [familyMembers])
 
   // Fetch family members
   useEffect(() => {
@@ -45,6 +56,7 @@ export default function FamilyMemberManager() {
       const response = await axios.post(`${API_BASE}/family-members`, {
         name: newMemberName.trim(),
         photo_url: newMemberPhotoUrl,
+        color: newMemberColor,
       })
       setFamilyMembers([...familyMembers, response.data])
       setNewMemberName('')
@@ -62,6 +74,7 @@ export default function FamilyMemberManager() {
     setEditingId(member.id)
     setEditingName(member.name)
     setEditingPhotoUrl(member.photo_url)
+    setEditingColor(member.color || null)
   }
 
   // Cancel editing
@@ -69,6 +82,7 @@ export default function FamilyMemberManager() {
     setEditingId(null)
     setEditingName('')
     setEditingPhotoUrl(null)
+    setEditingColor('')
   }
 
   // Save edit
@@ -81,6 +95,7 @@ export default function FamilyMemberManager() {
       const response = await axios.patch(`${API_BASE}/family-members/${id}`, {
         name: editingName.trim(),
         photo_url: editingPhotoUrl,
+        color: editingColor,
       })
       setFamilyMembers(familyMembers.map(m => 
         m.id === id ? response.data : m
@@ -114,6 +129,13 @@ export default function FamilyMemberManager() {
   const editableMembers = familyMembers.filter(m => !m.is_system)
   const systemMembers = familyMembers.filter(m => m.is_system)
 
+  // Colors used by non-system members, excluding a given member ID
+  const colorsUsedByOthers = (excludeId) =>
+    editableMembers
+      .filter(m => m.id !== excludeId)
+      .map(m => m.color)
+      .filter(Boolean)
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -136,44 +158,49 @@ export default function FamilyMemberManager() {
       )}
 
       {/* Add new member form */}
-      <form onSubmit={handleCreate} className="mb-6">
-        <div className="flex gap-3 items-start">
-          <PhotoUpload
-            currentUrl={newMemberPhotoUrl}
-            onUpload={(url) => setNewMemberPhotoUrl(url)}
-            uploadEndpoint="/upload/family-photo"
-            placeholder="Photo"
-            size="sm"
-          />
-          <div className="flex-1 flex gap-2">
-            <input
-              type="text"
-              value={newMemberName}
-              onChange={(e) => setNewMemberName(e.target.value)}
-              placeholder="Add family member..."
-              className="
-                flex-1 px-4 py-2.5 border border-card-border dark:border-gray-600
-                rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
-                focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
-                outline-none transition text-sm
-                placeholder:text-text-muted dark:placeholder:text-gray-500
-              "
+      <div className="mb-6 bg-warm-beige dark:bg-gray-800/50 rounded-xl border border-card-border dark:border-gray-700 p-4">
+        <form onSubmit={handleCreate}>
+          <div className="flex gap-3 items-start">
+            <PhotoUpload
+              currentUrl={newMemberPhotoUrl}
+              onUpload={(url) => setNewMemberPhotoUrl(url)}
+              uploadEndpoint="/upload/family-photo"
+              placeholder="Photo"
+              size="sm"
             />
-            <button
-              type="submit"
-              disabled={isSubmitting || !newMemberName.trim()}
-              className="
-                px-4 py-2.5 bg-terracotta-500 text-white font-medium rounded-lg
-                hover:bg-terracotta-600 transition-colors duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed
-                text-sm
-              "
-            >
-              Add
-            </button>
+            <div className="flex-1 flex gap-2">
+              <input
+                type="text"
+                value={newMemberName}
+                onChange={(e) => setNewMemberName(e.target.value)}
+                placeholder="Add family member..."
+                className="
+                  flex-1 px-4 py-2.5 border border-card-border dark:border-gray-600
+                  rounded-lg bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+                  focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
+                  outline-none transition text-sm
+                  placeholder:text-text-muted dark:placeholder:text-gray-500
+                "
+              />
+              <button
+                type="submit"
+                disabled={isSubmitting || !newMemberName.trim()}
+                className="
+                  px-4 py-2.5 bg-terracotta-500 text-white font-medium rounded-lg
+                  hover:bg-terracotta-600 transition-colors duration-200
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  text-sm
+                "
+              >
+                Add
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+          <div className="pl-[76px] mt-2">
+            <ColorPicker selectedColor={newMemberColor} onSelect={setNewMemberColor} disabledColors={colorsUsedByOthers(null)} />
+          </div>
+        </form>
+      </div>
 
       {/* System members (Everyone) - shown but not editable */}
       {systemMembers.length > 0 && (
@@ -216,51 +243,57 @@ export default function FamilyMemberManager() {
             <div
               key={member.id}
               className="flex items-center gap-3 p-3 bg-card-bg dark:bg-gray-800 border border-card-border dark:border-gray-700 rounded-lg"
+              style={{ borderLeftWidth: '10px', borderLeftColor: editingId === member.id ? (editingColor || '#9ca3af') : (member.color || '#9ca3af') }}
             >
               {editingId === member.id ? (
                 // Edit mode
-                <>
-                  <PhotoUpload
-                    currentUrl={editingPhotoUrl}
-                    onUpload={(url) => setEditingPhotoUrl(url)}
-                    uploadEndpoint="/upload/family-photo"
-                    placeholder="Photo"
-                    size="sm"
-                  />
-                  <input
-                    type="text"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    className="
-                      flex-1 px-3 py-1.5 border border-card-border dark:border-gray-600
-                      rounded bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
-                      focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
-                      outline-none text-sm
-                    "
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleUpdate(member.id)
-                      if (e.key === 'Escape') cancelEdit()
-                    }}
-                  />
-                  <button
-                    onClick={() => handleUpdate(member.id)}
-                    disabled={isSubmitting}
-                    className="px-3 py-1.5 text-sm text-sage-600 dark:text-green-400 hover:bg-sage-50 dark:hover:bg-green-900/20 rounded transition-colors"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={cancelEdit}
-                    className="px-3 py-1.5 text-sm text-text-secondary dark:text-gray-400 hover:bg-warm-beige dark:hover:bg-gray-700 rounded transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </>
+                <div className="flex flex-col gap-2 w-full">
+                  <div className="flex items-center gap-3">
+                    <PhotoUpload
+                      currentUrl={editingPhotoUrl}
+                      onUpload={(url) => setEditingPhotoUrl(url)}
+                      uploadEndpoint="/upload/family-photo"
+                      placeholder="Photo"
+                      size="sm"
+                    />
+                    <input
+                      type="text"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      className="
+                        flex-1 px-3 py-1.5 border border-card-border dark:border-gray-600
+                        rounded bg-card-bg dark:bg-gray-700 text-text-primary dark:text-gray-100
+                        focus:ring-2 focus:ring-terracotta-500 focus:border-terracotta-500
+                        outline-none text-sm
+                      "
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleUpdate(member.id)
+                        if (e.key === 'Escape') cancelEdit()
+                      }}
+                    />
+                    <button
+                      onClick={() => handleUpdate(member.id)}
+                      disabled={isSubmitting}
+                      className="px-3 py-1.5 text-sm text-sage-600 dark:text-green-400 hover:bg-sage-50 dark:hover:bg-green-900/20 rounded transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="px-3 py-1.5 text-sm text-text-secondary dark:text-gray-400 hover:bg-warm-beige dark:hover:bg-gray-700 rounded transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="pl-[76px]">
+                    <ColorPicker selectedColor={editingColor} onSelect={setEditingColor} disabledColors={colorsUsedByOthers(member.id)} />
+                  </div>
+                </div>
               ) : (
                 // View mode
                 <>
-                  <MemberAvatar name={member.name} photoUrl={member.photo_url} />
+                  <MemberAvatar name={member.name} photoUrl={member.photo_url} color={member.color} />
                   <span className="flex-1 text-text-primary dark:text-gray-100 text-sm">
                     {member.name}
                   </span>
@@ -282,40 +315,6 @@ export default function FamilyMemberManager() {
           ))
         )}
       </div>
-    </div>
-  )
-}
-
-// Avatar component that shows photo if available, otherwise shows initial
-function MemberAvatar({ name, photoUrl }) {
-  const initial = name.charAt(0).toUpperCase()
-  const colors = [
-    { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-600 dark:text-blue-400' },
-    { bg: 'bg-pink-100 dark:bg-pink-900/40', text: 'text-pink-600 dark:text-pink-400' },
-    { bg: 'bg-green-100 dark:bg-green-900/40', text: 'text-green-600 dark:text-green-400' },
-    { bg: 'bg-purple-100 dark:bg-purple-900/40', text: 'text-purple-600 dark:text-purple-400' },
-    { bg: 'bg-orange-100 dark:bg-orange-900/40', text: 'text-orange-600 dark:text-orange-400' },
-  ]
-  const colorIndex = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length
-  const color = colors[colorIndex]
-
-  // If there's a photo URL, show the image
-  if (photoUrl) {
-    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-    const imageSrc = photoUrl.startsWith('http') ? photoUrl : `${API_BASE}${photoUrl}`
-    return (
-      <img
-        src={imageSrc}
-        alt={name}
-        className="w-8 h-8 rounded-full object-cover"
-      />
-    )
-  }
-
-  // Otherwise show the initial
-  return (
-    <div className={`flex items-center justify-center w-8 h-8 rounded-full ${color.bg}`}>
-      <span className={`text-sm font-semibold ${color.text}`}>{initial}</span>
     </div>
   )
 }
