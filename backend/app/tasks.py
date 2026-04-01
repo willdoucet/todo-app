@@ -262,6 +262,203 @@ def move_event_on_icloud(self, event_id: int, old_calendar_id: int, new_calendar
         raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
 
 
+# =============================================================================
+# Reminders sync tasks
+# =============================================================================
+
+
+@celery_app.task(name="app.tasks.sync_all_reminders")
+def sync_all_reminders():
+    """Periodic task: sync all integrations that have reminder lists."""
+    from . import models
+
+    async def _sync_all():
+        from .services.reminders_sync_engine import pull_reminders_from_icloud
+        from .services.sync_base import update_sync_status
+        from sqlalchemy import select, func
+
+        async with AsyncSessionLocal() as db:
+            # Find integrations that have reminder Calendar rows (is_todo=True)
+            stmt = (
+                select(models.CalendarIntegration)
+                .where(models.CalendarIntegration.reminders_status.isnot(None))
+            )
+            result = await db.execute(stmt)
+            integrations = result.scalars().all()
+
+        results = {}
+        for integration in integrations:
+            try:
+                async with AsyncSessionLocal() as db:
+                    stats = await pull_reminders_from_icloud(db, integration.id)
+                    # Update reminders sync status
+                    stmt = select(models.CalendarIntegration).where(
+                        models.CalendarIntegration.id == integration.id
+                    )
+                    res = await db.execute(stmt)
+                    integ = res.scalar_one_or_none()
+                    if integ:
+                        integ.reminders_status = models.IntegrationStatus.ACTIVE
+                        integ.reminders_last_sync_at = func.now()
+                        integ.reminders_last_error = None
+                        await db.commit()
+
+                results[integration.id] = stats
+                logger.info(
+                    "Synced reminders for integration %d: %s",
+                    integration.id,
+                    stats,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to sync reminders for integration %d: %s",
+                    integration.id,
+                    str(e),
+                    exc_info=True,
+                )
+                try:
+                    async with AsyncSessionLocal() as db:
+                        stmt = select(models.CalendarIntegration).where(
+                            models.CalendarIntegration.id == integration.id
+                        )
+                        res = await db.execute(stmt)
+                        integ = res.scalar_one_or_none()
+                        if integ:
+                            integ.reminders_status = models.IntegrationStatus.ERROR
+                            integ.reminders_last_error = str(e)[:500]
+                            await db.commit()
+                except Exception:
+                    pass
+                results[integration.id] = {"error": str(e)}
+
+        return results
+
+    return run_async(_sync_all())
+
+
+@celery_app.task(
+    name="app.tasks.sync_single_reminders_integration",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=30,
+)
+def sync_single_reminders_integration(self, integration_id: int):
+    """Sync reminders for a single integration. Used for initial + manual sync."""
+    from . import models
+
+    async def _sync():
+        from .services.reminders_sync_engine import pull_reminders_from_icloud
+        from sqlalchemy import select, func
+
+        # Set reminders_status to SYNCING
+        async with AsyncSessionLocal() as db:
+            stmt = select(models.CalendarIntegration).where(
+                models.CalendarIntegration.id == integration_id
+            )
+            result = await db.execute(stmt)
+            integration = result.scalar_one_or_none()
+            if not integration:
+                return {"error": "integration_not_found"}
+            integration.reminders_status = models.IntegrationStatus.SYNCING
+            await db.commit()
+
+        try:
+            async with AsyncSessionLocal() as db:
+                stats = await pull_reminders_from_icloud(db, integration_id)
+
+            # Update status to ACTIVE
+            async with AsyncSessionLocal() as db:
+                stmt = select(models.CalendarIntegration).where(
+                    models.CalendarIntegration.id == integration_id
+                )
+                result = await db.execute(stmt)
+                integration = result.scalar_one_or_none()
+                if integration:
+                    integration.reminders_status = models.IntegrationStatus.ACTIVE
+                    integration.reminders_last_sync_at = func.now()
+                    integration.reminders_last_error = None
+                    await db.commit()
+
+            logger.info("Single reminders sync for integration %d: %s", integration_id, stats)
+            return stats
+        except Exception as e:
+            async with AsyncSessionLocal() as db:
+                stmt = select(models.CalendarIntegration).where(
+                    models.CalendarIntegration.id == integration_id
+                )
+                result = await db.execute(stmt)
+                integration = result.scalar_one_or_none()
+                if integration:
+                    integration.reminders_status = models.IntegrationStatus.ERROR
+                    integration.reminders_last_error = str(e)[:500]
+                    await db.commit()
+
+            logger.error(
+                "Failed to sync reminders for integration %d: %s",
+                integration_id,
+                str(e),
+                exc_info=True,
+            )
+            raise self.retry(exc=e)
+
+    return run_async(_sync())
+
+
+@celery_app.task(
+    name="app.tasks.push_task_to_icloud_task",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+)
+def push_task_to_icloud_task(self, task_id: int):
+    """Push a single task change to iCloud as VTODO."""
+
+    async def _push():
+        from .services.reminders_sync_engine import push_task_to_icloud
+
+        async with AsyncSessionLocal() as db:
+            return await push_task_to_icloud(db, task_id)
+
+    try:
+        result = run_async(_push())
+        logger.info("Pushed task %d to iCloud: %s", task_id, result)
+        return result
+    except Exception as e:
+        logger.error(
+            "Failed to push task %d: %s", task_id, str(e), exc_info=True
+        )
+        raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
+
+
+@celery_app.task(
+    name="app.tasks.push_task_delete_to_icloud_task",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+)
+def push_task_delete_to_icloud_task(self, external_id: str, integration_id: int):
+    """Push a task delete to iCloud (remove VTODO). Retries on failure."""
+
+    async def _push_delete():
+        from .services.reminders_sync_engine import push_task_delete_to_icloud
+
+        async with AsyncSessionLocal() as db:
+            return await push_task_delete_to_icloud(db, external_id, integration_id)
+
+    try:
+        result = run_async(_push_delete())
+        logger.info("Pushed task delete for external_id=%s: %s", external_id, result)
+        return result
+    except Exception as e:
+        logger.error(
+            "Failed to push task delete for external_id=%s: %s",
+            external_id,
+            str(e),
+            exc_info=True,
+        )
+        raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
+
+
 @celery_app.task(name="app.tasks.delete_events_for_integration")
 def delete_events_for_integration(integration_id: int):
     """Delete all local events for a disconnected integration."""

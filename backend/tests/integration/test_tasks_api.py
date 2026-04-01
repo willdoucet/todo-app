@@ -162,7 +162,7 @@ class TestGetTask:
         assert data["title"] == "Test Task"
         assert data["description"] == "A test task"
         assert data["completed"] is False
-        assert data["important"] is False
+        assert data["priority"] == 0
         # Verify nested family_member
         assert data["family_member"]["name"] == "Test User"
 
@@ -195,7 +195,7 @@ class TestCreateTask:
         data = response.json()
         assert data["title"] == "Buy groceries"
         assert data["completed"] is False  # default
-        assert data["important"] is False  # default
+        assert data["priority"] == 0  # default
         assert "id" in data
         assert "created_at" in data
         # Nested family_member should be included
@@ -209,7 +209,7 @@ class TestCreateTask:
             "list_id": test_list.id,
             "assigned_to": test_family_member.id,
             "completed": False,
-            "important": True,
+            "priority": 1,
             "due_date": "2024-12-25T10:00:00",
         }
 
@@ -219,7 +219,7 @@ class TestCreateTask:
         data = response.json()
         assert data["title"] == "Important meeting"
         assert data["description"] == "Discuss Q4 planning"
-        assert data["important"] is True
+        assert data["priority"] == 1
         assert "2024-12-25" in data["due_date"]
 
     async def test_rejects_missing_required_fields(self, client):
@@ -271,14 +271,14 @@ class TestUpdateTask:
         assert response.status_code == 200
         assert response.json()["completed"] is True
 
-    async def test_marks_task_as_important(self, client, test_task):
-        """Should toggle the important status."""
-        update_data = {"important": True}
+    async def test_sets_task_priority(self, client, test_task):
+        """Should set the priority."""
+        update_data = {"priority": 1}
 
         response = await client.patch(f"/tasks/{test_task.id}", json=update_data)
 
         assert response.status_code == 200
-        assert response.json()["important"] is True
+        assert response.json()["priority"] == 1
 
     async def test_updates_multiple_fields(self, client, test_task):
         """Should update multiple fields at once."""
@@ -286,7 +286,7 @@ class TestUpdateTask:
             "title": "New Title",
             "description": "New description",
             "completed": True,
-            "important": True,
+            "priority": 5,
         }
 
         response = await client.patch(f"/tasks/{test_task.id}", json=update_data)
@@ -296,7 +296,7 @@ class TestUpdateTask:
         assert data["title"] == "New Title"
         assert data["description"] == "New description"
         assert data["completed"] is True
-        assert data["important"] is True
+        assert data["priority"] == 5
 
     async def test_returns_404_when_not_found(self, client):
         """Should return 404 when task doesn't exist."""

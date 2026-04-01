@@ -430,3 +430,329 @@ def _apply_times_to_vevent(
                 tzinfo=source_tz,
             )
             vevent.add("dtend", dtend_local)
+
+
+# ---------------------------------------------------------------------------
+# VTODO (Reminders) operations
+# ---------------------------------------------------------------------------
+
+
+def list_reminder_lists(principal) -> list[dict]:
+    """List available reminder/todo lists from an iCloud account.
+
+    Filters calendars by VTODO component support.
+    Returns: [{"url": str, "name": str, "color": str | None}]
+    """
+    calendars = principal.calendars()
+    result = []
+    for cal in calendars:
+        # Check if calendar supports VTODOs
+        try:
+            supported = cal.get_supported_components()
+            if supported and "VTODO" not in supported:
+                continue
+        except Exception:
+            # If we can't determine supported components, try fetching todos
+            try:
+                cal.todos(include_completed=False)
+            except Exception:
+                continue
+
+        name = cal.name or str(cal.url)
+        color = None
+        try:
+            props = cal.get_properties(
+                [caldav.dav.DisplayName(), caldav.elements.ical.CalendarColor()]
+            )
+            for key, val in props.items():
+                if "calendar-color" in str(key).lower():
+                    color = str(val)
+        except Exception:
+            pass
+
+        result.append({"url": str(cal.url), "name": name, "color": color})
+    return result
+
+
+def fetch_todos(calendar: caldav.Calendar) -> list[dict]:
+    """Fetch incomplete + recently completed VTODOs from a calendar.
+
+    No date windowing — fetches all incomplete todos and completed within last 30 days.
+    Returns a list of dicts from vtodo_to_task_data().
+    """
+    results = []
+
+    # Fetch incomplete todos
+    try:
+        incomplete = calendar.todos(include_completed=False)
+    except Exception:
+        logger.warning("Failed to fetch incomplete todos", exc_info=True)
+        incomplete = []
+
+    # Fetch completed todos (recent)
+    try:
+        completed = calendar.todos(include_completed=True)
+        # Filter to only completed ones (not already in incomplete)
+        incomplete_uids = set()
+        for t in incomplete:
+            try:
+                cal_data = icalendar.Calendar.from_ical(t.data)
+                for comp in cal_data.walk():
+                    if comp.name == "VTODO" and comp.get("UID"):
+                        incomplete_uids.add(str(comp.get("UID")))
+            except Exception:
+                pass
+        completed = [t for t in completed if _get_todo_uid(t) not in incomplete_uids]
+    except Exception:
+        logger.warning("Failed to fetch completed todos", exc_info=True)
+        completed = []
+
+    for todo_obj in incomplete + completed:
+        try:
+            cal_data = icalendar.Calendar.from_ical(todo_obj.data)
+            for component in cal_data.walk():
+                if component.name != "VTODO":
+                    continue
+                parsed = vtodo_to_task_data(component)
+                if parsed:
+                    parsed["etag"] = getattr(todo_obj, "etag", None)
+                    results.append(parsed)
+        except Exception:
+            logger.warning("Failed to parse VTODO, skipping", exc_info=True)
+
+    return results
+
+
+def _get_todo_uid(todo_obj) -> str | None:
+    """Extract UID from a CalDAV todo object."""
+    try:
+        cal_data = icalendar.Calendar.from_ical(todo_obj.data)
+        for comp in cal_data.walk():
+            if comp.name == "VTODO" and comp.get("UID"):
+                return str(comp.get("UID"))
+    except Exception:
+        pass
+    return None
+
+
+def vtodo_to_task_data(vtodo) -> dict | None:
+    """Convert an iCalendar VTODO component to a dict matching Task fields.
+
+    Mapping:
+    - SUMMARY → title
+    - DESCRIPTION → description
+    - DUE → due_date (nullable — reminders don't require a due date)
+    - PRIORITY → priority (0=none, 1=high, 5=medium, 9=low)
+    - STATUS → completed (COMPLETED = True)
+    - COMPLETED → completed_at
+    - RELATED-TO → parent_external_id
+    - UID → external_id
+    - LAST-MODIFIED → last_modified_remote
+    """
+    uid = vtodo.get("UID")
+    if not uid:
+        logger.warning("VTODO missing UID, skipping")
+        return None
+
+    summary = vtodo.get("SUMMARY")
+    if not summary:
+        logger.warning("VTODO UID=%s missing SUMMARY, skipping", uid)
+        return None
+
+    title = str(summary)[:100]  # Respect max_length
+    description = str(vtodo.get("DESCRIPTION", "")) or None
+    if description:
+        description = description[:500]
+
+    # Parse DUE (optional for reminders)
+    due_date = None
+    due_prop = vtodo.get("DUE")
+    if due_prop:
+        dt = due_prop.dt
+        if isinstance(dt, datetime):
+            due_date = dt
+        elif isinstance(dt, date):
+            due_date = datetime.combine(dt, datetime.min.time())
+
+    # Parse PRIORITY (iCalendar standard: 0=undefined, 1-4=high, 5=medium, 6-9=low)
+    priority = 0
+    prio_prop = vtodo.get("PRIORITY")
+    if prio_prop:
+        prio_val = int(prio_prop)
+        if 1 <= prio_val <= 4:
+            priority = 1  # High
+        elif prio_val == 5:
+            priority = 5  # Medium
+        elif 6 <= prio_val <= 9:
+            priority = 9  # Low
+        # 0 = none/undefined → 0
+
+    # Parse STATUS
+    status = str(vtodo.get("STATUS", "")).upper()
+    completed = status == "COMPLETED"
+
+    # Parse COMPLETED timestamp
+    completed_at = None
+    completed_prop = vtodo.get("COMPLETED")
+    if completed_prop:
+        cat = completed_prop.dt
+        if isinstance(cat, datetime):
+            if cat.tzinfo:
+                cat = cat.astimezone(timezone.utc)
+            completed_at = cat.replace(tzinfo=None)
+
+    # Parse RELATED-TO for subtask parent
+    parent_external_id = None
+    related = vtodo.get("RELATED-TO")
+    if related:
+        parent_external_id = str(related)
+
+    # Parse LAST-MODIFIED
+    last_modified = None
+    last_mod_prop = vtodo.get("LAST-MODIFIED")
+    if last_mod_prop:
+        lm = last_mod_prop.dt
+        if isinstance(lm, datetime):
+            if lm.tzinfo:
+                lm = lm.astimezone(timezone.utc)
+            last_modified = lm.replace(tzinfo=None)
+
+    return {
+        "external_id": str(uid),
+        "title": title,
+        "description": description,
+        "due_date": due_date,
+        "priority": priority,
+        "completed": completed,
+        "completed_at": completed_at,
+        "parent_external_id": parent_external_id,
+        "last_modified_remote": last_modified,
+    }
+
+
+def task_data_to_vtodo(task_data: dict) -> icalendar.Calendar:
+    """Convert Task fields to an iCalendar VTODO object for pushing to iCloud."""
+    cal = icalendar.Calendar()
+    cal.add("prodid", "-//Family Hub//familyhub.app//")
+    cal.add("version", "2.0")
+
+    vtodo = icalendar.Todo()
+    vtodo.add("summary", task_data.get("title", "Untitled"))
+
+    if task_data.get("description"):
+        vtodo.add("description", task_data["description"])
+
+    # DUE date
+    if task_data.get("due_date"):
+        due = task_data["due_date"]
+        if isinstance(due, str):
+            due = datetime.fromisoformat(due)
+        if isinstance(due, datetime):
+            vtodo.add("due", due)
+        elif isinstance(due, date):
+            vtodo.add("due", due)
+
+    # PRIORITY
+    priority = task_data.get("priority", 0)
+    vtodo.add("priority", priority)
+
+    # STATUS + COMPLETED
+    if task_data.get("completed"):
+        vtodo.add("status", "COMPLETED")
+        if task_data.get("completed_at"):
+            cat = task_data["completed_at"]
+            if isinstance(cat, str):
+                cat = datetime.fromisoformat(cat)
+            vtodo.add("completed", cat)
+    else:
+        vtodo.add("status", "NEEDS-ACTION")
+
+    # RELATED-TO for subtask parent
+    if task_data.get("parent_external_id"):
+        vtodo.add("related-to", task_data["parent_external_id"])
+
+    # UID
+    if task_data.get("external_id"):
+        vtodo.add("uid", task_data["external_id"])
+    else:
+        import uuid
+        vtodo.add("uid", f"{uuid.uuid4()}@familyhub.app")
+
+    vtodo.add("dtstamp", datetime.now(timezone.utc))
+
+    cal.add_component(vtodo)
+    return cal
+
+
+def create_remote_todo(calendar: caldav.Calendar, task_data: dict) -> str:
+    """Create a VTODO on iCloud. Returns the UID."""
+    cal = task_data_to_vtodo(task_data)
+    created = calendar.save_todo(cal.to_ical().decode("utf-8"))
+    parsed = icalendar.Calendar.from_ical(created.data)
+    for comp in parsed.walk():
+        if comp.name == "VTODO":
+            return str(comp.get("UID"))
+    raise ValueError("Created VTODO but no UID in response — iCloud may have rejected it")
+
+
+def _get_todo_by_uid(calendar: caldav.Calendar, uid: str):
+    """Look up a CalDAV todo by UID with fallback for iCloud 412 errors."""
+    try:
+        return calendar.todo_by_uid(uid)
+    except Exception as e:
+        # Fallback to direct URL access (same pattern as _get_event_by_uid)
+        base = str(calendar.url).rstrip("/")
+        url = f"{base}/{uid}.ics"
+        logger.warning(
+            "todo_by_uid failed for UID=%s (%s), trying direct URL: %s",
+            uid, e, url,
+        )
+        todo_obj = caldav.Todo(client=calendar.client, url=url, parent=calendar)
+        todo_obj.load()
+        return todo_obj
+
+
+def update_remote_todo(calendar: caldav.Calendar, uid: str, task_data: dict) -> None:
+    """Update an existing VTODO on iCloud by UID."""
+    event_obj = _get_todo_by_uid(calendar, uid)
+    cal = event_obj.icalendar_instance
+    for comp in cal.subcomponents:
+        if comp.name == "VTODO":
+            if "title" in task_data:
+                comp["SUMMARY"] = task_data["title"]
+            if "description" in task_data:
+                if task_data["description"]:
+                    comp["DESCRIPTION"] = task_data["description"]
+                elif "DESCRIPTION" in comp:
+                    del comp["DESCRIPTION"]
+            # Update priority
+            if "priority" in task_data:
+                if "PRIORITY" in comp:
+                    del comp["PRIORITY"]
+                comp.add("priority", task_data["priority"])
+            # Update status
+            if "completed" in task_data:
+                if "STATUS" in comp:
+                    del comp["STATUS"]
+                if "COMPLETED" in comp:
+                    del comp["COMPLETED"]
+                if task_data["completed"]:
+                    comp.add("status", "COMPLETED")
+                    if task_data.get("completed_at"):
+                        comp.add("completed", task_data["completed_at"])
+                else:
+                    comp.add("status", "NEEDS-ACTION")
+            # Update due date
+            if "due_date" in task_data:
+                if "DUE" in comp:
+                    del comp["DUE"]
+                if task_data["due_date"]:
+                    comp.add("due", task_data["due_date"])
+    event_obj.icalendar_instance = cal
+    event_obj.save()
+
+
+def delete_remote_todo(calendar: caldav.Calendar, uid: str) -> None:
+    """Delete a VTODO from iCloud by UID."""
+    todo_obj = _get_todo_by_uid(calendar, uid)
+    todo_obj.delete()

@@ -32,7 +32,7 @@ def sample_task_data():
         "description": "Milk, eggs, bread",
         "due_date": date.today().isoformat(),
         "completed": False,
-        "important": False,
+        "priority": 0,
         "assigned_to": None,
         "list_id": None,
     }
@@ -121,7 +121,7 @@ def mock_task():
     task.description = "Milk, eggs, bread"
     task.due_date = date.today()
     task.completed = False
-    task.important = False
+    task.priority = 0
     task.assigned_to = None
     task.list_id = 1
     task.created_at = datetime.now()

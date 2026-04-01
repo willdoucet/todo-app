@@ -158,7 +158,7 @@ async def test_task(db_session, test_list, test_family_member):
         list_id=test_list.id,
         assigned_to=test_family_member.id,
         completed=False,
-        important=False,
+        priority=0,
     )
     db_session.add(task)
     await db_session.commit()

@@ -127,52 +127,60 @@ export default function ListPanel({
         role="button"
         tabIndex={0}
         className={`
-          group flex items-center gap-3 cursor-pointer transition-all duration-200
+          group flex items-center gap-2.5 cursor-pointer transition-all duration-100
           focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900
-          ${isMobile ? 'px-4 py-3.5 rounded-lg' : 'mx-3 px-4 py-3 rounded-xl'}
+          ${isMobile ? 'px-4 py-3.5' : 'px-3.5 py-[7px] border-l-[3px]'}
           ${isSelected
             ? isMobile
-              ? 'bg-gray-100 dark:bg-gray-800'
-              : 'bg-peach-100 text-terracotta-600 dark:bg-blue-600 dark:text-white shadow-sm'
+              ? 'bg-[#f0ece5] dark:bg-gray-800'
+              : 'bg-[#f0ece5] dark:bg-gray-800'
             : isMobile
-              ? 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
-              : 'hover:bg-warm-beige dark:hover:bg-gray-700'
+              ? 'hover:bg-warm-beige dark:hover:bg-gray-800/50'
+              : 'hover:bg-warm-beige dark:hover:bg-gray-700 border-l-transparent'
           }
         `}
+        style={!isMobile && isSelected ? { borderLeftColor: list.color || '#6B7280' } : undefined}
         onClick={handleSelect}
         onKeyDown={handleKeyDown}
         aria-selected={isSelected}
       >
-        {/* Color indicator */}
+        {/* Color dot indicator */}
         <div
-          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+          className="w-2 h-2 rounded-full flex-shrink-0"
           style={{ backgroundColor: list.color || '#6B7280' }}
         />
 
-        {/* List name */}
-        <TruncatedText
-          className={`
-            flex-1 min-w-0 text-sm font-medium transition-colors block
-            ${isSelected
-              ? isMobile
-                ? 'text-gray-900 dark:text-gray-100'
-                : 'text-terracotta-600 dark:text-white'
-              : 'text-text-secondary dark:text-gray-300'
-            }
-          `}
-        >
-          {list.name}
-        </TruncatedText>
+        {/* List name + cloud icon for synced + underline for selected */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <TruncatedText
+              className={`
+                text-[13px] transition-colors block
+                ${isSelected
+                  ? 'font-semibold text-text-primary dark:text-gray-100'
+                  : 'font-medium text-text-secondary dark:text-gray-300'
+                }
+              `}
+            >
+              {list.name}
+            </TruncatedText>
+            {list.is_synced && (
+              <svg className="w-3.5 h-3.5 text-text-muted dark:text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-label="Synced with iCloud">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z" />
+              </svg>
+            )}
+          </div>
+          {isSelected && !isMobile && (
+            <div
+              className="h-0.5 rounded-sm mt-0.5"
+              style={{ backgroundColor: list.color || '#6B7280' }}
+            />
+          )}
+        </div>
 
-        {/* Task count - hide when zero */}
+        {/* Task count */}
         {taskCount > 0 && (
-          <span className={`
-            text-xs tabular-nums
-            ${isSelected
-              ? 'text-gray-500 dark:text-gray-400'
-              : 'text-gray-400 dark:text-gray-500'
-            }
-          `}>
+          <span className="text-[11px] tabular-nums text-text-muted dark:text-gray-500">
             {taskCount}
           </span>
         )}
@@ -185,21 +193,23 @@ export default function ListPanel({
                 e.stopPropagation()
                 openEditForm(list)
               }}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500"
+              className="p-1 text-text-muted hover:text-text-secondary dark:hover:text-gray-300 rounded hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500"
               aria-label={`Edit ${list.name}`}
             >
               <PencilIcon className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleDeleteClick(list)
-              }}
-              className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-md hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-              aria-label={`Delete ${list.name}`}
-            >
-              <TrashIcon className="w-3.5 h-3.5" />
-            </button>
+            {!list.is_synced && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteClick(list)
+                }}
+                className="p-1 text-text-muted hover:text-red-500 dark:hover:text-red-400 rounded hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                aria-label={`Delete ${list.name}`}
+              >
+                <TrashIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -301,14 +311,14 @@ export default function ListPanel({
       </Transition>
 
       {/* Desktop: In-flow side panel */}
-      <aside className="hidden sm:flex flex-shrink-0 w-56 bg-warm-sand/50 dark:bg-gray-800/50 border-r border-card-border dark:border-gray-700 flex-col h-full">
+      <aside className="hidden sm:flex flex-shrink-0 w-[220px] bg-warm-sand/50 dark:bg-gray-800/50 border-r border-card-border dark:border-gray-700 flex-col h-full">
         {/* Header */}
-        <div className="p-6 border-b border-card-border dark:border-gray-700">
-          <h2 className="text-xl font-bold text-text-primary dark:text-gray-100">Lists</h2>
+        <div className="px-4 pt-5 pb-3.5 border-b border-card-border dark:border-gray-700">
+          <h2 className="text-lg font-bold text-text-primary dark:text-gray-100">Lists</h2>
         </div>
 
         {/* List items */}
-        <div className="flex-1 overflow-y-auto py-4 space-y-0.5">
+        <div className="flex-1 overflow-y-auto pt-2">
           {isLoading ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 dark:border-gray-600 border-t-gray-600 dark:border-t-gray-300" />
@@ -323,12 +333,12 @@ export default function ListPanel({
         </div>
 
         {/* Create button */}
-        <div className="p-3 border-t border-card-border dark:border-gray-700">
+        <div className="px-3 py-2.5 border-t border-card-border dark:border-gray-700">
           <button
             onClick={openCreateForm}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-text-muted dark:text-gray-400 hover:text-terracotta-600 dark:hover:text-gray-200 hover:bg-warm-beige dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-muted dark:text-gray-400 hover:text-text-secondary dark:hover:text-gray-200 hover:bg-warm-beige dark:hover:bg-gray-700 rounded-md transition-colors"
           >
-            <PlusIcon className="w-4 h-4" />
+            <PlusIcon className="w-3 h-3" />
             New List
           </button>
         </div>

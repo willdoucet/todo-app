@@ -3,11 +3,11 @@ import axios from 'axios'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-export default function TodoForm({ initial = null, listId = null, onSubmit, onCancel }) {
+export default function TodoForm({ initial = null, listId = null, sectionId = null, onSubmit, onCancel }) {
   const [title, setTitle] = useState(initial?.title || '')
   const [description, setDescription] = useState(initial?.description || '')
   const [dueDate, setDueDate] = useState(initial?.due_date?.split('T')[0] || '')
-  const [important, setImportant] = useState(initial?.important || false)
+  const [priority, setPriority] = useState(initial?.priority ?? 0)
   const [assignedTo, setAssignedTo] = useState(initial?.assigned_to || null)
   const [familyMembers, setFamilyMembers] = useState([])
   const [isLoadingFamilyMembers, setIsLoadingFamilyMembers] = useState(true)
@@ -39,13 +39,16 @@ export default function TodoForm({ initial = null, listId = null, onSubmit, onCa
       title,
       description: description || undefined,
       due_date: dueDate || undefined,
-      important,
+      priority,
       assigned_to: assignedTo,
     }
 
-    // Include list_id for new tasks (editing tasks keeps their existing list_id)
+    // Include list_id and section_id for new tasks
     if (!initial && listId) {
       data.list_id = listId
+    }
+    if (!initial && sectionId) {
+      data.section_id = sectionId
     }
 
     onSubmit(data)
@@ -140,29 +143,46 @@ export default function TodoForm({ initial = null, listId = null, onSubmit, onCa
         </select>
       </div>
 
-      {/* Important Toggle */}
-      <div className="flex items-center justify-between">
-        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300">
-          Mark as Important
+      {/* Priority Selector */}
+      <div>
+        <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">
+          Priority
         </label>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={important}
-          onClick={() => setImportant(!important)}
-          className={`
-            relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out
-            focus:outline-none focus:ring-2 focus:ring-terracotta-500 focus:ring-offset-2
-            ${important ? 'bg-terracotta-500 dark:bg-blue-600' : 'bg-warm-sand dark:bg-gray-600'}
-          `}
-        >
-          <span
-            className={`
-              inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out
-              ${important ? 'translate-x-6' : 'translate-x-1'}
-            `}
-          />
-        </button>
+        <div className="flex gap-1.5" role="radiogroup" aria-label="Task priority">
+          {[
+            { value: 0, label: 'None' },
+            { value: 9, label: 'Low' },
+            { value: 5, label: 'Med' },
+            { value: 1, label: 'High' },
+          ].map(({ value, label }) => {
+            const isActive = priority === value
+            const activeColor =
+              value === 1 ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' :
+              value === 5 ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800' :
+              value === 9 ? 'bg-warm-beige text-text-secondary border-card-border dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600' :
+              'bg-warm-beige text-text-secondary border-card-border dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
+
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                onClick={() => setPriority(value)}
+                className={`
+                  px-3 py-1.5 text-sm font-medium rounded-lg border transition-all duration-150
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500
+                  ${isActive
+                    ? activeColor
+                    : 'bg-warm-sand/50 text-text-muted border-transparent hover:bg-warm-beige dark:bg-gray-800 dark:text-gray-500 dark:hover:bg-gray-700'
+                  }
+                `}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Action Buttons */}

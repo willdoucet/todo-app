@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import CalendarSelector from './CalendarSelector'
+import ReminderListSelector from './ReminderListSelector'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -172,6 +173,7 @@ export default function ICloudSettings() {
           integration={integration}
           onSync={() => handleSync(integration.id)}
           onDisconnect={() => handleDisconnect(integration.id)}
+          onRefresh={loadIntegrations}
         />
       ))}
 
@@ -308,7 +310,14 @@ export default function ICloudSettings() {
   )
 }
 
-function IntegrationCard({ integration, onSync, onDisconnect }) {
+function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
+  const [remindersStep, setRemindersStep] = useState(null) // null | 'selecting'
+  const [reminderLists, setReminderLists] = useState([])
+  const [selectedReminderLists, setSelectedReminderLists] = useState([])
+  const [validatingReminders, setValidatingReminders] = useState(false)
+  const [connectingReminders, setConnectingReminders] = useState(false)
+  const [remindersError, setRemindersError] = useState(null)
+
   const statusConfig = {
     ACTIVE: { label: 'Active', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
     SYNCING: { label: 'Syncing...', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -316,19 +325,82 @@ function IntegrationCard({ integration, onSync, onDisconnect }) {
     DISCONNECTED: { label: 'Disconnected', color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' },
   }
 
-  const status = statusConfig[integration.status] || statusConfig.ACTIVE
+  const calStatus = statusConfig[integration.status] || statusConfig.ACTIVE
   const memberName = integration.family_member?.name || 'Unknown'
+  const hasReminders = integration.reminders_status != null
+  const remStatus = hasReminders ? (statusConfig[integration.reminders_status] || statusConfig.ACTIVE) : null
+
+  const handleConnectReminders = async () => {
+    setValidatingReminders(true)
+    setRemindersError(null)
+    try {
+      const res = await axios.post(`${API_BASE}/integrations/icloud/validate-reminders`, {
+        integration_id: integration.id,
+      })
+      setReminderLists(res.data)
+      setSelectedReminderLists(res.data.filter(l => !l.already_synced_by).map(l => l.url))
+      setRemindersStep('selecting')
+    } catch (err) {
+      setRemindersError(err.response?.data?.detail || 'Failed to fetch reminder lists')
+    } finally {
+      setValidatingReminders(false)
+    }
+  }
+
+  const handleStartRemindersSync = async () => {
+    if (selectedReminderLists.length === 0) return
+    setConnectingReminders(true)
+    setRemindersError(null)
+    try {
+      await axios.post(`${API_BASE}/integrations/icloud/connect-reminders`, {
+        integration_id: integration.id,
+        selected_lists: selectedReminderLists,
+      })
+      setRemindersStep(null)
+      onRefresh?.()
+    } catch (err) {
+      setRemindersError(err.response?.data?.detail || 'Failed to connect reminders')
+    } finally {
+      setConnectingReminders(false)
+    }
+  }
+
+  const handleSyncReminders = async () => {
+    try {
+      await axios.post(`${API_BASE}/integrations/${integration.id}/sync-reminders`)
+      onRefresh?.()
+    } catch (err) {
+      console.error('Failed to sync reminders:', err)
+    }
+  }
+
+  const handleDisconnectReminders = async () => {
+    const confirmed = window.confirm(
+      'This will disconnect Reminders sync. Your tasks and lists will remain as local data.'
+    )
+    if (!confirmed) return
+    try {
+      await axios.delete(`${API_BASE}/integrations/${integration.id}/reminders`)
+      onRefresh?.()
+    } catch (err) {
+      console.error('Failed to disconnect reminders:', err)
+    }
+  }
 
   return (
     <div className="border border-card-border dark:border-gray-700 rounded-xl p-4">
+      {/* Calendar section (top half) */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-medium text-text-primary dark:text-gray-200 truncate">
               {integration.email}
             </span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${status.color}`}>
-              {status.label}
+          </div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs text-text-muted dark:text-gray-400">Calendar:</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${calStatus.color}`}>
+              {calStatus.label}
             </span>
           </div>
           <p className="text-xs text-text-muted dark:text-gray-400">
@@ -363,6 +435,104 @@ function IntegrationCard({ integration, onSync, onDisconnect }) {
             Disconnect
           </button>
         </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-card-border dark:border-gray-700 mt-3 pt-3">
+        {/* Reminders section (bottom half) */}
+        {hasReminders ? (
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs text-text-muted dark:text-gray-400">Reminders:</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${remStatus.color}`}>
+                    {remStatus.label}
+                  </span>
+                </div>
+                <p className="text-xs text-text-muted dark:text-gray-400">
+                  {integration.reminder_lists?.length || 0} list{(integration.reminder_lists?.length || 0) !== 1 ? 's' : ''}
+                </p>
+                {integration.reminders_last_sync_at && (
+                  <p className="text-xs text-text-muted dark:text-gray-400 mt-0.5">
+                    Last synced {relativeTime(integration.reminders_last_sync_at)}
+                  </p>
+                )}
+                {integration.reminders_status === 'ERROR' && integration.reminders_last_error && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    {integration.reminders_last_error}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleSyncReminders}
+                  disabled={integration.reminders_status === 'SYNCING'}
+                  className="text-xs px-3 py-1.5 text-terracotta-600 dark:text-blue-400 hover:bg-terracotta-50 dark:hover:bg-blue-900/20 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {integration.reminders_status === 'SYNCING' ? 'Syncing...' : 'Sync Now'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDisconnectReminders}
+                  className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : remindersStep === 'selecting' ? (
+          <div className="space-y-3">
+            <h4 className="text-xs font-semibold text-text-primary dark:text-gray-200">
+              Select Reminder Lists
+            </h4>
+            {remindersError && (
+              <p className="text-xs text-red-600 dark:text-red-400">{remindersError}</p>
+            )}
+            <ReminderListSelector
+              reminderLists={reminderLists}
+              selected={selectedReminderLists}
+              onChange={setSelectedReminderLists}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleStartRemindersSync}
+                disabled={connectingReminders || selectedReminderLists.length === 0}
+                className="px-3 py-1.5 bg-terracotta-500 hover:bg-terracotta-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg font-medium text-xs transition-colors disabled:opacity-50"
+              >
+                {connectingReminders ? 'Starting...' : 'Start Sync'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRemindersStep(null)}
+                className="px-3 py-1.5 text-xs text-text-muted hover:text-text-primary dark:hover:text-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleConnectReminders}
+            disabled={validatingReminders}
+            className="flex items-center gap-1.5 text-xs font-medium text-terracotta-600 dark:text-blue-400 hover:bg-terracotta-50 dark:hover:bg-blue-900/20 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {validatingReminders ? (
+              'Validating...'
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Connect Reminders
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   )

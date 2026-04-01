@@ -28,12 +28,9 @@ from .. import models
 from ..crud_calendars import get_or_create_calendar, get_calendar
 from ..utils.encryption import decrypt_password
 from . import caldav_client
+from .sync_base import SYNCED, PENDING_PUSH
 
 logger = logging.getLogger(__name__)
-
-# Sync status constants
-SYNCED = "SYNCED"
-PENDING_PUSH = "PENDING_PUSH"
 
 
 async def pull_from_icloud(db: AsyncSession, integration_id: int) -> dict:

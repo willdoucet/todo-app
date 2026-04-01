@@ -2,11 +2,11 @@
  * Tests for TaskItem component
  *
  * Tests:
- * - Renders task title and description
+ * - Renders task title
  * - Completed task styling
  * - Due date display and overdue styling
  * - Important indicator
- * - Assigned member display
+ * - Assignee color stripe (right border)
  * - Button interactions (toggle, edit, delete)
  */
 
@@ -22,9 +22,12 @@ function createTask(overrides = {}) {
     title: 'Test Task',
     description: null,
     completed: false,
-    important: false,
+    priority: 0,
     due_date: null,
     family_member: null,
+    children: [],
+    parent_id: null,
+    section_id: null,
     ...overrides,
   }
 }
@@ -44,7 +47,7 @@ describe('TaskItem', () => {
       expect(screen.getByText('Buy groceries')).toBeInTheDocument()
     })
 
-    it('renders description when provided', () => {
+    it('does not render description in task rows', () => {
       render(
         <TaskItem
           {...defaultProps}
@@ -52,13 +55,7 @@ describe('TaskItem', () => {
         />
       )
 
-      expect(screen.getByText('Get milk and eggs')).toBeInTheDocument()
-    })
-
-    it('does not render description when not provided', () => {
-      render(<TaskItem {...defaultProps} task={createTask({ description: null })} />)
-
-      // Only title should be in text content, no description paragraph
+      // Description is intentionally hidden from task rows (Option B design)
       expect(screen.queryByText('Get milk and eggs')).not.toBeInTheDocument()
     })
 
@@ -131,9 +128,9 @@ describe('TaskItem', () => {
         />
       )
 
-      // The date text should have red styling
-      const dateText = screen.getByText(/[A-Z][a-z]{2} \d{1,2}/)
-      expect(dateText).toHaveClass('text-red-500')
+      // The date chip should have red styling
+      const dateChip = screen.getByText(/[A-Z][a-z]{2} \d{1,2}/)
+      expect(dateChip).toHaveClass('text-red-600')
     })
 
     it('does not apply overdue styling when task is completed', () => {
@@ -149,42 +146,71 @@ describe('TaskItem', () => {
       )
 
       const dateText = screen.getByText(/[A-Z][a-z]{2} \d{1,2}/)
-      expect(dateText).not.toHaveClass('text-red-500')
+      expect(dateText).not.toHaveClass('text-red-600')
     })
   })
 
-  describe('important indicator', () => {
-    it('shows star icon when task is important', () => {
-      render(<TaskItem {...defaultProps} task={createTask({ important: true })} />)
+  describe('priority indicator', () => {
+    it('shows red flag for high priority (1)', () => {
+      render(<TaskItem {...defaultProps} task={createTask({ priority: 1 })} />)
 
-      // Star has title="Important"
-      expect(screen.getByTitle('Important')).toBeInTheDocument()
+      expect(screen.getByLabelText('High priority')).toBeInTheDocument()
     })
 
-    it('does not show star icon when task is not important', () => {
-      render(<TaskItem {...defaultProps} task={createTask({ important: false })} />)
+    it('shows amber flag for medium priority (5)', () => {
+      render(<TaskItem {...defaultProps} task={createTask({ priority: 5 })} />)
 
-      expect(screen.queryByTitle('Important')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Medium priority')).toBeInTheDocument()
+    })
+
+    it('shows gray flag for low priority (9)', () => {
+      render(<TaskItem {...defaultProps} task={createTask({ priority: 9 })} />)
+
+      expect(screen.getByLabelText('Low priority')).toBeInTheDocument()
+    })
+
+    it('does not show flag when priority is none (0)', () => {
+      render(<TaskItem {...defaultProps} task={createTask({ priority: 0 })} />)
+
+      expect(screen.queryByLabelText(/priority/)).not.toBeInTheDocument()
     })
   })
 
-  describe('assigned member display', () => {
-    it('shows member initial for regular family member', () => {
-      render(
+  describe('subtask expand/collapse', () => {
+    it('shows expand chevron when task has children', () => {
+      const taskWithChildren = createTask({
+        children: [createTask({ id: 2, title: 'Subtask' })],
+      })
+      render(<TaskItem {...defaultProps} task={taskWithChildren} />)
+
+      expect(screen.getByLabelText('Expand subtasks')).toBeInTheDocument()
+    })
+
+    it('does not show chevron when task has no children', () => {
+      render(<TaskItem {...defaultProps} task={createTask()} />)
+
+      expect(screen.queryByLabelText(/subtasks/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('assignee color stripe', () => {
+    it('shows colored right border for regular family member', () => {
+      const { container } = render(
         <TaskItem
           {...defaultProps}
           task={createTask({
-            family_member: { id: 1, name: 'Alice', is_system: false },
+            family_member: { id: 1, name: 'Alice', is_system: false, color: '#D4695A' },
           })}
         />
       )
 
-      expect(screen.getByText('A')).toBeInTheDocument()
-      expect(screen.getByTitle('Assigned to Alice')).toBeInTheDocument()
+      const row = container.querySelector('[title="Assigned to Alice"]')
+      expect(row).toBeInTheDocument()
+      expect(row).toHaveStyle({ borderRightColor: '#D4695A' })
     })
 
-    it('shows group icon for system member (Everyone)', () => {
-      render(
+    it('shows transparent right border for system member (Everyone)', () => {
+      const { container } = render(
         <TaskItem
           {...defaultProps}
           task={createTask({
@@ -193,10 +219,11 @@ describe('TaskItem', () => {
         />
       )
 
-      expect(screen.getByTitle('Assigned to Everyone')).toBeInTheDocument()
+      // No title attribute for system members, transparent border
+      expect(screen.queryByTitle(/Assigned to/)).not.toBeInTheDocument()
     })
 
-    it('does not show assigned icon when no family member', () => {
+    it('shows transparent right border when no family member', () => {
       render(<TaskItem {...defaultProps} task={createTask({ family_member: null })} />)
 
       expect(screen.queryByTitle(/Assigned to/)).not.toBeInTheDocument()
