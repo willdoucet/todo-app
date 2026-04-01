@@ -12,16 +12,6 @@ import usePageTitle from '../hooks/usePageTitle'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-// Returns white or dark text based on background luminance (WCAG contrast)
-function getContrastText(hex) {
-  const r = parseInt(hex.slice(1, 3), 16) / 255
-  const g = parseInt(hex.slice(3, 5), 16) / 255
-  const b = parseInt(hex.slice(5, 7), 16) / 255
-  const toLinear = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
-  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
-  return luminance > 0.4 ? '#1f2937' : '#ffffff'
-}
-
 export default function ListsPage() {
   // Lists state
   const [lists, setLists] = useState([])
@@ -38,6 +28,7 @@ export default function ListsPage() {
   const [isOpen, setIsOpen] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [addToSectionId, setAddToSectionId] = useState(null)
 
   // Persist selected list to localStorage
   useEffect(() => {
@@ -216,6 +207,39 @@ export default function ListsPage() {
   }
 
   const selectedList = lists.find(l => l.id === selectedListId)
+  const sections = selectedList?.sections || []
+
+  // Section handlers
+  const editSection = async (sectionId, data) => {
+    try {
+      await axios.patch(`${API_BASE}/sections/${sectionId}`, data)
+      await loadLists()
+    } catch (err) {
+      console.error('Error updating section:', err)
+      setError(err.response?.data?.detail || 'Failed to update section')
+    }
+  }
+
+  const deleteSection = async (sectionId) => {
+    try {
+      await axios.delete(`${API_BASE}/sections/${sectionId}`)
+      await loadLists()
+    } catch (err) {
+      console.error('Error deleting section:', err)
+      setError(err.response?.data?.detail || 'Failed to delete section')
+    }
+  }
+
+  const createSection = async () => {
+    if (!selectedListId) return
+    try {
+      await axios.post(`${API_BASE}/lists/${selectedListId}/sections`, { name: 'New Section' })
+      await loadLists()
+    } catch (err) {
+      console.error('Error creating section:', err)
+      setError(err.response?.data?.detail || 'Failed to create section')
+    }
+  }
 
   // Update page title based on selected list
   usePageTitle(selectedList?.name || 'Lists')
@@ -241,7 +265,7 @@ export default function ListsPage() {
 
         {/* Main content area */}
         <main className="flex-1 sm:overflow-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-          <div className="w-full max-w-3xl">
+          <div className="w-full">
             {/* Error display */}
             {error && (
               <div className="mb-4 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 rounded-lg text-red-600 dark:text-red-400 text-sm">
@@ -249,20 +273,25 @@ export default function ListsPage() {
               </div>
             )}
 
-            {/* Title pill with list color */}
+            {/* List title with colored underline */}
             <div className="mb-6">
               {selectedList ? (
-                <span
-                  className="inline-block px-4 py-1.5 rounded-full text-lg sm:text-xl font-semibold"
-                  style={{
-                    backgroundColor: selectedList.color || '#6B7280',
-                    color: getContrastText(selectedList.color || '#6B7280'),
-                  }}
-                >
-                  {selectedList.name}
-                </span>
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <h1 className="text-xl font-semibold text-text-primary dark:text-gray-100">
+                      {selectedList.name}
+                    </h1>
+                    <span className="text-sm text-text-muted dark:text-gray-500">
+                      ({tasks.length})
+                    </span>
+                  </div>
+                  <div
+                    className="w-[60px] h-1.5 rounded-full mt-1.5"
+                    style={{ backgroundColor: selectedList.color || '#6B7280' }}
+                  />
+                </div>
               ) : (
-                <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                <h1 className="text-xl font-semibold text-text-primary dark:text-gray-100">
                   My Lists
                 </h1>
               )}
@@ -279,20 +308,37 @@ export default function ListsPage() {
                 </p>
               </div>
             ) : (
-              <TaskListView
-                tasks={tasks}
-                isLoading={isLoadingTasks}
-                onToggle={toggleComplete}
-                onEdit={(task) => {
-                  setEditingTask(task)
-                  setIsOpen(true)
-                }}
-                onDelete={deleteTask}
-                onAddTask={() => {
-                  setEditingTask(null)
-                  setIsOpen(true)
-                }}
-              />
+              <>
+                <TaskListView
+                  tasks={tasks}
+                  sections={sections}
+                  isLoading={isLoadingTasks}
+                  onToggle={toggleComplete}
+                  onEdit={(task) => {
+                    setEditingTask(task)
+                    setIsOpen(true)
+                  }}
+                  onDelete={deleteTask}
+                  onAddTask={(sectionId) => {
+                    setEditingTask(null)
+                    setAddToSectionId(sectionId || null)
+                    setIsOpen(true)
+                  }}
+                  onEditSection={editSection}
+                  onDeleteSection={deleteSection}
+                />
+                {selectedListId && !isLoadingTasks && (
+                  <button
+                    onClick={createSection}
+                    className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text-secondary dark:text-gray-500 dark:hover:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-800 rounded-md transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Section
+                  </button>
+                )}
+              </>
             )}
           </div>
         </main>
@@ -302,6 +348,7 @@ export default function ListsPage() {
       {selectedListId && (
         <AddButton onClick={() => {
           setEditingTask(null)
+          setAddToSectionId(null)
           setIsOpen(true)
         }} />
       )}
@@ -352,6 +399,7 @@ export default function ListsPage() {
                 <TodoForm
                   initial={editingTask}
                   listId={selectedListId}
+                  sectionId={addToSectionId}
                   onSubmit={handleTaskSubmit}
                   onCancel={() => setIsOpen(false)}
                 />

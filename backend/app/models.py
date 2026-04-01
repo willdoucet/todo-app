@@ -70,11 +70,37 @@ class Task(Base):
     completed = Column(Boolean, default=False)
     assigned_to = Column(Integer, ForeignKey("family_members.id"), nullable=False)
     family_member = relationship("FamilyMember", back_populates="tasks")
-    important = Column(Boolean, default=False)
+    priority = Column(Integer, default=0, nullable=False)  # 0=none, 1=high, 5=medium, 9=low
     list_id = Column(Integer, ForeignKey("lists.id"), nullable=False)
     list = relationship("List", back_populates="tasks")
+    parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    children = relationship("Task", back_populates="parent")
+    parent = relationship("Task", back_populates="children", remote_side="Task.id")
+    section_id = Column(Integer, ForeignKey("sections.id", ondelete="SET NULL"), nullable=True, index=True)
+    section = relationship("Section", back_populates="tasks")
+    sort_order = Column(Integer, default=0, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    # Sync metadata (for iCloud Reminders)
+    external_id = Column(String, nullable=True)
+    etag = Column(String, nullable=True)
+    last_modified_remote = Column(DateTime, nullable=True)
+    sync_status = Column(String, nullable=True)  # SYNCED, PENDING_PUSH
+    calendar_integration_id = Column(
+        Integer,
+        ForeignKey("calendar_integrations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    integration = relationship("CalendarIntegration", back_populates="synced_tasks")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "external_id",
+            "calendar_integration_id",
+            name="uq_task_external_integration",
+        ),
+    )
 
 
 class Responsibility(Base):
@@ -179,9 +205,16 @@ class CalendarIntegration(Base):
     sync_range_future_days = Column(Integer, default=90)
     selected_calendars = Column(JSON, nullable=True)  # Legacy — migrating to Calendar table
 
+    # Reminders sync status (Phase 2)
+    reminders_status = Column(SQLEnum(IntegrationStatus), nullable=True)
+    reminders_last_error = Column(String, nullable=True)
+    reminders_last_sync_at = Column(DateTime, nullable=True)
+
     family_member = relationship("FamilyMember", back_populates="calendar_integrations")
     calendars = relationship("Calendar", back_populates="integration", cascade="all, delete-orphan")
     calendar_events = relationship("CalendarEvent", back_populates="integration")
+    synced_tasks = relationship("Task", back_populates="integration")
+    synced_lists = relationship("List", back_populates="integration")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
@@ -198,6 +231,7 @@ class Calendar(Base):
     calendar_url = Column(String, nullable=False)
     name = Column(String, nullable=False)
     color = Column(String, nullable=True)
+    is_todo = Column(Boolean, default=False)  # True for reminder lists, False for event calendars
 
     integration = relationship("CalendarIntegration", back_populates="calendars")
     events = relationship("CalendarEvent", back_populates="calendar")
@@ -275,6 +309,28 @@ class List(Base):
     name = Column(String, index=True, nullable=False)
     color = Column(String, nullable=True)
     icon = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)  # CalDAV calendar URL for synced lists
+    calendar_integration_id = Column(
+        Integer,
+        ForeignKey("calendar_integrations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    integration = relationship("CalendarIntegration", back_populates="synced_lists")
     tasks = relationship("Task", back_populates="list")
+    sections = relationship("Section", back_populates="list", cascade="all, delete-orphan")
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+
+class Section(Base):
+    __tablename__ = "sections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    list_id = Column(Integer, ForeignKey("lists.id", ondelete="CASCADE"), nullable=False)
+    sort_order = Column(Integer, default=0)
+    external_id = Column(String, nullable=True)
+    list = relationship("List", back_populates="sections")
+    tasks = relationship("Task", back_populates="section")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)

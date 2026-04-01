@@ -138,7 +138,7 @@ class TestTaskCreate:
         assert task.assigned_to == 1
         assert task.list_id == 1
         assert task.completed is False  # default
-        assert task.important is False  # default
+        assert task.priority == 0  # default
         assert task.description is None
         assert task.due_date is None
 
@@ -149,11 +149,11 @@ class TestTaskCreate:
             description="Milk, eggs, bread",
             due_date=datetime(2024, 12, 25, 10, 0),
             completed=True,
-            important=True,
+            priority=1,
         )
         assert task.description == "Milk, eggs, bread"
         assert task.completed is True
-        assert task.important is True
+        assert task.priority == 1
 
     def test_rejects_empty_title(self, valid_task_data):
         """Should reject empty title."""

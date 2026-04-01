@@ -51,7 +51,7 @@ class TaskFactory(factory.Factory):
     description = "A task description"
     due_date = factory.LazyFunction(lambda: date.today() + timedelta(days=7))
     completed = False
-    important = False
+    priority = 0
     assigned_to = None
     list_id = None
 

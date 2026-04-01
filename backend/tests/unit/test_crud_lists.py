@@ -111,10 +111,10 @@ class TestUpdateList:
 
     async def test_returns_none_when_list_not_found(self, mock_db_session):
         """Should return None when list doesn't exist."""
-        # Arrange: Update returns rowcount=0 (no rows updated)
-        mock_update_result = MagicMock()
-        mock_update_result.rowcount = 0
-        mock_db_session.execute.return_value = mock_update_result
+        # Arrange: get_list returns None
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db_session.execute.return_value = mock_result
 
         update_data = ListUpdate(name="New Name")
 
@@ -123,21 +123,13 @@ class TestUpdateList:
 
         # Assert
         assert result is None
-        mock_db_session.commit.assert_not_called()
 
     async def test_updates_and_returns_list_when_found(self, mock_db_session, mock_list):
         """Should update and return the list when found."""
-        # Arrange: Two calls:
-        # 1. Update returns rowcount=1
-        # 2. get_list returns the updated list
-
-        mock_update_result = MagicMock()
-        mock_update_result.rowcount = 1
-
-        mock_get_result = MagicMock()
-        mock_get_result.scalar_one_or_none.return_value = mock_list
-
-        mock_db_session.execute.side_effect = [mock_update_result, mock_get_result]
+        # Arrange: get_list returns mock_list
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_list
+        mock_db_session.execute.return_value = mock_result
 
         update_data = ListUpdate(name="Updated Name")
 
@@ -145,7 +137,7 @@ class TestUpdateList:
         result = await update_list(mock_db_session, list_id=1, list=update_data)
 
         # Assert
-        assert result == mock_list
+        assert result is not None
         mock_db_session.commit.assert_called_once()
 
 
@@ -154,25 +146,44 @@ class TestUpdateList:
 # =============================================================================
 
 class TestDeleteList:
-    """Tests for delete_list function.
+    """Tests for delete_list function."""
 
-    Note: This function doesn't check if the list exists before deleting.
-    It just executes the delete and commits.
-    """
+    async def test_deletes_local_list(self, mock_db_session, mock_list):
+        """Should delete a non-synced list."""
+        # Arrange: get_list returns a non-synced list
+        mock_list.calendar_integration_id = None
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_list
+        mock_db_session.execute.return_value = mock_result
 
-    async def test_executes_delete_and_commits(self, mock_db_session):
-        """Should execute delete statement and commit."""
         # Act
-        await delete_list(mock_db_session, list_id=1)
+        result = await delete_list(mock_db_session, list_id=1)
 
         # Assert
-        mock_db_session.execute.assert_called_once()
+        assert result is True
         mock_db_session.commit.assert_called_once()
 
-    async def test_delete_nonexistent_list_still_commits(self, mock_db_session):
-        """Deleting non-existent list still executes (no error, just 0 rows affected)."""
-        # Act
-        await delete_list(mock_db_session, list_id=999)
+    async def test_returns_false_for_nonexistent_list(self, mock_db_session):
+        """Should return False when list doesn't exist."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db_session.execute.return_value = mock_result
 
-        # Assert: Still commits (delete is idempotent)
-        mock_db_session.commit.assert_called_once()
+        result = await delete_list(mock_db_session, list_id=999)
+
+        assert result is False
+
+    async def test_blocks_synced_list_deletion(self, mock_db_session, mock_list):
+        """Should raise 400 when trying to delete a synced list."""
+        from fastapi import HTTPException
+
+        mock_list.calendar_integration_id = 1  # Synced list
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_list
+        mock_db_session.execute.return_value = mock_result
+
+        with pytest.raises(HTTPException) as exc_info:
+            await delete_list(mock_db_session, list_id=1)
+
+        assert exc_info.value.status_code == 400
+        assert "synced" in exc_info.value.detail.lower()

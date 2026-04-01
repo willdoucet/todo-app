@@ -8,7 +8,7 @@
  * - Validates title is required
  * - Submits form data correctly
  * - Cancel button works
- * - Important toggle works
+ * - Priority selector works
  */
 
 import { describe, it, expect, vi } from 'vitest'
@@ -51,11 +51,14 @@ describe('TodoForm', () => {
       expect(screen.getByRole('combobox')).toBeInTheDocument()
     })
 
-    it('renders important toggle', () => {
+    it('renders priority selector', () => {
       render(<TodoForm {...defaultProps} />)
 
-      expect(screen.getByText(/mark as important/i)).toBeInTheDocument()
-      expect(screen.getByRole('switch')).toBeInTheDocument()
+      expect(screen.getByText(/priority/i)).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'None' })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Low' })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Med' })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'High' })).toBeInTheDocument()
     })
 
     it('renders submit and cancel buttons', () => {
@@ -106,7 +109,7 @@ describe('TodoForm', () => {
       title: 'Existing Task',
       description: 'Task description',
       due_date: '2026-06-15T00:00:00Z',
-      important: true,
+      priority: 1,
       assigned_to: 2,
     }
 
@@ -128,11 +131,11 @@ describe('TodoForm', () => {
       expect(screen.getByDisplayValue('2026-06-15')).toBeInTheDocument()
     })
 
-    it('pre-fills important toggle from initial data', () => {
+    it('pre-fills priority selector from initial data', () => {
       render(<TodoForm {...defaultProps} initial={existingTask} />)
 
-      const toggle = screen.getByRole('switch')
-      expect(toggle).toHaveAttribute('aria-checked', 'true')
+      const highButton = screen.getByRole('radio', { name: 'High' })
+      expect(highButton).toHaveAttribute('aria-checked', 'true')
     })
 
     it('shows "Save Changes" button when editing', () => {
@@ -159,16 +162,16 @@ describe('TodoForm', () => {
       expect(input).toHaveValue('New Task')
     })
 
-    it('toggles important when clicked', async () => {
+    it('selects priority when clicked', async () => {
       const user = userEvent.setup()
       render(<TodoForm {...defaultProps} />)
 
-      const toggle = screen.getByRole('switch')
-      expect(toggle).toHaveAttribute('aria-checked', 'false')
+      const highButton = screen.getByRole('radio', { name: 'High' })
+      expect(highButton).toHaveAttribute('aria-checked', 'false')
 
-      await user.click(toggle)
+      await user.click(highButton)
 
-      expect(toggle).toHaveAttribute('aria-checked', 'true')
+      expect(highButton).toHaveAttribute('aria-checked', 'true')
     })
 
     it('calls onCancel when cancel button clicked', async () => {
@@ -214,7 +217,7 @@ describe('TodoForm', () => {
       // Fill in the form
       await user.type(screen.getByPlaceholderText('Enter task title'), 'Test Task')
       await user.type(screen.getByPlaceholderText('Add a description (optional)'), 'Test description')
-      await user.click(screen.getByRole('switch')) // Toggle important
+      await user.click(screen.getByRole('radio', { name: 'High' })) // Set high priority
 
       // Submit
       await user.click(screen.getByRole('button', { name: /add task/i }))
@@ -224,7 +227,7 @@ describe('TodoForm', () => {
         expect.objectContaining({
           title: 'Test Task',
           description: 'Test description',
-          important: true,
+          priority: 1,
           assigned_to: 1, // First family member auto-selected
           list_id: 5,
         })

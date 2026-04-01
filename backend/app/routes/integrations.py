@@ -213,3 +213,261 @@ async def disconnect_integration(
         raise HTTPException(status_code=404, detail="Integration not found")
 
     return await crud_calendar_integrations.delete_integration(db, integration_id)
+
+
+# =============================================================================
+# iCloud Reminders endpoints
+# =============================================================================
+
+
+@router.post(
+    "/icloud/validate-reminders",
+    response_model=List[schemas.ICloudReminderListInfo],
+)
+async def validate_reminders(
+    payload: schemas.RemindersValidatePayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Validate existing iCloud credentials and return available reminder lists.
+
+    Reuses credentials from an existing integration — no password needed.
+    """
+    integration = await crud_calendar_integrations.get_integration(
+        db, payload.integration_id
+    )
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    from ..utils.encryption import decrypt_password
+
+    password = decrypt_password(integration.encrypted_password)
+
+    try:
+        client, principal = await asyncio.to_thread(
+            caldav_client.connect_icloud, integration.email, password
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not connect to iCloud. Credentials may have changed. ({type(e).__name__})",
+        )
+
+    reminder_lists = await asyncio.to_thread(
+        caldav_client.list_reminder_lists, principal
+    )
+
+    result = []
+    for cal_info in reminder_lists:
+        task_count = None
+        already_synced_by = None
+        try:
+            calendar = await asyncio.to_thread(
+                caldav_client.get_calendar_by_url, principal, cal_info["url"]
+            )
+            todos = await asyncio.to_thread(caldav_client.fetch_todos, calendar)
+            task_count = len(todos)
+
+            # Check if already synced by another member
+            if todos:
+                external_ids = [t["external_id"] for t in todos[:50]]
+                stmt = (
+                    select(
+                        models.Task.external_id,
+                        models.FamilyMember.name,
+                    )
+                    .join(
+                        models.CalendarIntegration,
+                        models.Task.calendar_integration_id
+                        == models.CalendarIntegration.id,
+                    )
+                    .join(
+                        models.FamilyMember,
+                        models.CalendarIntegration.family_member_id
+                        == models.FamilyMember.id,
+                    )
+                    .where(models.Task.external_id.in_(external_ids))
+                    .limit(1)
+                )
+                row = (await db.execute(stmt)).first()
+                if row:
+                    already_synced_by = row.name
+        except Exception:
+            logger.warning(
+                "Failed to fetch todos for reminder list %s during validate",
+                cal_info["name"],
+                exc_info=True,
+            )
+
+        result.append(
+            schemas.ICloudReminderListInfo(
+                url=cal_info["url"],
+                name=cal_info["name"],
+                color=cal_info.get("color"),
+                task_count=task_count,
+                already_synced_by=already_synced_by,
+            )
+        )
+
+    return result
+
+
+@router.post(
+    "/icloud/connect-reminders",
+    response_model=schemas.CalendarIntegrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_reminders(
+    payload: schemas.RemindersConnectPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Connect iCloud Reminders to an existing integration.
+
+    Creates Calendar rows with is_todo=True and dispatches initial sync.
+    """
+    integration = await crud_calendar_integrations.get_integration(
+        db, payload.integration_id
+    )
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    from ..utils.encryption import decrypt_password
+
+    password = decrypt_password(integration.encrypted_password)
+
+    # Get calendar details for selected lists
+    try:
+        client, principal = await asyncio.to_thread(
+            caldav_client.connect_icloud, integration.email, password
+        )
+        all_lists = await asyncio.to_thread(
+            caldav_client.list_reminder_lists, principal
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not connect to iCloud. Credentials may have changed.",
+        )
+
+    selected_set = set(payload.selected_lists)
+    from ..crud_calendars import get_or_create_calendar
+
+    for cal_info in all_lists:
+        if cal_info["url"] in selected_set:
+            cal_row = await get_or_create_calendar(
+                db,
+                integration.id,
+                cal_info["url"],
+                cal_info["name"],
+                color=cal_info.get("color"),
+            )
+            # Mark as reminder list
+            cal_row.is_todo = True
+            await db.commit()
+
+    # Set reminders_status to SYNCING and dispatch initial sync
+    stmt = select(models.CalendarIntegration).where(
+        models.CalendarIntegration.id == payload.integration_id
+    )
+    result = await db.execute(stmt)
+    integ = result.scalar_one_or_none()
+    if integ:
+        integ.reminders_status = models.IntegrationStatus.SYNCING
+        await db.commit()
+
+    from ..tasks import sync_single_reminders_integration
+
+    sync_single_reminders_integration.delay(payload.integration_id)
+
+    return await crud_calendar_integrations.get_integration(db, payload.integration_id)
+
+
+@router.post(
+    "/{integration_id}/sync-reminders",
+    response_model=schemas.CalendarIntegrationResponse,
+)
+async def trigger_reminders_sync(
+    integration_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger a manual 'Sync Now' for reminders."""
+    integration = await crud_calendar_integrations.get_integration(db, integration_id)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    # Set reminders_status to SYNCING
+    stmt = select(models.CalendarIntegration).where(
+        models.CalendarIntegration.id == integration_id
+    )
+    result = await db.execute(stmt)
+    integ = result.scalar_one_or_none()
+    if integ:
+        integ.reminders_status = models.IntegrationStatus.SYNCING
+        await db.commit()
+
+    from ..tasks import sync_single_reminders_integration
+
+    sync_single_reminders_integration.delay(integration_id)
+
+    return await crud_calendar_integrations.get_integration(db, integration_id)
+
+
+@router.delete("/{integration_id}/reminders")
+async def disconnect_reminders(
+    integration_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Disconnect reminders only: remove reminder Calendar rows and clear task sync metadata."""
+    integration = await crud_calendar_integrations.get_integration(db, integration_id)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not found")
+
+    # Clear sync metadata on tasks (keep tasks and lists as local data)
+    from sqlalchemy import update as sql_update
+
+    stmt = (
+        sql_update(models.Task)
+        .where(models.Task.calendar_integration_id == integration_id)
+        .values(
+            external_id=None,
+            etag=None,
+            last_modified_remote=None,
+            sync_status=None,
+            calendar_integration_id=None,
+        )
+    )
+    await db.execute(stmt)
+
+    # Clear sync metadata on lists
+    stmt = (
+        sql_update(models.List)
+        .where(models.List.calendar_integration_id == integration_id)
+        .values(
+            external_id=None,
+            calendar_integration_id=None,
+        )
+    )
+    await db.execute(stmt)
+
+    # Delete reminder Calendar rows (is_todo=True)
+    from sqlalchemy import delete as sql_delete
+
+    stmt = sql_delete(models.Calendar).where(
+        models.Calendar.calendar_integration_id == integration_id,
+        models.Calendar.is_todo == True,
+    )
+    await db.execute(stmt)
+
+    # Clear reminders status fields
+    stmt = select(models.CalendarIntegration).where(
+        models.CalendarIntegration.id == integration_id
+    )
+    result = await db.execute(stmt)
+    integ = result.scalar_one_or_none()
+    if integ:
+        integ.reminders_status = None
+        integ.reminders_last_error = None
+        integ.reminders_last_sync_at = None
+
+    await db.commit()
+
+    return {"detail": "Reminders disconnected. Tasks and lists remain as local data."}

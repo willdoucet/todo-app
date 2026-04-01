@@ -21,5 +21,9 @@ celery_app.conf.update(
             "task": "app.tasks.sync_all_icloud_integrations",
             "schedule": 600.0,  # Every 10 minutes
         },
+        "sync-icloud-reminders": {
+            "task": "app.tasks.sync_all_reminders",
+            "schedule": 600.0,  # Every 10 minutes
+        },
     },
 )

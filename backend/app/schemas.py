@@ -71,8 +71,10 @@ class TaskBase(BaseModel):
     due_date: Optional[datetime] = Field(None)
     completed: bool = False
     assigned_to: int = Field(..., ge=1, le=1000000)
-    important: bool = False
+    priority: int = Field(default=0, ge=0, le=9)
     list_id: int = Field(..., ge=1)
+    parent_id: Optional[int] = None
+    section_id: Optional[int] = None
 
 
 class TaskCreate(TaskBase):
@@ -84,18 +86,38 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     due_date: Optional[datetime] = Field(None)
     completed: Optional[bool] = None
-    important: Optional[bool] = None
+    priority: Optional[int] = Field(None, ge=0, le=9)
     assigned_to: Optional[int] = Field(None, ge=1, le=1000000)
     list_id: Optional[int] = Field(None, ge=1)
+    parent_id: Optional[int] = None
+    section_id: Optional[int] = None
+    completed_at: Optional[datetime] = None
 
 
 class Task(TaskBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    is_synced: bool = False
+    children: TypingList["Task"] = []
+    completed_at: Optional[datetime] = None
+    external_id: Optional[str] = None
+    sync_status: Optional[str] = None
+    calendar_integration_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     family_member: FamilyMember
+
+    @model_validator(mode="before")
+    @classmethod
+    def compute_is_synced(cls, data):
+        """Derive is_synced from calendar_integration_id presence."""
+        if hasattr(data, "calendar_integration_id"):
+            # ORM model
+            data.__dict__["is_synced"] = data.calendar_integration_id is not None
+        elif isinstance(data, dict):
+            data["is_synced"] = data.get("calendar_integration_id") is not None
+        return data
 
 
 class ResponsibilityBase(BaseModel):
@@ -169,12 +191,54 @@ class ListUpdate(BaseModel):
     icon: Optional[str] = Field(None, min_length=1, max_length=100)
 
 
+# =============================================================================
+# Section Schemas
+# =============================================================================
+
+
+class SectionBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class SectionCreate(SectionBase):
+    pass
+
+
+class SectionUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    sort_order: Optional[int] = Field(None, ge=0)
+
+
+class Section(SectionBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    list_id: int
+    sort_order: int = 0
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
 class List(ListBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    is_synced: bool = False
+    sections: TypingList[Section] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def compute_is_synced(cls, data):
+        """Derive is_synced from calendar_integration_id presence."""
+        if hasattr(data, "calendar_integration_id"):
+            data.__dict__["is_synced"] = data.calendar_integration_id is not None
+        elif isinstance(data, dict):
+            data["is_synced"] = data.get("calendar_integration_id") is not None
+        return data
 
 
 # =============================================================================
@@ -332,6 +396,7 @@ class CalendarResponse(BaseModel):
     calendar_url: str
     name: str
     color: Optional[str] = None
+    is_todo: Optional[bool] = False
     family_member_name: Optional[str] = None
     integration_email: Optional[str] = None
 
@@ -382,13 +447,29 @@ class CalendarIntegrationResponse(BaseModel):
     status: IntegrationStatus
     last_sync_at: Optional[datetime] = None
     last_error: Optional[str] = None
+    reminders_status: Optional[IntegrationStatus] = None
+    reminders_last_error: Optional[str] = None
+    reminders_last_sync_at: Optional[datetime] = None
     sync_range_past_days: int
     sync_range_future_days: int
     selected_calendars: Optional[TypingList[str]] = None
     calendars: Optional[TypingList[CalendarResponse]] = None
+    reminder_lists: Optional[TypingList[CalendarResponse]] = None
     family_member: FamilyMember
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def split_calendar_types(cls, data):
+        """Separate calendars into event calendars and reminder lists."""
+        if hasattr(data, "calendars") and data.calendars:
+            all_cals = data.calendars
+            event_cals = [c for c in all_cals if not bool(getattr(c, "is_todo", False))]
+            reminder_cals = [c for c in all_cals if bool(getattr(c, "is_todo", False))]
+            data.__dict__["calendars"] = event_cals
+            data.__dict__["reminder_lists"] = reminder_cals
+        return data
 
 
 class ICloudCalendarInfo(BaseModel):
@@ -398,6 +479,24 @@ class ICloudCalendarInfo(BaseModel):
     color: Optional[str] = None
     event_count: Optional[int] = None
     already_synced_by: Optional[str] = None
+
+
+class ICloudReminderListInfo(BaseModel):
+    """Returned when listing available reminder lists from an iCloud account."""
+    url: str
+    name: str
+    color: Optional[str] = None
+    task_count: Optional[int] = None
+    already_synced_by: Optional[str] = None
+
+
+class RemindersValidatePayload(BaseModel):
+    integration_id: int = Field(..., ge=1)
+
+
+class RemindersConnectPayload(BaseModel):
+    integration_id: int = Field(..., ge=1)
+    selected_lists: TypingList[str] = Field(..., min_length=1)
 
 
 # =============================================================================
