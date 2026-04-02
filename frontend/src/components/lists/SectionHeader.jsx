@@ -52,10 +52,17 @@ export default function SectionHeader({
           onBlur={handleSave}
           onKeyDown={handleKeyDown}
           autoFocus
-          className="flex-1 text-xs font-semibold uppercase tracking-wider bg-transparent border-b border-terracotta-500 outline-none text-text-primary dark:text-gray-100 py-0"
+          className="flex-1 text-xs font-semibold uppercase tracking-wider bg-transparent border-b border-terracotta-500 outline-none text-text-primary dark:text-gray-100 pt-0 pb-1.5"
         />
       ) : (
-        <span className="flex-1 text-xs font-semibold uppercase tracking-wider text-text-secondary dark:text-gray-400 select-none">
+        <span
+          className="flex-1 text-xs font-semibold uppercase tracking-wider text-text-secondary dark:text-gray-400 select-none cursor-text"
+          onClick={(e) => {
+            e.stopPropagation()
+            setEditName(section.name)
+            setIsEditing(true)
+          }}
+        >
           {section.name}
         </span>
       )}

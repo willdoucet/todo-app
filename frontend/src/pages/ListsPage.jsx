@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import axios from 'axios'
@@ -9,6 +9,8 @@ import AddButton from '../components/layout/AddButton'
 import Header from '../components/layout/Header'
 import Sidebar from '../components/layout/Sidebar'
 import usePageTitle from '../hooks/usePageTitle'
+import useMediaQuery from '../hooks/useMediaQuery'
+import { useToast } from '../components/shared/ToastProvider'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -30,6 +32,25 @@ export default function ListsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [addToSectionId, setAddToSectionId] = useState(null)
 
+  // Inline editing state
+  const [editingTaskId, setEditingTaskId] = useState(null)
+
+  // Family members (loaded once, passed down)
+  const [familyMembers, setFamilyMembers] = useState([])
+
+  // Responsive
+  const isDesktop = useMediaQuery('(min-width: 640px)')
+
+  // Toast notifications
+  const toast = useToast()
+
+  // Refs for reconcile guards
+  const selectedListIdRef = useRef(selectedListId)
+  const reconcileTimerRef = useRef(null)
+
+  // Keep ref in sync
+  useEffect(() => { selectedListIdRef.current = selectedListId }, [selectedListId])
+
   // Persist selected list to localStorage
   useEffect(() => {
     if (selectedListId) {
@@ -40,14 +61,31 @@ export default function ListsPage() {
   // Load lists on mount
   useEffect(() => {
     loadLists()
+    loadFamilyMembers()
   }, [])
 
-  // Load tasks when selected list changes
+  // Load tasks when selected list changes + cancel pending reconcile
   useEffect(() => {
+    clearTimeout(reconcileTimerRef.current)
     if (selectedListId) {
       loadTasks(selectedListId)
     }
+    return () => clearTimeout(reconcileTimerRef.current)
   }, [selectedListId])
+
+  // Auto-refetch while any task has PENDING_PUSH (iCloud sync in progress).
+  // Mirrors useCalendarData.js polling pattern. Celery push runs ~30s after save;
+  // poll every 10s until resolved.
+  useEffect(() => {
+    const hasPending = tasks.some(t => t.sync_status === 'PENDING_PUSH')
+    if (!hasPending) return
+
+    const timer = setTimeout(
+      () => loadTasks(selectedListIdRef.current, { silent: true }),
+      10000
+    )
+    return () => clearTimeout(timer)
+  }, [tasks])
 
   // Calculate task counts per list
   const taskCounts = useMemo(() => {
@@ -58,18 +96,28 @@ export default function ListsPage() {
     return counts
   }, [tasks])
 
+  // API: Load family members (once)
+  const loadFamilyMembers = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/family-members`)
+      setFamilyMembers(response.data)
+    } catch (err) {
+      console.error('Error loading family members:', err)
+    }
+  }
+
   // API: Load lists
   const loadLists = async () => {
     setIsLoadingLists(true)
     try {
       const response = await axios.get(`${API_BASE}/lists`)
       setLists(response.data)
-      
+
       // Auto-select first list if none selected or selected list doesn't exist
       if (response.data.length > 0) {
         const savedId = localStorage.getItem('selectedListId')
         const savedIdExists = response.data.some(l => l.id === parseInt(savedId))
-        
+
         if (!savedIdExists) {
           setSelectedListId(response.data[0].id)
         }
@@ -111,7 +159,7 @@ export default function ListsPage() {
       await axios.delete(`${API_BASE}/lists/${id}`)
       const newLists = lists.filter(l => l.id !== id)
       setLists(newLists)
-      
+
       // Select another list if the deleted one was selected
       if (selectedListId === id && newLists.length > 0) {
         setSelectedListId(newLists[0].id)
@@ -125,23 +173,62 @@ export default function ListsPage() {
     }
   }
 
-  // API: Load tasks for a list
-  const loadTasks = async (listId) => {
-    setIsLoadingTasks(true)
-    setError(null)
+  // API: Load tasks for a list (with optional silent mode for reconcile)
+  const loadTasks = async (listId, { silent = false } = {}) => {
+    if (!silent) setIsLoadingTasks(true)
+    if (!silent) setError(null)
 
     try {
       const response = await axios.get(`${API_BASE}/tasks?list_id=${listId}`)
+      // Guard: ignore stale responses if user switched lists while in-flight
+      if (listId !== selectedListIdRef.current) return
       setTasks(response.data)
     } catch (err) {
-      console.error('Error loading tasks:', err)
-      setError(err.response?.data?.detail || 'Failed to load tasks')
+      if (!silent) {
+        console.error('Error loading tasks:', err)
+        setError(err.response?.data?.detail || 'Failed to load tasks')
+      }
     } finally {
-      setIsLoadingTasks(false)
+      if (!silent) setIsLoadingTasks(false)
     }
   }
 
-  // Task form submit handler
+  // API: Update a single task field (inline auto-save)
+  // Uses field-level merge to prevent concurrent PATCH race conditions
+  const onUpdateTask = useCallback(async (taskId, fieldData) => {
+    // Optimistic update: apply immediately so UI doesn't flash stale data
+    let prevTask
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) { prevTask = t; return { ...t, ...fieldData } }
+      return t
+    }))
+    try {
+      const response = await axios.patch(`${API_BASE}/tasks/${taskId}`, fieldData)
+      // Field-level merge: reconcile with server response
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, ...Object.fromEntries(
+              Object.keys(fieldData).map(k => [k, response.data[k]])
+            )}
+          : t
+      ))
+      // Schedule silent reconcile to pick up server-derived fields
+      clearTimeout(reconcileTimerRef.current)
+      reconcileTimerRef.current = setTimeout(
+        () => loadTasks(selectedListIdRef.current, { silent: true }),
+        1000
+      )
+    } catch (err) {
+      // Revert optimistic update on error
+      if (prevTask) setTasks(prev => prev.map(t => t.id === taskId ? prevTask : t))
+      console.error('Error updating task:', err)
+      const detail = err.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : 'Failed to save — try again'
+      toast.error(msg)
+    }
+  }, [])
+
+  // Task form submit handler (for modal flow — mobile + legacy)
   const handleTaskSubmit = async (data) => {
     if (!data) {
       setIsOpen(false)
@@ -175,23 +262,39 @@ export default function ListsPage() {
     }
   }
 
+  // Inline task creation (from AddTaskRow on desktop)
+  const createTaskInline = useCallback(async (title, sectionId) => {
+    try {
+      const data = { title, list_id: selectedListId, assigned_to: familyMembers[0]?.id }
+      if (sectionId) data.section_id = sectionId
+      const response = await axios.post(`${API_BASE}/tasks`, data)
+      setTasks(prev => [...prev, response.data])
+    } catch (err) {
+      console.error('Error creating task:', err)
+      const detail = err.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : 'Failed to create task'
+      toast.error(msg)
+    }
+  }, [selectedListId, familyMembers, toast])
+
   // Task handlers
-  const deleteTask = async (id) => {
+  const deleteTask = useCallback(async (id) => {
     try {
       await axios.delete(`${API_BASE}/tasks/${id}`)
-      setTasks(tasks.filter(t => t.id !== id))
+      setTasks(prev => prev.filter(t => t.id !== id))
+      if (editingTaskId === id) setEditingTaskId(null)
     } catch (err) {
       console.error('Error deleting task:', err)
       setError(err.response?.data?.detail || 'Failed to delete task')
     }
-  }
+  }, [editingTaskId])
 
-  const toggleComplete = async (id) => {
+  const toggleComplete = useCallback(async (id) => {
     const task = tasks.find(t => t.id === id)
     if (!task) return
 
     // Optimistic update
-    setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
 
     try {
       const response = await axios.patch(`${API_BASE}/tasks/${id}`, {
@@ -204,7 +307,23 @@ export default function ListsPage() {
       console.error('Error toggling task:', err)
       setError(err.response?.data?.detail || 'Failed to update task')
     }
-  }
+  }, [tasks])
+
+  // Inline edit management — one task at a time
+  const handleStartEdit = useCallback((taskId) => {
+    // If another task is being edited, auto-save is handled by TaskItem's blur
+    setEditingTaskId(taskId)
+  }, [])
+
+  const handleStopEdit = useCallback(() => {
+    setEditingTaskId(null)
+  }, [])
+
+  // Mobile modal open (for expand button on mobile)
+  const handleOpenModal = useCallback((task) => {
+    setEditingTask(task)
+    setIsOpen(true)
+  }, [])
 
   const selectedList = lists.find(l => l.id === selectedListId)
   const sections = selectedList?.sections || []
@@ -230,14 +349,53 @@ export default function ListsPage() {
     }
   }
 
-  const createSection = async () => {
-    if (!selectedListId) return
+  // Add Section inline editor state
+  const [isAddingSectionInline, setIsAddingSectionInline] = useState(false)
+  const [newSectionName, setNewSectionName] = useState('')
+  const sectionInputRef = useRef(null)
+
+  const createSection = async (name) => {
+    if (!selectedListId || !name?.trim()) return
     try {
-      await axios.post(`${API_BASE}/lists/${selectedListId}/sections`, { name: 'New Section' })
+      await axios.post(`${API_BASE}/lists/${selectedListId}/sections`, { name: name.trim() })
       await loadLists()
     } catch (err) {
       console.error('Error creating section:', err)
       setError(err.response?.data?.detail || 'Failed to create section')
+    }
+  }
+
+  const handleAddSectionActivate = () => {
+    setNewSectionName('')
+    setIsAddingSectionInline(true)
+    // Focus after render
+    setTimeout(() => sectionInputRef.current?.focus(), 0)
+  }
+
+  const handleAddSectionSave = () => {
+    const trimmed = newSectionName.trim()
+    if (trimmed) {
+      createSection(trimmed)
+    }
+    setIsAddingSectionInline(false)
+    setNewSectionName('')
+  }
+
+  const handleAddSectionCancel = () => {
+    setIsAddingSectionInline(false)
+    setNewSectionName('')
+  }
+
+  const handleAddSectionKeyDown = (e) => {
+    if (e.key === 'Enter') handleAddSectionSave()
+    if (e.key === 'Escape') handleAddSectionCancel()
+  }
+
+  const handleAddSectionBlur = () => {
+    if (newSectionName.trim()) {
+      handleAddSectionSave()
+    } else {
+      handleAddSectionCancel()
     }
   }
 
@@ -314,29 +472,71 @@ export default function ListsPage() {
                   sections={sections}
                   isLoading={isLoadingTasks}
                   onToggle={toggleComplete}
-                  onEdit={(task) => {
-                    setEditingTask(task)
-                    setIsOpen(true)
-                  }}
                   onDelete={deleteTask}
+                  onUpdateTask={onUpdateTask}
                   onAddTask={(sectionId) => {
                     setEditingTask(null)
                     setAddToSectionId(sectionId || null)
                     setIsOpen(true)
                   }}
+                  onCreateTask={createTaskInline}
                   onEditSection={editSection}
                   onDeleteSection={deleteSection}
+                  editingTaskId={editingTaskId}
+                  onStartEdit={handleStartEdit}
+                  onStopEdit={handleStopEdit}
+                  familyMembers={familyMembers}
+                  isDesktop={isDesktop}
+                  onOpenModal={handleOpenModal}
                 />
                 {selectedListId && !isLoadingTasks && (
-                  <button
-                    onClick={createSection}
-                    className="mt-3 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text-secondary dark:text-gray-500 dark:hover:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-800 rounded-md transition-colors"
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Add Section
-                  </button>
+                  isAddingSectionInline ? (
+                    <div className="
+                      w-full max-w-[960px] flex items-center gap-2 min-h-[48px] px-4
+                      bg-warm-beige dark:bg-gray-800
+                      border-t border-card-border dark:border-gray-700
+                    ">
+                      <span className="w-[22px] h-[22px] flex items-center justify-center bg-terracotta-500 dark:bg-blue-600 text-white rounded-[5px] text-[14px] font-bold flex-shrink-0">
+                        +
+                      </span>
+                      <input
+                        ref={sectionInputRef}
+                        type="text"
+                        value={newSectionName}
+                        onChange={(e) => setNewSectionName(e.target.value)}
+                        onKeyDown={handleAddSectionKeyDown}
+                        onBlur={handleAddSectionBlur}
+                        placeholder="Section name"
+                        className="
+                          flex-1 min-w-0 text-[12px] font-semibold uppercase tracking-wider
+                          bg-transparent outline-none
+                          text-text-primary dark:text-gray-100
+                          border-b-2 border-terracotta-500 dark:border-blue-500 py-1
+                          placeholder:text-text-muted dark:placeholder:text-gray-500
+                        "
+                        aria-label="New section name"
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleAddSectionActivate}
+                      className="
+                        w-full max-w-[960px] flex items-center gap-2 min-h-[48px] px-4
+                        text-terracotta-500 dark:text-blue-400
+                        bg-warm-beige dark:bg-gray-800
+                        border-t border-card-border dark:border-gray-700
+                        hover:bg-[#FDFCFA] dark:hover:bg-gray-800/50
+                        transition-colors duration-150
+                      "
+                    >
+                      <span className="w-[22px] h-[22px] flex items-center justify-center bg-terracotta-500 dark:bg-blue-600 text-white rounded-[5px] text-[14px] font-bold flex-shrink-0">
+                        +
+                      </span>
+                      <span className="text-[12px] font-semibold uppercase tracking-wider text-text-muted dark:text-gray-500">
+                        Add Section
+                      </span>
+                    </button>
+                  )
                 )}
               </>
             )}
@@ -344,8 +544,8 @@ export default function ListsPage() {
         </main>
       </div>
 
-      {/* Floating Action Button - only show when a list is selected */}
-      {selectedListId && (
+      {/* Floating Action Button - mobile only */}
+      {selectedListId && !isDesktop && (
         <AddButton onClick={() => {
           setEditingTask(null)
           setAddToSectionId(null)
@@ -353,7 +553,7 @@ export default function ListsPage() {
         }} />
       )}
 
-      {/* Create / Edit Modal */}
+      {/* Create / Edit Modal — mobile only on desktop, always available on mobile */}
       <Transition show={isOpen} as="div">
         <Dialog onClose={() => setIsOpen(false)} className="relative z-50">
           {/* Backdrop */}

@@ -38,17 +38,19 @@ frontend/src/
 │   ├── calendar/           # Calendar dashboard (20 files — see Section 2)
 │   ├── family-members/     # Family member management (1 file — see Section 7)
 │   ├── layout/             # App shell: header, sidebar, nav (4 files — see Section 8)
-│   ├── lists/              # Task lists feature (4 files + 2 tests — see Section 6)
+│   ├── lists/              # Task lists feature (8 files + 2 tests — see Section 6)
 │   ├── mealboard/          # Mealboard feature (12 files — see Section 3)
 │   ├── responsibilities/   # Responsibilities feature (3 files + 2 tests — see Section 5)
 │   ├── settings/           # Settings components (3 files — see Section 4)
-│   └── shared/             # Cross-cutting UI components (5 files — see Section 9)
+│   └── shared/             # Cross-cutting UI components (6 files — see Section 9)
 │
 ├── contexts/
 │   └── DarkModeContext.jsx  # Dark mode toggle provider (class on document root)
 │
 ├── hooks/
-│   └── usePageTitle.js      # Sets document title
+│   ├── usePageTitle.js      # Sets document title
+│   ├── useMediaQuery.js     # Responsive breakpoint hook (SSR-safe)
+│   └── useDebounce.js       # Debounce callback invocation
 │
 └── assets/
     └── react.svg
@@ -164,15 +166,19 @@ Components in `src/components/settings/`:
 
 **Route:** `/lists`
 
-### Files (4 + 2 tests)
+### Files (8 + 2 tests)
 
 | File | Purpose |
 |------|---------|
 | `ListPanel.jsx` | Task list sidebar (desktop aside, mobile slide-in drawer) |
-| `TaskItem.jsx` | Single task row with checkbox, swipe-to-delete |
-| `TaskListView.jsx` | Task list rendering with empty state |
-| `TodoForm.jsx` | Task create/edit form (also used by calendar's TaskFormModal) |
-| `TaskItem.test.jsx` | Tests for TaskItem |
+| `TaskItem.jsx` | Single task row with inline editing, action area, expand panel (React.memo) |
+| `TaskActionArea.jsx` | Bordered action container with indicators, separator, and buttons |
+| `InlineTaskFields.jsx` | Expanded detail panel: due date, description, assignee pills, priority pills |
+| `AddTaskRow.jsx` | Reusable "Add a task" row used at bottom of sections/unsectioned |
+| `SectionHeader.jsx` | Section header with inline name editing, collapse chevron |
+| `TaskListView.jsx` | Task list rendering with sections, add-task rows, empty state |
+| `TodoForm.jsx` | Task create/edit form (retained for mobile modal flow) |
+| `TaskItem.test.jsx` | Tests for TaskItem (28 tests: inline edit, blur, delete-on-empty, etc.) |
 | `TodoForm.test.jsx` | Tests for TodoForm |
 
 ---
@@ -208,11 +214,12 @@ App shell components used by all pages.
 
 Cross-cutting UI components used across multiple features.
 
-### Files (5)
+### Files (6)
 
 | File | Purpose |
 |------|---------|
 | `ConfirmDialog.jsx` | Reusable confirmation modal (used by responsibilities, lists, mealboard) |
+| `ToastProvider.jsx` | Toast notification context + provider + useToast hook (error/success/info) |
 | `EmptyState.jsx` | Empty state placeholder variants (tasks, responsibilities, daily view) |
 | `SwipeableItem.jsx` | Swipe-to-reveal actions wrapper (used by TaskItem, ResponsibilityCard) |
 | `PhotoUpload.jsx` | Image upload with preview (used by ResponsibilityForm, FamilyMemberManager) |
