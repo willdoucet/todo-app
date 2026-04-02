@@ -1,33 +1,60 @@
 import { useState, useMemo } from 'react'
 import TaskItem from './TaskItem'
 import SectionHeader from './SectionHeader'
+import AddTaskRow from './AddTaskRow'
 import { EmptyTasksState } from '../shared/EmptyState'
 
 // Render a task and its children recursively
-function TaskTree({ task, depth, expandedTasks, onToggle, onEdit, onDelete, onToggleExpand }) {
-  const isExpanded = expandedTasks.has(task.id)
+function TaskTree({
+  task,
+  depth,
+  expandedTasks,
+  onToggle,
+  onDelete,
+  onUpdateTask,
+  onToggleExpand,
+  editingTaskId,
+  onStartEdit,
+  onStopEdit,
+  familyMembers,
+  isDesktop,
+  onOpenModal,
+}) {
+  const isSubtaskExpanded = expandedTasks.has(task.id)
 
   return (
     <>
       <TaskItem
         task={task}
         onToggle={onToggle}
-        onEdit={() => onEdit(task)}
         onDelete={onDelete}
+        onUpdateTask={onUpdateTask}
         depth={depth}
         onToggleExpand={onToggleExpand}
-        isExpanded={isExpanded}
+        isSubtaskExpanded={isSubtaskExpanded}
+        isEditing={editingTaskId === task.id}
+        onStartEdit={onStartEdit}
+        onStopEdit={onStopEdit}
+        familyMembers={familyMembers}
+        isDesktop={isDesktop}
+        onOpenModal={onOpenModal}
       />
-      {isExpanded && task.children?.map(child => (
+      {isSubtaskExpanded && task.children?.map(child => (
         <TaskTree
           key={child.id}
           task={child}
           depth={depth + 1}
           expandedTasks={expandedTasks}
           onToggle={onToggle}
-          onEdit={onEdit}
           onDelete={onDelete}
+          onUpdateTask={onUpdateTask}
           onToggleExpand={onToggleExpand}
+          editingTaskId={editingTaskId}
+          onStartEdit={onStartEdit}
+          onStopEdit={onStopEdit}
+          familyMembers={familyMembers}
+          isDesktop={isDesktop}
+          onOpenModal={onOpenModal}
         />
       ))}
     </>
@@ -39,14 +66,23 @@ export default function TaskListView({
   sections = [],
   isLoading,
   onToggle,
-  onEdit,
   onDelete,
+  onUpdateTask,
   onAddTask,
+  onCreateTask,
   onEditSection,
   onDeleteSection,
+  editingTaskId,
+  onStartEdit,
+  onStopEdit,
+  familyMembers = [],
+  isDesktop = true,
+  onOpenModal,
 }) {
   const [collapsedSections, setCollapsedSections] = useState(new Set())
   const [expandedTasks, setExpandedTasks] = useState(new Set())
+  // Which add-task row is active (inline input visible). 'unsectioned' or a section ID, null = none
+  const [addingInSectionId, setAddingInSectionId] = useState(null)
 
   // Group top-level tasks by section
   const { unsectioned, bySectionId, sectionTaskCounts } = useMemo(() => {
@@ -107,22 +143,71 @@ export default function TaskListView({
     return <EmptyTasksState onAction={onAddTask} />
   }
 
+  const taskTreeProps = {
+    expandedTasks,
+    onToggle,
+    onDelete,
+    onUpdateTask,
+    onToggleExpand: toggleExpand,
+    editingTaskId,
+    onStartEdit,
+    onStopEdit,
+    familyMembers,
+    isDesktop,
+    onOpenModal,
+  }
+
+  const hasSections = sections.length > 0
+
+  // Handle AddTaskRow activation — inline on desktop, modal on mobile
+  const handleAddTaskClick = (sectionKey) => {
+    if (isDesktop) {
+      setAddingInSectionId(sectionKey)
+    } else {
+      onAddTask?.(sectionKey === 'unsectioned' ? undefined : sectionKey)
+    }
+  }
+
+  // Handle inline add-task save
+  const handleAddTaskSave = (title) => {
+    const sectionId = addingInSectionId === 'unsectioned' ? null : addingInSectionId
+    onCreateTask?.(title, sectionId)
+    setAddingInSectionId(null)
+  }
+
+  const handleAddTaskCancel = () => {
+    setAddingInSectionId(null)
+  }
+
   return (
     <div className="max-w-[960px]">
       {/* Unsectioned tasks */}
-      {unsectioned.map((task, i) => (
-        <div key={task.id} className={i === 0 ? 'border-t border-[#f0ece5] dark:border-gray-800' : ''}>
-          <TaskTree
-            task={task}
-            depth={0}
-            expandedTasks={expandedTasks}
-            onToggle={onToggle}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onToggleExpand={toggleExpand}
+      {unsectioned.length > 0 && (
+        <>
+          {unsectioned.map((task, i) => (
+            <div key={task.id} className={i === 0 ? 'border-t border-[#f0ece5] dark:border-gray-800' : ''}>
+              <TaskTree task={task} depth={0} {...taskTreeProps} />
+            </div>
+          ))}
+          {/* Add task row after unsectioned tasks */}
+          <AddTaskRow
+            isActive={addingInSectionId === 'unsectioned'}
+            onActivate={() => handleAddTaskClick('unsectioned')}
+            onSave={handleAddTaskSave}
+            onCancel={handleAddTaskCancel}
           />
-        </div>
-      ))}
+        </>
+      )}
+
+      {/* If no unsectioned tasks but no sections either, show add row */}
+      {unsectioned.length === 0 && !hasSections && (
+        <AddTaskRow
+          isActive={addingInSectionId === 'unsectioned'}
+          onActivate={() => handleAddTaskClick('unsectioned')}
+          onSave={handleAddTaskSave}
+          onCancel={handleAddTaskCancel}
+        />
+      )}
 
       {/* Sections */}
       {sections.map(section => {
@@ -138,34 +223,20 @@ export default function TaskListView({
               onToggleCollapse={() => toggleSection(section.id)}
               onEdit={onEditSection}
               onDelete={onDeleteSection}
-              onAddTask={() => onAddTask?.(section.id)}
+              onAddTask={() => handleAddTaskClick(section.id)}
             />
             {!isCollapsed && (
               <div className="transition-all duration-150 ease-out">
-                {sectionTasks.length === 0 ? (
-                  <button
-                    onClick={() => onAddTask?.(section.id)}
-                    className="w-full flex items-center gap-2 px-3 py-3 text-text-muted hover:text-text-secondary border border-dashed border-card-border bg-warm-beige/30 dark:bg-gray-800/30 dark:border-gray-700 transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span className="text-xs">Add a task</span>
-                  </button>
-                ) : (
-                  sectionTasks.map(task => (
-                    <TaskTree
-                      key={task.id}
-                      task={task}
-                      depth={0}
-                      expandedTasks={expandedTasks}
-                      onToggle={onToggle}
-                      onEdit={onEdit}
-                      onDelete={onDelete}
-                      onToggleExpand={toggleExpand}
-                    />
-                  ))
-                )}
+                {sectionTasks.map(task => (
+                  <TaskTree key={task.id} task={task} depth={0} {...taskTreeProps} />
+                ))}
+                {/* Add task row at bottom of each section */}
+                <AddTaskRow
+                  isActive={addingInSectionId === section.id}
+                  onActivate={() => handleAddTaskClick(section.id)}
+                  onSave={handleAddTaskSave}
+                  onCancel={handleAddTaskCancel}
+                />
               </div>
             )}
           </div>
