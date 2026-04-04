@@ -199,7 +199,7 @@ async def test_recipe(db_session):
         name="Test Recipe",
         description="A test recipe",
         ingredients=[
-            {"name": "Test ingredient", "quantity": 1, "unit": "cups", "category": "Pantry"}
+            {"name": "Test ingredient", "quantity": 1, "unit": "cup", "category": "Pantry"}
         ],
         instructions="Test instructions",
         prep_time_minutes=10,
@@ -222,7 +222,7 @@ async def test_favorite_recipe(db_session):
     recipe = Recipe(
         name="Favorite Recipe",
         description="A favorite recipe",
-        ingredients=[{"name": "Ingredient", "quantity": 2, "unit": "cups", "category": "Pantry"}],
+        ingredients=[{"name": "Ingredient", "quantity": 2, "unit": "cup", "category": "Pantry"}],
         instructions="Favorite instructions",
         prep_time_minutes=15,
         cook_time_minutes=30,
@@ -237,21 +237,75 @@ async def test_favorite_recipe(db_session):
 
 
 @pytest_asyncio.fixture
-async def test_meal_plan(db_session, test_recipe):
-    """Create a test meal plan in the database."""
-    from app.models import MealPlan
+async def test_meal_slot_types(db_session):
+    """Create the 4 default meal slot types (Breakfast, Lunch, Dinner, Snack)."""
+    from app.models import MealSlotType
+
+    slots = [
+        MealSlotType(name="Breakfast", sort_order=1, color="#F5A623", icon="☀", is_default=True, default_participants=[]),
+        MealSlotType(name="Lunch", sort_order=2, color="#6B8F71", icon="🥪", is_default=True, default_participants=[]),
+        MealSlotType(name="Dinner", sort_order=3, color="#E8927C", icon="🍽", is_default=True, default_participants=[]),
+        MealSlotType(name="Snack", sort_order=4, color="#B8A9C9", icon="🍌", is_default=True, default_participants=[]),
+    ]
+    for slot in slots:
+        db_session.add(slot)
+    await db_session.commit()
+    for slot in slots:
+        await db_session.refresh(slot)
+    return slots
+
+
+@pytest_asyncio.fixture
+async def test_meal_slot_dinner(test_meal_slot_types):
+    """Return just the Dinner slot type for convenience."""
+    return test_meal_slot_types[2]  # Dinner
+
+
+@pytest_asyncio.fixture
+async def test_food_item(db_session):
+    """Create a test food item (Banana)."""
+    from app.models import FoodItem
+
+    item = FoodItem(name="Banana", emoji="🍌", category="fruit", is_favorite=False)
+    db_session.add(item)
+    await db_session.commit()
+    await db_session.refresh(item)
+    return item
+
+
+@pytest_asyncio.fixture
+async def test_meal_entry(db_session, test_recipe, test_meal_slot_dinner):
+    """Create a test meal entry (dinner with a recipe)."""
+    from app.models import MealEntry
     from datetime import date
 
-    meal_plan = MealPlan(
+    entry = MealEntry(
         date=date.today(),
-        category="DINNER",
+        meal_slot_type_id=test_meal_slot_dinner.id,
         recipe_id=test_recipe.id,
+        item_type="recipe",
         was_cooked=False,
     )
-    db_session.add(meal_plan)
+    db_session.add(entry)
     await db_session.commit()
-    await db_session.refresh(meal_plan)
-    return meal_plan
+    await db_session.refresh(entry)
+    return entry
+
+
+@pytest_asyncio.fixture
+async def test_app_settings(db_session):
+    """Create the singleton app settings row."""
+    from app.models import AppSettings
+
+    settings = AppSettings(
+        timezone="UTC",
+        week_start_day="monday",
+        measurement_system="imperial",
+    )
+    db_session.add(settings)
+    await db_session.commit()
+    await db_session.refresh(settings)
+    return settings
 
 
 # =============================================================================

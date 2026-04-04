@@ -112,7 +112,7 @@ class TestCreateRecipe:
             "description": "Quick and easy dinner",
             "ingredients": [
                 {"name": "Chicken breast", "quantity": 2, "unit": "lb", "category": "Protein"},
-                {"name": "Honey", "quantity": 0.25, "unit": "cups", "category": "Pantry"},
+                {"name": "Honey", "quantity": 0.25, "unit": "cup", "category": "Pantry"},
             ],
             "instructions": "1. Season chicken. 2. Cook in pan. 3. Add sauce.",
             "prep_time_minutes": 10,

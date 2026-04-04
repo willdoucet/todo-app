@@ -477,3 +477,82 @@ def delete_events_for_integration(integration_id: int):
     result = run_async(_delete())
     logger.info("Deleted events for integration %d: %s", integration_id, result)
     return result
+
+
+# =============================================================================
+# Shopping List Sync Tasks
+# =============================================================================
+
+
+@celery_app.task(
+    name="app.tasks.sync_shopping_list_add",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+)
+def sync_shopping_list_add(self, meal_entry_id: int):
+    """Sync a meal entry's ingredients to the linked shopping list.
+
+    Called after a meal entry is created. Aggregates ingredients with
+    existing shopping items using the aggregation key + unique constraint.
+    """
+    from .services.shopping_sync import sync_meal_to_shopping_list
+    from sqlalchemy import update
+    from . import models
+
+    async def _sync():
+        async with AsyncSessionLocal() as db:
+            await sync_meal_to_shopping_list(db, meal_entry_id)
+
+    try:
+        run_async(_sync())
+        logger.info("Shopping sync (add) complete for meal entry %d", meal_entry_id)
+    except Exception as e:
+        logger.error(
+            "Shopping sync (add) failed for meal entry %d: %s",
+            meal_entry_id, str(e), exc_info=True,
+        )
+        # On final retry failure, mark the meal entry as "failed"
+        if self.request.retries >= self.max_retries:
+            async def _mark_failed():
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        update(models.MealEntry)
+                        .where(models.MealEntry.id == meal_entry_id)
+                        .values(shopping_sync_status="failed")
+                    )
+                    await db.commit()
+            try:
+                run_async(_mark_failed())
+            except Exception:
+                logger.error("Failed to mark meal entry %d as sync failed", meal_entry_id)
+        raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
+
+
+@celery_app.task(
+    name="app.tasks.sync_shopping_list_remove",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+)
+def sync_shopping_list_remove(self, meal_entry_id: int):
+    """Remove a meal entry's contributions from the shopping list.
+
+    Called before/after a meal entry is deleted. Subtracts ingredient
+    quantities and deletes tasks that reach zero.
+    """
+    from .services.shopping_sync import remove_meal_from_shopping_list
+
+    async def _remove():
+        async with AsyncSessionLocal() as db:
+            await remove_meal_from_shopping_list(db, meal_entry_id)
+
+    try:
+        run_async(_remove())
+        logger.info("Shopping sync (remove) complete for meal entry %d", meal_entry_id)
+    except Exception as e:
+        logger.error(
+            "Shopping sync (remove) failed for meal entry %d: %s",
+            meal_entry_id, str(e), exc_info=True,
+        )
+        raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))

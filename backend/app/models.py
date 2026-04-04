@@ -9,6 +9,7 @@ from sqlalchemy import (
     ARRAY,
     JSON,
     Text,
+    Table,
     func,
     UniqueConstraint,
 )
@@ -27,9 +28,22 @@ class ResponsibilityCategory(PyEnum):
 
 
 class MealCategory(PyEnum):
+    """Legacy enum — kept for migration compatibility only. Do not use in new code."""
     BREAKFAST = "BREAKFAST"
     LUNCH = "LUNCH"
     DINNER = "DINNER"
+
+
+class MealItemType(PyEnum):
+    RECIPE = "recipe"
+    FOOD_ITEM = "food_item"
+    CUSTOM = "custom"
+
+
+class ShoppingSyncStatus(PyEnum):
+    SYNCED = "synced"
+    PENDING = "pending"
+    FAILED = "failed"
 
 
 class CalendarEventSource(PyEnum):
@@ -91,6 +105,10 @@ class Task(Base):
         nullable=True,
     )
     integration = relationship("CalendarIntegration", back_populates="synced_tasks")
+    # Mealboard shopping sync fields (nullable — only for auto-generated shopping items)
+    source_meals = Column(JSON, nullable=True)  # [{meal_entry_id, quantity, base_unit}]
+    aggregation_key_name = Column(String, nullable=True)  # Normalized ingredient name
+    aggregation_unit_group = Column(String, nullable=True)  # "weight", "volume", "count", "none"
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
@@ -99,6 +117,12 @@ class Task(Base):
             "external_id",
             "calendar_integration_id",
             name="uq_task_external_integration",
+        ),
+        UniqueConstraint(
+            "list_id",
+            "aggregation_key_name",
+            "aggregation_unit_group",
+            name="uq_task_ingredient_aggregate",
         ),
     )
 
@@ -165,25 +189,81 @@ class Recipe(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
-    meal_plans = relationship("MealPlan", back_populates="recipe")
+    meal_entries = relationship("MealEntry", back_populates="recipe")
 
 
-class MealPlan(Base):
-    __tablename__ = "meal_plans"
+class MealSlotType(Base):
+    __tablename__ = "meal_slot_types"
 
     id = Column(Integer, primary_key=True, index=True)
-    date = Column(Date, index=True, nullable=False)
-    category = Column(SQLEnum(MealCategory), nullable=False)
-    recipe_id = Column(
-        Integer, ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True
-    )
-    custom_meal_name = Column(String, nullable=True)
-    was_cooked = Column(Boolean, default=False)
-    notes = Column(String, nullable=True)
+    name = Column(String, nullable=False)
+    sort_order = Column(Integer, nullable=False, default=0)
+    color = Column(String, nullable=True)  # Hex color for badge/swimlane
+    icon = Column(String, nullable=True)  # Emoji or icon name
+    is_default = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    default_participants = Column(JSON, nullable=True)  # Array of family_member_ids; [] = everyone
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
-    recipe = relationship("Recipe", back_populates="meal_plans")
+    meal_entries = relationship("MealEntry", back_populates="meal_slot_type")
+
+
+class FoodItem(Base):
+    __tablename__ = "food_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, unique=True, nullable=False)
+    emoji = Column(String, nullable=True)
+    category = Column(String, nullable=True)  # fruit, dairy, grain, protein, vegetable
+    is_favorite = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    meal_entries = relationship("MealEntry", back_populates="food_item")
+
+
+class MealEntry(Base):
+    __tablename__ = "meal_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True, nullable=False)
+    meal_slot_type_id = Column(
+        Integer, ForeignKey("meal_slot_types.id", ondelete="RESTRICT"), nullable=False
+    )
+    recipe_id = Column(
+        Integer, ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True
+    )
+    food_item_id = Column(
+        Integer, ForeignKey("food_items.id", ondelete="SET NULL"), nullable=True
+    )
+    custom_meal_name = Column(String, nullable=True)
+    item_type = Column(String, nullable=False)  # "recipe", "food_item", or "custom"
+    servings = Column(Integer, nullable=True)
+    was_cooked = Column(Boolean, default=False)
+    notes = Column(String, nullable=True)
+    sort_order = Column(Integer, default=0, nullable=False)
+    shopping_sync_status = Column(String, nullable=True)  # "synced", "pending", "failed"
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    meal_slot_type = relationship("MealSlotType", back_populates="meal_entries")
+    recipe = relationship("Recipe", back_populates="meal_entries")
+    food_item = relationship("FoodItem", back_populates="meal_entries")
+    participants = relationship(
+        "FamilyMember",
+        secondary="meal_entry_participants",
+        backref="meal_entries",
+    )
+
+
+# Junction table for meal entry ↔ family member (per-person meals)
+meal_entry_participants = Table(
+    "meal_entry_participants",
+    Base.metadata,
+    Column("meal_entry_id", Integer, ForeignKey("meal_entries.id", ondelete="CASCADE"), primary_key=True),
+    Column("family_member_id", Integer, ForeignKey("family_members.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class CalendarIntegration(Base):
@@ -299,6 +379,12 @@ class AppSettings(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     timezone = Column(String, nullable=False, default="UTC")
+    # Mealboard settings
+    week_start_day = Column(String, nullable=False, default="monday")  # "monday" or "sunday"
+    measurement_system = Column(String, nullable=False, default="imperial")  # "imperial" or "metric"
+    mealboard_shopping_list_id = Column(
+        Integer, ForeignKey("lists.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
