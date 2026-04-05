@@ -1,87 +1,250 @@
-const CATEGORY_COLORS = {
-  BREAKFAST: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  LUNCH: 'bg-sage-100 text-sage-700 dark:bg-green-900/30 dark:text-green-400',
-  DINNER: 'bg-peach-100 text-terracotta-700 dark:bg-orange-900/30 dark:text-orange-400'
-}
+import { useState } from 'react'
+import axios from 'axios'
+import MemberAvatar from '../shared/MemberAvatar'
 
-export default function MealCard({ meal, recipe, onToggleCooked, onDelete }) {
-  const mealName = recipe?.name || meal.custom_meal_name || 'Unnamed meal'
-  const cookTime = recipe?.cook_time_minutes
-  const isFavorite = recipe?.is_favorite
-  const categoryColor = CATEGORY_COLORS[meal.category] || CATEGORY_COLORS.DINNER
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-  return (
-    <div className={`meal-card meal-card-row-view relative p-3 rounded-xl border transition-all ${
-      meal.was_cooked
-        ? 'meal-card-cooked bg-sage-50 dark:bg-green-900/20 border-sage-200 dark:border-green-800'
-        : 'bg-card-bg dark:bg-gray-800 border-card-border dark:border-gray-700 hover:shadow-md'
-    }`}>
-      {/* Category Badge */}
-      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full mb-2 ${categoryColor}`}>
-        {meal.category}
-      </span>
+/**
+ * Meal card for the swimlane grid.
+ * Has 3 variants: recipe (full card), food_item (lighter), custom (text only).
+ * All variants support cooked state + participant avatars + hover actions.
+ */
+export default function MealCard({ entry, slotType, familyMembers, onUpdated, onDeleted }) {
+  const [isWorking, setIsWorking] = useState(false)
 
-      {/* Meal Name */}
-      <h4 className={`font-medium text-sm leading-tight mb-2 ${
-        meal.was_cooked
-          ? 'text-text-secondary dark:text-gray-400'
-          : 'text-text-primary dark:text-gray-100'
-      }`}>
-        {mealName}
-      </h4>
+  const isRecipe = entry.item_type === 'recipe' && entry.recipe
+  const isFoodItem = entry.item_type === 'food_item' && entry.food_item
+  const isCustom = entry.item_type === 'custom'
 
-      {/* Meta Info */}
-      <div className="flex items-center gap-2 text-xs text-text-muted dark:text-gray-500">
-        {cookTime && (
-          <span className="flex items-center gap-1">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {cookTime} min
-          </span>
+  const displayName =
+    (isRecipe && entry.recipe.name) ||
+    (isFoodItem && entry.food_item.name) ||
+    entry.custom_meal_name ||
+    'Untitled meal'
+
+  const emoji = isFoodItem ? entry.food_item.emoji : null
+  const cookTime = isRecipe ? entry.recipe.cook_time_minutes : null
+  const isFavorite = isRecipe ? entry.recipe.is_favorite : false
+
+  // Participant display logic: if all household members → show "Everyone" badge
+  // Otherwise show avatars
+  const participants = entry.participants || []
+  const allMembers = familyMembers.filter((m) => !m.is_system)
+  const isEveryone =
+    participants.length === 0 ||
+    (participants.length === allMembers.length && allMembers.length > 0)
+
+  const handleToggleCooked = async (e) => {
+    e.stopPropagation()
+    if (isWorking) return
+    setIsWorking(true)
+    try {
+      const res = await axios.patch(`${API_BASE}/meal-entries/${entry.id}`, {
+        was_cooked: !entry.was_cooked,
+      })
+      onUpdated(res.data)
+    } catch (err) {
+      console.error('Failed to toggle cooked:', err)
+    } finally {
+      setIsWorking(false)
+    }
+  }
+
+  const handleDelete = async (e) => {
+    e.stopPropagation()
+    if (isWorking) return
+    setIsWorking(true)
+    try {
+      await axios.delete(`${API_BASE}/meal-entries/${entry.id}`)
+      onDeleted(entry.id)
+    } catch (err) {
+      console.error('Failed to delete meal:', err)
+      setIsWorking(false)
+    }
+  }
+
+  // Food item variant: lighter, translucent
+  if (isFoodItem) {
+    return (
+      <div
+        className={`
+          group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg
+          bg-white/65 dark:bg-white/10
+          hover:bg-white/90 dark:hover:bg-white/15
+          text-xs font-medium text-text-secondary dark:text-gray-300
+          transition-all
+          ${entry.was_cooked ? 'opacity-60' : ''}
+        `}
+      >
+        {emoji && <span className="text-sm leading-none">{emoji}</span>}
+        <span className={`flex-1 truncate ${entry.was_cooked ? 'line-through' : ''}`}>
+          {displayName}
+        </span>
+
+        {/* Participant mini-avatars */}
+        {!isEveryone && participants.length > 0 && (
+          <div className="flex -space-x-1">
+            {participants.slice(0, 3).map((p) => (
+              <MemberAvatar
+                key={p.id}
+                name={p.name}
+                photoUrl={p.photo_url}
+                color={p.color}
+                size="xs"
+                className="ring-2 ring-white dark:ring-gray-800"
+              />
+            ))}
+          </div>
         )}
-        {isFavorite && (
-          <span className="px-1.5 py-0.5 bg-terracotta-100 dark:bg-blue-900/30 text-terracotta-600 dark:text-blue-400 rounded text-xs">
-            Favorite
-          </span>
-        )}
+
+        <HoverActions
+          wasCooked={entry.was_cooked}
+          onToggleCooked={handleToggleCooked}
+          onDelete={handleDelete}
+          isWorking={isWorking}
+        />
       </div>
+    )
+  }
 
-      {/* Notes */}
-      {meal.notes && (
-        <p className="mt-2 text-xs text-text-muted dark:text-gray-500 italic">
-          {meal.notes}
-        </p>
+  // Recipe + Custom variants: full white card
+  return (
+    <div
+      className={`
+        group relative rounded-xl border border-card-border/60 dark:border-gray-700
+        bg-card-bg dark:bg-gray-800
+        p-2 transition-all
+        hover:shadow-md
+        ${entry.was_cooked ? 'bg-sage-50 dark:bg-green-900/10' : ''}
+      `}
+    >
+      {/* Cooked badge (top-right) */}
+      {entry.was_cooked && (
+        <div
+          className="
+            absolute top-1.5 right-1.5 w-5 h-5 rounded-full
+            bg-gradient-to-br from-sage-500 to-sage-600
+            dark:from-green-500 dark:to-green-600
+            text-white text-xs font-bold
+            flex items-center justify-center shadow
+          "
+        >
+          ✓
+        </div>
       )}
 
-      {/* Actions - Bottom of card, visible on hover */}
-      <div className="meal-card-actions absolute bottom-2 left-3 right-3 flex items-center justify-end gap-1">
-        {/* Cooked Toggle */}
-        <button
-          onClick={onToggleCooked}
-          className={`p-1.5 rounded-full transition-colors ${
-            meal.was_cooked
-              ? 'bg-sage-500 text-white'
-              : 'bg-warm-sand dark:bg-gray-700 text-text-muted dark:text-gray-500 hover:bg-sage-100 dark:hover:bg-green-900/30 hover:text-sage-600 dark:hover:text-green-400'
-          }`}
-          title={meal.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </button>
-
-        {/* Delete */}
-        <button
-          onClick={onDelete}
-          className="p-1.5 rounded-full bg-warm-sand dark:bg-gray-700 text-text-muted dark:text-gray-500 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-500 transition-colors"
-          title="Remove meal"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+      {/* Name */}
+      <div
+        className={`
+          text-xs font-semibold leading-tight pr-6
+          text-text-primary dark:text-gray-100
+          ${entry.was_cooked ? 'line-through text-sage-600 dark:text-green-500' : ''}
+        `}
+      >
+        {displayName}
       </div>
+
+      {/* Meta: cook time + favorite */}
+      {(cookTime || isFavorite) && (
+        <div className="flex items-center gap-1.5 mt-1 text-[10px] text-text-muted dark:text-gray-400">
+          {cookTime && (
+            <span className="flex items-center gap-0.5">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="10" />
+                <path strokeLinecap="round" d="M12 6v6l4 2" />
+              </svg>
+              {cookTime}m
+            </span>
+          )}
+          {isFavorite && (
+            <span className="px-1.5 py-0.5 rounded bg-gradient-to-r from-terracotta-500 to-peach-200 dark:from-blue-600 dark:to-blue-400 text-white text-[9px] font-bold">
+              ★ FAV
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Notes */}
+      {entry.notes && (
+        <div className="mt-1 text-[10px] italic text-text-muted dark:text-gray-400 line-clamp-1">
+          {entry.notes}
+        </div>
+      )}
+
+      {/* Footer: participants + actions */}
+      <div className="flex items-center justify-between mt-1.5">
+        {isEveryone ? (
+          <span className="text-[9px] font-semibold text-text-muted dark:text-gray-400 px-1.5 py-0.5 bg-warm-beige dark:bg-gray-700 rounded">
+            Everyone
+          </span>
+        ) : (
+          <div className="flex -space-x-1">
+            {participants.slice(0, 4).map((p) => (
+              <MemberAvatar
+                key={p.id}
+                name={p.name}
+                photoUrl={p.photo_url}
+                color={p.color}
+                size="xs"
+                className="ring-2 ring-card-bg dark:ring-gray-800"
+              />
+            ))}
+            {participants.length > 4 && (
+              <span className="text-[9px] text-text-muted ml-0.5 self-center">
+                +{participants.length - 4}
+              </span>
+            )}
+          </div>
+        )}
+
+        <HoverActions
+          wasCooked={entry.was_cooked}
+          onToggleCooked={handleToggleCooked}
+          onDelete={handleDelete}
+          isWorking={isWorking}
+        />
+      </div>
+    </div>
+  )
+}
+
+function HoverActions({ wasCooked, onToggleCooked, onDelete, isWorking }) {
+  return (
+    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <button
+        type="button"
+        onClick={onToggleCooked}
+        disabled={isWorking}
+        title={wasCooked ? 'Mark as not cooked' : 'Mark as cooked'}
+        aria-label={wasCooked ? 'Mark as not cooked' : 'Mark as cooked'}
+        className="
+          p-1 rounded text-text-muted dark:text-gray-500
+          hover:text-sage-600 dark:hover:text-green-400
+          hover:bg-sage-50 dark:hover:bg-green-900/20
+          transition-colors disabled:opacity-50
+        "
+      >
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={isWorking}
+        title="Delete"
+        aria-label="Delete meal"
+        className="
+          p-1 rounded text-text-muted dark:text-gray-500
+          hover:text-red-600 dark:hover:text-red-400
+          hover:bg-red-50 dark:hover:bg-red-900/20
+          transition-colors disabled:opacity-50
+        "
+      >
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
   )
 }

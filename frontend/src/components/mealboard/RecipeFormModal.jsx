@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
+import UnitCombobox from './UnitCombobox'
 
-const UNITS = ['cups', 'tbsp', 'tsp', 'oz', 'lb', 'g', 'kg', 'ml', 'L', 'pieces', 'cloves', 'slices', 'whole']
 const INGREDIENT_CATEGORIES = ['Produce', 'Protein', 'Dairy', 'Pantry', 'Frozen', 'Bakery', 'Beverages', 'Other']
 
 const emptyIngredient = { name: '', quantity: '', unit: '', category: 'Pantry' }
@@ -68,6 +68,10 @@ export default function RecipeFormModal({ isOpen, onClose, onSubmit, recipe }) {
   const handleIngredientChange = (index, field, value) => {
     const newIngredients = [...formData.ingredients]
     newIngredients[index] = { ...newIngredients[index], [field]: value }
+    // Clear quantity when unit is cleared (pantry staples have no quantity)
+    if (field === 'unit' && !value) {
+      newIngredients[index].quantity = ''
+    }
     setFormData(prev => ({ ...prev, ingredients: newIngredients }))
   }
 
@@ -214,21 +218,19 @@ export default function RecipeFormModal({ isOpen, onClose, onSubmit, recipe }) {
                               type="number"
                               value={ingredient.quantity}
                               onChange={(e) => handleIngredientChange(index, 'quantity', e.target.value)}
-                              className="col-span-2 px-3 py-2 border border-card-border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
-                              placeholder="Qty"
+                              disabled={!ingredient.unit}
+                              className="col-span-2 px-3 py-2 border border-card-border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500 disabled:bg-warm-beige disabled:text-text-muted dark:disabled:bg-gray-800 dark:disabled:text-gray-500 disabled:cursor-not-allowed"
+                              placeholder={ingredient.unit ? 'Qty' : '—'}
+                              title={ingredient.unit ? 'Quantity' : 'Select a unit first'}
                               step="0.1"
                               min="0"
                             />
-                            <select
-                              value={ingredient.unit}
-                              onChange={(e) => handleIngredientChange(index, 'unit', e.target.value)}
-                              className="col-span-2 px-2 py-2 border border-card-border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
-                            >
-                              <option value="">Unit</option>
-                              {UNITS.map(unit => (
-                                <option key={unit} value={unit}>{unit}</option>
-                              ))}
-                            </select>
+                            <div className="col-span-2">
+                              <UnitCombobox
+                                value={ingredient.unit || null}
+                                onChange={(unit) => handleIngredientChange(index, 'unit', unit || '')}
+                              />
+                            </div>
                             <select
                               value={ingredient.category}
                               onChange={(e) => handleIngredientChange(index, 'category', e.target.value)}
