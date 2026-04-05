@@ -3,6 +3,7 @@ import Sidebar from '../components/layout/Sidebar'
 import FamilyMemberManager from '../components/family-members/FamilyMemberManager'
 import TimezoneSettings from '../components/settings/TimezoneSettings'
 import ICloudSettings from '../components/settings/ICloudSettings'
+import MealboardSettings from '../components/settings/MealboardSettings'
 import usePageTitle from '../hooks/usePageTitle'
 
 export default function FamilyMembersPage() {
@@ -13,7 +14,7 @@ export default function FamilyMembersPage() {
       <Sidebar />
       <Header />
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-text-primary dark:text-gray-100 tracking-tight mb-6 sm:mb-8">
           Settings
         </h1>
@@ -37,6 +38,13 @@ export default function FamilyMembersPage() {
             Calendar Integrations
           </h2>
           <ICloudSettings />
+        </div>
+
+        <div className="bg-card-bg dark:bg-gray-800 rounded-xl border border-card-border dark:border-gray-700 p-6 mt-6">
+          <h2 className="text-lg font-semibold text-text-primary dark:text-gray-100 mb-4">
+            Mealboard
+          </h2>
+          <MealboardSettings />
         </div>
       </main>
     </div>

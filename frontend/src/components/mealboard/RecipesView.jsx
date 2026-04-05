@@ -5,10 +5,58 @@ import MealboardNav from './MealboardNav'
 import RecipeCard from './RecipeCard'
 import RecipeFormModal from './RecipeFormModal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import FoodItemsView from './FoodItemsView'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function RecipesView() {
+  const [activeTab, setActiveTab] = useState('recipes') // 'recipes' | 'food-items'
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Mobile Navigation */}
+      <div className="xl:hidden px-4 py-3 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
+        <MealboardNav variant="dropdown" />
+      </div>
+
+      {/* Tab toggle */}
+      <div className="px-4 sm:px-6 lg:px-8 pt-4 flex items-center gap-1 border-b border-card-border dark:border-gray-700 bg-card-bg/30 dark:bg-gray-800/30">
+        <button
+          type="button"
+          onClick={() => setActiveTab('recipes')}
+          className={`
+            px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
+            ${
+              activeTab === 'recipes'
+                ? 'text-terracotta-600 dark:text-blue-400 border-terracotta-500 dark:border-blue-500'
+                : 'text-text-muted dark:text-gray-400 border-transparent hover:text-text-secondary dark:hover:text-gray-300'
+            }
+          `}
+        >
+          Recipes
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('food-items')}
+          className={`
+            px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
+            ${
+              activeTab === 'food-items'
+                ? 'text-terracotta-600 dark:text-blue-400 border-terracotta-500 dark:border-blue-500'
+                : 'text-text-muted dark:text-gray-400 border-transparent hover:text-text-secondary dark:hover:text-gray-300'
+            }
+          `}
+        >
+          Food Items
+        </button>
+      </div>
+
+      {activeTab === 'recipes' ? <RecipesTab /> : <FoodItemsView />}
+    </div>
+  )
+}
+
+function RecipesTab() {
   const [recipes, setRecipes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -118,18 +166,11 @@ export default function RecipesView() {
     })
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      {/* Mobile Navigation */}
-      <div className="xl:hidden px-4 py-3 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
-        <MealboardNav variant="dropdown" />
-      </div>
-
+    <>
       {/* Header */}
       <div className="px-4 sm:px-6 lg:px-8 py-6 border-b border-card-border dark:border-gray-700">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl font-bold text-text-primary dark:text-gray-100">
-            Recipes
-          </h1>
+          <div /> {/* Spacer (title now comes from tab) */}
           <button
             onClick={() => setIsFormOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-terracotta-500 hover:bg-terracotta-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
@@ -223,9 +264,9 @@ export default function RecipesView() {
         onConfirm={handleDeleteRecipe}
         title="Delete Recipe"
         message={`Are you sure you want to delete "${deleteConfirm.recipe?.name}"? This action cannot be undone.`}
-        confirmText="Delete"
-        confirmVariant="danger"
+        confirmLabel="Delete"
+        variant="danger"
       />
-    </div>
+    </>
   )
 }
