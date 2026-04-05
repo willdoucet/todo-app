@@ -8,6 +8,9 @@ import ProgressTracker from './ProgressTracker'
 import FamilyStrip from './FamilyStrip'
 import ShoppingCard from './ShoppingCard'
 import AddMealPopover from './AddMealPopover'
+import WelcomeCard from './WelcomeCard'
+
+const WELCOME_DISMISSED_KEY = 'mealboard_welcome_dismissed'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -68,6 +71,16 @@ export default function MealPlannerView() {
   const [isCompactMode, setIsCompactMode] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   )
+
+  // Welcome card dismissal (tracked in localStorage)
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() =>
+    typeof window !== 'undefined' ? !!localStorage.getItem(WELCOME_DISMISSED_KEY) : true
+  )
+
+  const dismissWelcome = () => {
+    localStorage.setItem(WELCOME_DISMISSED_KEY, '1')
+    setWelcomeDismissed(true)
+  }
 
   // Load initial data
   useEffect(() => {
@@ -154,6 +167,23 @@ export default function MealPlannerView() {
   const handleMealCreated = (newEntry) => {
     setMealEntries((prev) => [...prev, newEntry])
     setAddMealContext(null)
+    // Auto-dismiss welcome card after first meal is added
+    if (!welcomeDismissed) {
+      dismissWelcome()
+    }
+  }
+
+  const handleAddFirstMeal = () => {
+    // Open add meal for today's dinner (or first available slot) to make onboarding easy
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const todayInWeek = weekDates.find(
+      (d) => d.toDateString() === today.toDateString()
+    ) || weekDates[0]
+    const dinnerSlot = slotTypes.find((s) => s.name.toLowerCase().includes('dinner')) || slotTypes[0]
+    if (dinnerSlot) {
+      setAddMealContext({ date: todayInWeek, slotTypeId: dinnerSlot.id })
+    }
   }
 
   const handleMealDeleted = (entryId) => {
@@ -217,11 +247,20 @@ export default function MealPlannerView() {
           selectedId={filterFamilyMemberId}
           onSelect={handleFamilyFilterToggle}
         />
-        <ShoppingCard settings={settings} onSettingsChange={setSettings} />
+        <ShoppingCard
+          settings={settings}
+          onSettingsChange={setSettings}
+          mealEntries={mealEntries}
+          onRetrySync={fetchMealEntries}
+        />
       </div>
 
       {/* Swimlane grid */}
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4">
+        {/* Welcome card — shown only on empty mealboard when not dismissed */}
+        {!loading && !welcomeDismissed && mealEntries.length === 0 && slotTypes.length > 0 && (
+          <WelcomeCard onDismiss={dismissWelcome} onAddFirst={handleAddFirstMeal} />
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-8 h-8 border-2 border-terracotta-500 dark:border-blue-500 border-t-transparent rounded-full animate-spin" />

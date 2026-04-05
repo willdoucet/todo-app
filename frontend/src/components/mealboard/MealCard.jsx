@@ -68,6 +68,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     return (
       <div
         className={`
+          meal-card-enter
           group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg
           bg-white/65 dark:bg-white/10
           hover:bg-white/90 dark:hover:bg-white/15
@@ -111,6 +112,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
   return (
     <div
       className={`
+        meal-card-enter
         group relative rounded-xl border border-card-border/60 dark:border-gray-700
         bg-card-bg dark:bg-gray-800
         p-2 transition-all
@@ -122,6 +124,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
       {entry.was_cooked && (
         <div
           className="
+            bounce-in
             absolute top-1.5 right-1.5 w-5 h-5 rounded-full
             bg-gradient-to-br from-sage-500 to-sage-600
             dark:from-green-500 dark:to-green-600

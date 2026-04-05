@@ -91,6 +91,58 @@ body {
   }
 }
 
+/* Swimlane entrance — staggered fade + slide up */
+@keyframes swimlane-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.swimlane-enter {
+  animation: swimlane-enter 0.4s ease-out both;
+}
+
+/* Meal card enter — fade + scale up */
+@keyframes meal-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.meal-card-enter {
+  animation: meal-card-enter 0.25s ease-out both;
+}
+
+/* Cooked checkmark badge — bounce in */
+@keyframes bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.bounce-in {
+  animation: bounce-in 0.3s ease-out both;
+}
+
 /* Meal Calendar - Responsive layout */
 .meal-calendar {
   display: flex;

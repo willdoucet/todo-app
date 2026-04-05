@@ -75,14 +75,22 @@ export default function SwimlaneGrid({
   }
 
   return (
-    <div>
+    <div role="grid" aria-label="Weekly meal plan">
       {/* Day headers */}
-      <div className="grid grid-cols-[80px_repeat(7,1fr)] gap-0 mb-2 sm:grid-cols-[100px_repeat(7,1fr)]">
-        <div /> {/* Spacer for slot label column */}
+      <div
+        className="grid grid-cols-[80px_repeat(7,1fr)] gap-0 mb-2 sm:grid-cols-[100px_repeat(7,1fr)]"
+        role="row"
+      >
+        <div role="columnheader" /> {/* Spacer for slot label column */}
         {weekDates.map((date) => {
           const isToday = isSameDay(date, today)
           return (
-            <div key={date.toISOString()} className="text-center px-1 py-2">
+            <div
+              key={date.toISOString()}
+              className="text-center px-1 py-2"
+              role="columnheader"
+              aria-label={date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            >
               <div
                 className={`text-[10px] font-semibold uppercase tracking-wider ${
                   isToday ? 'text-terracotta-500 dark:text-blue-400' : 'text-text-muted dark:text-gray-400'
@@ -115,7 +123,7 @@ export default function SwimlaneGrid({
 
       {/* Swimlane rows */}
       <div className="space-y-2">
-        {slotTypes.map((slot) => {
+        {slotTypes.map((slot, idx) => {
           const slotColor = slot.color || '#9CA3AF'
           const gradient = `linear-gradient(135deg, ${slotColor}14, ${slotColor}1F)` // 14/1F alpha hex
 
@@ -123,6 +131,7 @@ export default function SwimlaneGrid({
             <div
               key={slot.id}
               className="
+                swimlane-enter
                 grid grid-cols-[80px_repeat(7,1fr)]
                 sm:grid-cols-[100px_repeat(7,1fr)]
                 rounded-2xl overflow-hidden border
@@ -131,12 +140,16 @@ export default function SwimlaneGrid({
               style={{
                 background: gradient,
                 borderColor: `${slotColor}40`,
+                animationDelay: `${idx * 70}ms`,
               }}
+              role="row"
+              aria-label={slot.name}
             >
               {/* Left rail label */}
               <div
                 className="flex flex-col items-center justify-center gap-1 py-3 px-2 border-r"
                 style={{ borderColor: `${slotColor}40` }}
+                role="rowheader"
               >
                 {slot.icon && <span className="text-lg leading-none">{slot.icon}</span>}
                 <span
@@ -188,6 +201,7 @@ function LaneCell({ date, slotType, entries, familyMembers, isToday, isLast, onA
     onAddMeal(date, slotType.id, rect)
   }
 
+  const cellLabel = `${slotType.name}, ${date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
   return (
     <div
       className={`
@@ -195,6 +209,8 @@ function LaneCell({ date, slotType, entries, familyMembers, isToday, isLast, onA
         ${!isLast ? 'border-r border-black/5 dark:border-white/5' : ''}
         ${isToday ? 'bg-white/30 dark:bg-white/5' : ''}
       `}
+      role="gridcell"
+      aria-label={`${cellLabel}${hasMeals ? `, ${entries.length} meal${entries.length === 1 ? '' : 's'}` : ', empty'}`}
     >
       {hasMeals ? (
         <>
