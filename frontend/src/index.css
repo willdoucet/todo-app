@@ -143,100 +143,51 @@ body {
   animation: bounce-in 0.3s ease-out both;
 }
 
-/* Meal Calendar - Responsive layout */
-.meal-calendar {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow-y: auto;
+/* Recipe card entrance — staggered fade + slide up */
+@keyframes recipe-card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-@media (min-width: 768px) {
-  .meal-calendar {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
+/* Recipe row entrance — staggered fade + slide right */
+@keyframes recipe-row-enter {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-/* Day column responsive borders */
-.meal-day-column {
-  border-bottom: 1px solid var(--color-card-border);
+/* View crossfade — fade in incoming view */
+@keyframes view-crossfade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.meal-day-column:last-child {
-  border-bottom: none;
+/* Popover/menu scale pop — 150ms fade + scale from 95% to 100% */
+@keyframes scale-pop {
+  from { transform: scale(0.95); }
+  to { transform: scale(1); }
 }
 
-@media (min-width: 768px) {
-  .meal-day-column {
-    border-bottom: none;
-    border-right: 1px solid var(--color-card-border);
-  }
-
-  .meal-day-column:last-child {
-    border-right: none;
-  }
+/* Recipe grid responsive — fixed column counts at breakpoints */
+@media (max-width: 1099px) {
+  .recipe-grid-responsive { grid-template-columns: repeat(4, 1fr) !important; }
+}
+@media (max-width: 799px) {
+  .recipe-grid-responsive { grid-template-columns: repeat(3, 1fr) !important; }
+}
+@media (max-width: 499px) {
+  .recipe-grid-responsive { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 399px) {
+  .recipe-grid-responsive { grid-template-columns: 1fr !important; }
 }
 
-.dark .meal-day-column {
-  border-color: #374151;
+/* Hide scrollbar for horizontal tag chip scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-
-/* Right panel breakpoint - show at 1525px+ */
-.right-panel-desktop {
+.scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
 
-@media (min-width: 1525px) {
-  .right-panel-desktop {
-    display: block;
-  }
-}
 
-/* Right panel toggle button - hide at 1525px+ */
-.right-panel-toggle {
-  display: block;
-}
-
-@media (min-width: 1525px) {
-  .right-panel-toggle {
-    display: none;
-  }
-}
-
-/* Mobile right panel overlay - hide at 1525px+ */
-.right-panel-mobile-overlay {
-  display: block;
-}
-
-@media (min-width: 1525px) {
-  .right-panel-mobile-overlay {
-    display: none;
-  }
-}
-
-/* MealCard - row calendar view (>=768px) fixed height */
-@media (min-width: 768px) {
-  .meal-card-row-view {
-    height: 150px;
-  }
-}
-
-/* MealCard actions - hover visibility */
-.meal-card-actions {
-  opacity: 0;
-  transition: opacity 150ms ease-in-out;
-}
-
-.meal-card:hover .meal-card-actions,
-.meal-card:focus-within .meal-card-actions,
-.meal-card-actions:focus-within {
-  opacity: 1;
-}
-
-/* Keep actions visible if meal is already cooked */
-.meal-card-cooked .meal-card-actions {
-  opacity: 1;
-}
