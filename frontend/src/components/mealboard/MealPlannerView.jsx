@@ -9,6 +9,8 @@ import FamilyStrip from './FamilyStrip'
 import ShoppingCard from './ShoppingCard'
 import AddMealPopover from './AddMealPopover'
 import WelcomeCard from './WelcomeCard'
+import RecipeDetailDrawer from './RecipeDetailDrawer'
+import useDelayedFlag from '../../hooks/useDelayedFlag'
 
 const WELCOME_DISMISSED_KEY = 'mealboard_welcome_dismissed'
 
@@ -40,14 +42,6 @@ function formatDateKey(date) {
   return `${y}-${m}-${d}`
 }
 
-function formatCurrentDate() {
-  return new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  })
-}
-
 export default function MealPlannerView() {
   // Data state
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -59,23 +53,31 @@ export default function MealPlannerView() {
   const [recipes, setRecipes] = useState([])
   const [foodItems, setFoodItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [initialLoaded, setInitialLoaded] = useState(false)
 
   // Filter state
   const [filterFamilyMemberId, setFilterFamilyMemberId] = useState(null)
 
-  // Add meal popover state
+  // Add meal popover state — context persists across close so the leave animation
+  // still has data to render; parent clears it in the Transition.Root afterLeave hook.
   const [addMealContext, setAddMealContext] = useState(null)
-  // Shape: { date: Date, slotTypeId: number, anchorRect?: DOMRect }
+  const [isAddMealOpen, setIsAddMealOpen] = useState(false)
 
   // Compact mode for small screens
   const [isCompactMode, setIsCompactMode] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   )
 
+  // Delayed spinner — only shows for genuinely slow loads (>200ms)
+  const showSpinner = useDelayedFlag(!initialLoaded || loading, 200)
+
   // Welcome card dismissal (tracked in localStorage)
   const [welcomeDismissed, setWelcomeDismissed] = useState(() =>
     typeof window !== 'undefined' ? !!localStorage.getItem(WELCOME_DISMISSED_KEY) : true
   )
+
+  // Recipe drawer state
+  const [drawerRecipeId, setDrawerRecipeId] = useState(null)
 
   const dismissWelcome = () => {
     localStorage.setItem(WELCOME_DISMISSED_KEY, '1')
@@ -107,6 +109,8 @@ export default function MealPlannerView() {
       setWeekDates(dates)
     } catch (err) {
       console.error('Failed to load initial data:', err)
+    } finally {
+      setInitialLoaded(true)
     }
   }
 
@@ -156,17 +160,24 @@ export default function MealPlannerView() {
     setWeekDates(getWeekDates(newDate, settings?.week_start_day || 'monday'))
   }
 
+  const handleGoToToday = () => {
+    const today = new Date()
+    setCurrentDate(today)
+    setWeekDates(getWeekDates(today, settings?.week_start_day || 'monday'))
+  }
+
   const handleOpenAddMeal = (date, slotTypeId, anchorRect) => {
     setAddMealContext({ date, slotTypeId, anchorRect })
+    setIsAddMealOpen(true)
   }
 
   const handleCloseAddMeal = () => {
-    setAddMealContext(null)
+    setIsAddMealOpen(false)
   }
 
   const handleMealCreated = (newEntry) => {
     setMealEntries((prev) => [...prev, newEntry])
-    setAddMealContext(null)
+    setIsAddMealOpen(false)
     // Auto-dismiss welcome card after first meal is added
     if (!welcomeDismissed) {
       dismissWelcome()
@@ -183,6 +194,7 @@ export default function MealPlannerView() {
     const dinnerSlot = slotTypes.find((s) => s.name.toLowerCase().includes('dinner')) || slotTypes[0]
     if (dinnerSlot) {
       setAddMealContext({ date: todayInWeek, slotTypeId: dinnerSlot.id })
+      setIsAddMealOpen(true)
     }
   }
 
@@ -201,26 +213,20 @@ export default function MealPlannerView() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-4 sm:px-6 lg:px-8 py-4 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
-        {/* Desktop header (>=1200px) */}
-        <div className="hidden xl:flex xl:items-center">
-          <div className="flex flex-col">
-            <span className="text-sm text-text-muted dark:text-gray-400">
-              {formatCurrentDate()}
-            </span>
-            <h1 className="text-2xl font-bold text-text-primary dark:text-gray-100">
-              What's Cooking?
-            </h1>
-          </div>
-          <div className="flex-1 flex justify-center">
-            <WeekSelector
-              weekDates={weekDates}
-              onPrevWeek={handlePrevWeek}
-              onNextWeek={handleNextWeek}
-              compact={false}
-            />
-          </div>
-          <div className="w-32" />
+      <div className="px-4 sm:px-6 lg:px-8 py-2.5 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
+        {/* Desktop header (>=1200px) — single row */}
+        <div className="hidden xl:flex xl:items-center xl:gap-6">
+          <h1 className="text-xl font-bold text-terracotta-600 dark:text-blue-400 tracking-tight">
+            What's Cooking?
+          </h1>
+          <div className="flex-1" />
+          <WeekSelector
+            weekDates={weekDates}
+            onPrevWeek={handlePrevWeek}
+            onNextWeek={handleNextWeek}
+            onToday={handleGoToToday}
+            compact={false}
+          />
         </div>
 
         {/* Mobile/Tablet header */}
@@ -233,6 +239,7 @@ export default function MealPlannerView() {
               weekDates={weekDates}
               onPrevWeek={handlePrevWeek}
               onNextWeek={handleNextWeek}
+              onToday={handleGoToToday}
               compact={isCompactMode}
             />
           </div>
@@ -240,19 +247,21 @@ export default function MealPlannerView() {
         </div>
       </div>
 
-      {/* Family strip + Shopping card */}
-      <div className="px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row gap-3 border-b border-card-border dark:border-gray-700">
+      {/* Family strip + Shopping card — family left, shopping always right */}
+      <div className="px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-2.5 border-b border-card-border dark:border-gray-700">
         <FamilyStrip
           familyMembers={familyMembers}
           selectedId={filterFamilyMemberId}
           onSelect={handleFamilyFilterToggle}
         />
-        <ShoppingCard
-          settings={settings}
-          onSettingsChange={setSettings}
-          mealEntries={mealEntries}
-          onRetrySync={fetchMealEntries}
-        />
+        <div className="ml-auto">
+          <ShoppingCard
+            settings={settings}
+            onSettingsChange={setSettings}
+            mealEntries={mealEntries}
+            onRetrySync={fetchMealEntries}
+          />
+        </div>
       </div>
 
       {/* Swimlane grid */}
@@ -261,31 +270,37 @@ export default function MealPlannerView() {
         {!loading && !welcomeDismissed && mealEntries.length === 0 && slotTypes.length > 0 && (
           <WelcomeCard onDismiss={dismissWelcome} onAddFirst={handleAddFirstMeal} />
         )}
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-2 border-terracotta-500 dark:border-blue-500 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : isCompactMode ? (
-          <MobileDayView
-            weekDates={weekDates}
-            slotTypes={slotTypes}
-            mealEntries={mealEntries}
-            familyMembers={familyMembers}
-            onAddMeal={handleOpenAddMeal}
-            onMealUpdated={handleMealUpdated}
-            onMealDeleted={handleMealDeleted}
-          />
-        ) : (
-          <SwimlaneGrid
-            weekDates={weekDates}
-            slotTypes={slotTypes}
-            mealEntries={mealEntries}
-            familyMembers={familyMembers}
-            onAddMeal={handleOpenAddMeal}
-            onMealUpdated={handleMealUpdated}
-            onMealDeleted={handleMealDeleted}
-          />
-        )}
+        {/* Content renders from frame zero — no conditional spinner gate */}
+        <div className="relative">
+          {isCompactMode ? (
+            <MobileDayView
+              weekDates={weekDates}
+              slotTypes={slotTypes}
+              mealEntries={mealEntries}
+              familyMembers={familyMembers}
+              onAddMeal={handleOpenAddMeal}
+              onMealUpdated={handleMealUpdated}
+              onMealDeleted={handleMealDeleted}
+            />
+          ) : (
+            <SwimlaneGrid
+              weekDates={weekDates}
+              slotTypes={slotTypes}
+              mealEntries={mealEntries}
+              familyMembers={familyMembers}
+              onAddMeal={handleOpenAddMeal}
+              onMealUpdated={handleMealUpdated}
+              onMealDeleted={handleMealDeleted}
+              onViewRecipe={(recipeId) => setDrawerRecipeId(recipeId)}
+            />
+          )}
+          {/* Delayed spinner overlay — bare spinner, no backdrop (design review 1A) */}
+          {showSpinner && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-8 h-8 border-2 border-terracotta-500 dark:border-blue-500 border-t-transparent rounded-full animate-spin motion-safe:transition-opacity motion-safe:duration-150" />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Progress tracker */}
@@ -293,18 +308,29 @@ export default function MealPlannerView() {
         <ProgressTracker slotTypes={slotTypes} mealEntries={mealEntries} />
       </div>
 
-      {/* Add meal popover */}
-      {addMealContext && (
-        <AddMealPopover
-          context={addMealContext}
-          slotTypes={slotTypes}
-          recipes={recipes}
-          foodItems={foodItems}
-          familyMembers={familyMembers}
-          onClose={handleCloseAddMeal}
-          onCreated={handleMealCreated}
-        />
-      )}
+      {/* Add meal popover — always mounted so Transition.Root can play leave animations */}
+      <AddMealPopover
+        context={addMealContext}
+        isOpen={isAddMealOpen}
+        slotTypes={slotTypes}
+        recipes={recipes}
+        foodItems={foodItems}
+        familyMembers={familyMembers}
+        onClose={handleCloseAddMeal}
+        onCreated={handleMealCreated}
+        onAfterLeave={() => setAddMealContext(null)}
+      />
+
+      {/* Recipe detail drawer */}
+      <RecipeDetailDrawer
+        recipeId={drawerRecipeId}
+        isOpen={drawerRecipeId !== null}
+        onClose={() => setDrawerRecipeId(null)}
+        onEditRecipe={(recipe) => {
+          // TODO: wire to RecipeFormModal edit mode in Phase 3
+          console.log('Edit recipe:', recipe.id)
+        }}
+      />
     </div>
   )
 }
