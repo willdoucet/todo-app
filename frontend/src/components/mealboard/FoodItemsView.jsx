@@ -5,6 +5,7 @@ import FoodItemRow from './FoodItemRow'
 import FoodItemFormModal from './FoodItemFormModal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ToolbarCount from './ToolbarCount'
+import useDelayedFlag from '../../hooks/useDelayedFlag'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -21,6 +22,7 @@ export default function FoodItemsView() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const showSpinner = useDelayedFlag(loading, 200)
 
   // View + filter state
   const [view, setView] = useState('grid') // 'grid' or 'list'
@@ -223,10 +225,12 @@ export default function FoodItemsView() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6">
-        {loading ? (
+        {showSpinner ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-2 border-terracotta-500 dark:border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-terracotta-500 dark:border-blue-500 border-t-transparent rounded-full animate-spin motion-safe:transition-opacity motion-safe:duration-150" />
           </div>
+        ) : loading ? (
+          null
         ) : error ? (
           <div className="text-center py-12 text-red-500 dark:text-red-400">
             {error}
