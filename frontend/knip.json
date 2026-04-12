@@ -1,0 +1,6 @@
+{
+  "project": ["src/**/*.{js,jsx}"],
+  "ignoreDependencies": [
+    "prettier"
+  ]
+}
