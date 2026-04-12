@@ -8,6 +8,7 @@ import RecipeFormModal from './RecipeFormModal'
 import RecipeDetailDrawer from './RecipeDetailDrawer'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import FoodItemsView from './FoodItemsView'
+import ToolbarCount from './ToolbarCount'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
@@ -219,9 +220,6 @@ function RecipesTab() {
   }, [recipes, searchQuery, filterFavorite, selectedTags, sortBy])
 
   const isFiltered = searchQuery || filterFavorite !== 'all' || selectedTags.size > 0
-  const countText = isFiltered
-    ? `${filteredRecipes.length} of ${recipes.length}`
-    : `${recipes.length} recipe${recipes.length === 1 ? '' : 's'}`
 
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Sort'
 
@@ -245,9 +243,12 @@ function RecipesTab() {
           </div>
 
           {/* Recipe count */}
-          <span className="text-xs text-text-muted dark:text-gray-400 whitespace-nowrap hidden sm:inline">
-            {countText}
-          </span>
+          <ToolbarCount
+            count={filteredRecipes.length}
+            totalCount={isFiltered ? recipes.length : undefined}
+            singular="recipe"
+            plural="recipes"
+          />
 
           {/* Grid/list toggle */}
           <div className="flex gap-1 p-1 rounded-lg bg-warm-beige dark:bg-gray-700">

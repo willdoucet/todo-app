@@ -4,6 +4,7 @@ import FoodItemCard from './FoodItemCard'
 import FoodItemRow from './FoodItemRow'
 import FoodItemFormModal from './FoodItemFormModal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import ToolbarCount from './ToolbarCount'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -138,6 +139,14 @@ export default function FoodItemsView() {
               "
             />
           </div>
+
+          {/* Food item count */}
+          <ToolbarCount
+            count={filteredItems.length}
+            totalCount={(search || category !== 'all') ? items.length : undefined}
+            singular="food item"
+            plural="food items"
+          />
 
           {/* View toggle */}
           <div className="flex gap-1 p-1 rounded-lg bg-warm-beige dark:bg-gray-700">
