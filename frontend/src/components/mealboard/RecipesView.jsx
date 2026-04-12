@@ -359,16 +359,17 @@ function RecipesTab() {
           {allTags.length > 0 && (
             <div className="relative">
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {allTags.map((tag) => (
+                {allTags.map((tag, index) => (
                   <button
                     key={tag}
                     type="button"
                     onClick={() => handleTagToggle(tag)}
-                    className={`px-2.5 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap transition-colors flex-shrink-0 ${
+                    className={`tag-pill-enter px-2.5 py-0.5 text-[11px] font-medium rounded-full whitespace-nowrap transition-colors flex-shrink-0 ${
                       selectedTags.has(tag)
                         ? 'bg-terracotta-500 dark:bg-blue-600 text-white'
                         : 'bg-warm-sand/60 dark:bg-gray-700/60 text-text-muted dark:text-gray-400 hover:bg-warm-sand dark:hover:bg-gray-600'
                     }`}
+                    style={{ animationDelay: `${Math.min(index, 6) * 30}ms` }}
                   >
                     {tag}
                   </button>
