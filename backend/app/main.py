@@ -26,11 +26,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# Include routers BEFORE mounting StaticFiles so the specific
+# POST /uploads/item-icon route wins over the static mount, which would
+# otherwise intercept all /uploads/* requests and return 405 for non-GET.
 app.include_router(tasks.router)
 app.include_router(family_members.router)
 app.include_router(responsibilities.router)
 app.include_router(uploads.router)
+app.include_router(uploads.item_icon_router)
 app.include_router(lists.router)
 app.include_router(items.router)
 app.include_router(calendar_events.router)
@@ -40,6 +43,10 @@ app.include_router(calendars.router)
 app.include_router(sections.router)
 app.include_router(meal_slot_types.router)
 app.include_router(meal_entries.router)
+
+# Mount static files AFTER routers so that specific router paths (e.g.
+# POST /uploads/item-icon) take precedence over the catch-all static mount.
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
 @app.get("/")

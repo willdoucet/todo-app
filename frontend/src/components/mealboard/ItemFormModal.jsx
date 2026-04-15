@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
+import axios from 'axios'
 import UnitCombobox from './UnitCombobox'
 import RecipeImageUpload from './RecipeImageUpload'
 import FoodEmojiPicker from '../shared/FoodEmojiPicker'
 import { suggestEmoji } from '../../constants/foodEmojis'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const INGREDIENT_CATEGORIES = ['Produce', 'Protein', 'Dairy', 'Pantry', 'Frozen', 'Bakery', 'Beverages', 'Other']
 const FOOD_CATEGORIES = [
@@ -391,6 +394,9 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
   const [emojiManuallySet, setEmojiManuallySet] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  // Upload state for the Custom-image tab's file picker (Chunk 5)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -403,7 +409,37 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
     setIsFavorite(initialItem?.is_favorite || false)
     setEmojiManuallySet(!!initialItem?.icon_emoji)
     setError(null)
+    setIsUploading(false)
+    setUploadError(null)
   }, [isOpen, initialItem])
+
+  // File picker handler — POSTs to /uploads/item-icon, sets icon_url on success.
+  // Backend validates via magic bytes (PNG/JPEG/WebP only, SVG rejected, 1 MB cap).
+  const handlePickFile = async (file) => {
+    setIsUploading(true)
+    setUploadError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await axios.post(`${API_BASE}/uploads/item-icon`, form)
+      setIconUrl(res.data.url)
+      // Uploading a file implies URL mode — flip the tab state + clear emoji.
+      setIconMode(ICON_MODE_URL)
+      setIconEmoji('')
+      setEmojiManuallySet(true)
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      if (err.response?.status === 415) {
+        setUploadError('PNG, JPEG, or WebP only')
+      } else if (err.response?.status === 413) {
+        setUploadError('File too large — max 1 MB')
+      } else {
+        setUploadError(typeof detail === 'string' ? detail : 'Upload failed')
+      }
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   // Auto-suggest emoji as user types the name (only if not manually set and no URL)
   useEffect(() => {
@@ -517,6 +553,9 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
                 iconEmoji={iconEmoji}
                 iconUrl={iconUrl}
                 onPickEmoji={handlePickEmoji}
+                onPickFile={handlePickFile}
+                uploading={isUploading}
+                uploadError={uploadError}
               />
 
               {/* Tab switcher — compact 32px tall */}
@@ -562,11 +601,17 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
               </div>
             )}
 
-            <p className="text-[0.6875rem] text-text-muted dark:text-gray-500 mt-1.5 pl-[4.5rem]">
-              {iconMode === ICON_MODE_EMOJI
-                ? 'Click the square to open the emoji picker.'
-                : 'Paste an image URL above, or click the square to upload a file.'}
-            </p>
+            {uploadError ? (
+              <p className="text-[0.6875rem] text-red-600 dark:text-red-400 mt-1.5 pl-[4.5rem]">
+                {uploadError}
+              </p>
+            ) : (
+              <p className="text-[0.6875rem] text-text-muted dark:text-gray-500 mt-1.5 pl-[4.5rem]">
+                {iconMode === ICON_MODE_EMOJI
+                  ? 'Click the square to open the emoji picker.'
+                  : 'Paste an image URL above, or click the square to upload a file.'}
+              </p>
+            )}
           </div>
 
           {/* Category */}
@@ -633,10 +678,10 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
 // Shared sub-components
 // ---------------------------------------------------------------------------
 
-function IconSquare({ mode, iconEmoji, iconUrl, onPickEmoji }) {
-  // onPickFile reserved for future file-picker wiring — URL paste handles the write path today
+function IconSquare({ mode, iconEmoji, iconUrl, onPickEmoji, onPickFile, uploading, uploadError }) {
   const dimensions = 'w-16 h-16'  // 64×64 per mockup
   const commonCls = 'rounded-[0.625rem] flex items-center justify-center flex-shrink-0 transition-colors'
+  const fileInputRef = useRef(null)
 
   if (mode === ICON_MODE_EMOJI) {
     return (
@@ -656,28 +701,73 @@ function IconSquare({ mode, iconEmoji, iconUrl, onPickEmoji }) {
     )
   }
 
-  // URL mode — show preview if set, otherwise show upload affordance.
-  // File-picker integration is deferred to a follow-up — clicking here for now
-  // is a visual affordance; the URL input field below the tabs is the real input.
-  if (iconUrl) {
-    return (
-      <div className={`${dimensions} ${commonCls} bg-warm-sand dark:bg-gray-700 border border-card-border dark:border-gray-600 overflow-hidden`}>
-        <img src={iconUrl} alt="" className="w-full h-full object-cover" />
-      </div>
-    )
+  // URL mode — click opens the file picker. Shows:
+  //   - uploading: spinner
+  //   - filled (iconUrl set): image preview
+  //   - error: red-tinted border + retry affordance
+  //   - empty: dashed drop zone with Upload glyph
+  const handleClick = () => fileInputRef.current?.click()
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file && onPickFile) {
+      onPickFile(file)
+    }
+    // Reset the input so picking the same file twice still fires change
+    e.target.value = ''
   }
+
   return (
-    <div
-      className={`${dimensions} ${commonCls} border border-dashed border-card-border dark:border-gray-600 bg-warm-sand/35 dark:bg-gray-700/30 hover:bg-terracotta-50 dark:hover:bg-gray-700 text-text-muted dark:text-gray-500`}
-      aria-hidden="true"
-    >
-      <div className="flex flex-col items-center gap-0.5">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <span className="text-[0.625rem] leading-none">Upload</span>
-      </div>
-    </div>
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      {uploading ? (
+        <div className={`${dimensions} ${commonCls} border border-card-border dark:border-gray-600 bg-warm-sand/35 dark:bg-gray-700/30`}>
+          <svg className="w-5 h-5 animate-spin text-terracotta-500" fill="none" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+            <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+          </svg>
+        </div>
+      ) : iconUrl ? (
+        <button
+          type="button"
+          onClick={handleClick}
+          className={`${dimensions} ${commonCls} bg-warm-sand dark:bg-gray-700 border border-card-border dark:border-gray-600 overflow-hidden hover:border-terracotta-500 dark:hover:border-blue-500`}
+          aria-label="Change uploaded image"
+        >
+          <img
+            src={iconUrl.startsWith('http') ? iconUrl : `${API_BASE}${iconUrl}`}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleClick}
+          aria-label="Upload custom image"
+          className={`
+            ${dimensions} ${commonCls}
+            border border-dashed
+            ${uploadError
+              ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+              : 'border-card-border dark:border-gray-600 bg-warm-sand/35 dark:bg-gray-700/30 hover:bg-terracotta-50 dark:hover:bg-gray-700 text-text-muted dark:text-gray-500'
+            }
+          `}
+        >
+          <div className="flex flex-col items-center gap-0.5">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-[0.625rem] leading-none">{uploadError ? 'Retry' : 'Upload'}</span>
+          </div>
+        </button>
+      )}
+    </>
   )
 }
 

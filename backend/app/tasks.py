@@ -563,3 +563,34 @@ def sync_shopping_list_remove(self, meal_entry_id: int, synced_to_list_id: int |
             meal_entry_id, str(e), exc_info=True,
         )
         raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
+
+
+# =============================================================================
+# Chunk 6 — Soft-delete hard-delete sweeper (Expansion B)
+# =============================================================================
+
+@celery_app.task(name="app.tasks.hard_delete_expired_soft_deletes")
+def hard_delete_expired_soft_deletes():
+    """Hourly sweeper that permanently removes items whose soft-delete window
+    has expired (items.deleted_at older than 24 hours).
+
+    Thin wrapper around `crud_items.hard_delete_expired_soft_deletes_async()`.
+    The real cascade-in-code + assertion-gate logic lives there so tests can
+    await it directly with their own db_session fixture.
+    """
+    from .crud_items import hard_delete_expired_soft_deletes_async
+
+    async def _sweep():
+        async with AsyncSessionLocal() as db:
+            return await hard_delete_expired_soft_deletes_async(db)
+
+    try:
+        deleted_count = run_async(_sweep())
+        if deleted_count:
+            logger.info(
+                "Hard-delete sweep: removed %d expired soft-deleted items",
+                deleted_count,
+            )
+    except Exception as e:
+        logger.error("Hard-delete sweep failed: %s", str(e), exc_info=True)
+        raise

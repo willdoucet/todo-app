@@ -19,6 +19,65 @@ from sqlalchemy.orm import selectinload
 from . import models, schemas
 
 
+HARD_DELETE_SOAK_HOURS = 24
+
+
+async def hard_delete_expired_soft_deletes_async(db: AsyncSession) -> int:
+    """Sweep items whose soft-delete window has expired (>24h old).
+
+    Runs as a cascade-in-code transaction (Eng Review #3 Issue 3):
+      1. Find items with deleted_at older than HARD_DELETE_SOAK_HOURS
+      2. Delete their soft-hidden meal_entries first
+      3. Assertion gate: any active meal_entry still referencing an expired
+         item means soft-delete propagation broke. Abort with RuntimeError.
+      4. Delete the items (FK RESTRICT is now satisfied).
+
+    Extracted from the Celery task body so tests can await it directly
+    without colliding with pytest's already-running event loop.
+    Returns the count of hard-deleted items.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=HARD_DELETE_SOAK_HOURS)
+
+    expired_res = await db.execute(
+        select(models.Item.id).where(
+            models.Item.deleted_at.is_not(None),
+            models.Item.deleted_at < cutoff,
+        )
+    )
+    expired_ids = [row[0] for row in expired_res.all()]
+    if not expired_ids:
+        return 0
+
+    # Step 2a: delete soft-hidden meal_entries that reference expired items
+    await db.execute(
+        delete(models.MealEntry).where(
+            models.MealEntry.item_id.in_(expired_ids),
+            models.MealEntry.soft_hidden_at.is_not(None),
+        )
+    )
+    await db.flush()
+
+    # Step 2b: assertion gate — any remaining meal_entries means a bug
+    remaining_res = await db.execute(
+        select(func.count(models.MealEntry.id)).where(
+            models.MealEntry.item_id.in_(expired_ids),
+        )
+    )
+    remaining = remaining_res.scalar() or 0
+    if remaining > 0:
+        await db.rollback()
+        raise RuntimeError(
+            f"Hard-delete aborted: {remaining} active meal_entries still "
+            f"reference {len(expired_ids)} expired items. Soft-delete "
+            f"propagation bug — investigate before the next sweep run."
+        )
+
+    # Step 3: now delete the items (FK RESTRICT is satisfied)
+    await db.execute(delete(models.Item).where(models.Item.id.in_(expired_ids)))
+    await db.commit()
+    return len(expired_ids)
+
+
 async def _attach_usage_counts(db: AsyncSession, items: list[models.Item]) -> None:
     """Populate `item.meal_entry_count` on each passed Item in place.
 
