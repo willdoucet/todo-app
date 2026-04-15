@@ -31,7 +31,7 @@ describe('WeekSelector', () => {
       />
     )
 
-    expect(screen.getByText('Jan 20 - 26')).toBeInTheDocument()
+    expect(screen.getByText('Jan 20 – 26')).toBeInTheDocument()
   })
 
   it('displays the week range spanning two months', () => {
@@ -44,7 +44,7 @@ describe('WeekSelector', () => {
       />
     )
 
-    expect(screen.getByText('Jan 27 - Feb 2')).toBeInTheDocument()
+    expect(screen.getByText('Jan 27 – Feb 2')).toBeInTheDocument()
   })
 
   it('calls onPrevWeek when clicking previous button', async () => {

@@ -36,6 +36,7 @@ VOLUME_UNITS = {
 }
 
 COUNT_UNITS = {
+    "each": {"name": "each"},
     "piece": {"name": "piece"},
     "clove": {"name": "clove"},
     "slice": {"name": "slice"},
@@ -45,6 +46,7 @@ COUNT_UNITS = {
     "head": {"name": "head"},
     "stalk": {"name": "stalk"},
     "sprig": {"name": "sprig"},
+    "ear": {"name": "ear"},
 }
 
 # ── Lookup tables ──
@@ -106,6 +108,8 @@ FREEFORM_UNIT_MAP = {
     "head": "head", "heads": "head",
     "stalk": "stalk", "stalks": "stalk",
     "sprig": "sprig", "sprigs": "sprig",
+    "each": "each",
+    "ear": "ear", "ears": "ear",
 }
 
 

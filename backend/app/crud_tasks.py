@@ -134,15 +134,22 @@ async def update_task(db: AsyncSession, task_id: int, task: schemas.TaskUpdate):
     if "section_id" in update_data and update_data["section_id"] is not None:
         await _validate_section_id(db, update_data["section_id"], effective_list_id)
 
-    # Auto-set completed_at
+    # Auto-set completed_at + shopping check-flip
+    completing = False
     if "completed" in update_data:
         if update_data["completed"] and not db_task.completed:
             update_data["completed_at"] = datetime.now(timezone.utc).replace(tzinfo=None)
+            completing = True
         elif not update_data["completed"] and db_task.completed:
             update_data["completed_at"] = None
 
     for field, value in update_data.items():
         setattr(db_task, field, value)
+
+    # When a mealboard_auto task is checked, flip to manual
+    if completing and db_task.aggregation_source == "mealboard_auto":
+        from .services.shopping_sync import on_item_checked
+        await on_item_checked(db, db_task)
 
     # CRUD-level push trigger for synced tasks
     if db_task.external_id and db_task.calendar_integration_id:

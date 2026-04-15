@@ -32,7 +32,7 @@ export default function ConfirmDialog({
   const styles = variantStyles[variant] || variantStyles.danger
 
   return (
-    <Transition show={isOpen} as="div">
+    <Transition show={isOpen} as="div" appear>
       <Dialog onClose={onClose} className="relative z-50">
         {/* Backdrop */}
         <Transition.Child

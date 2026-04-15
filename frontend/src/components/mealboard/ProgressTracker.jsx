@@ -51,7 +51,7 @@ export default function ProgressTracker({ slotTypes, mealEntries }) {
         </h3>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-        {stats.map((stat) => {
+        {stats.map((stat, i) => {
           const pct = Math.round((stat.count / 7) * 100)
           const message = getMessage(stat.count, 7)
           return (
@@ -64,6 +64,8 @@ export default function ProgressTracker({ slotTypes, mealEntries }) {
               style={{
                 background: `linear-gradient(135deg, ${stat.color}14, ${stat.color}1F)`,
                 borderColor: `${stat.color}40`,
+                animation: `swimlane-enter 0.4s ease-out both`,
+                animationDelay: `${i * 70}ms`,
               }}
             >
               <div className="flex items-center gap-1.5 mb-1.5">
@@ -84,7 +86,7 @@ export default function ProgressTracker({ slotTypes, mealEntries }) {
               {/* Progress bar */}
               <div className="h-1.5 rounded-full bg-white/60 dark:bg-white/10 overflow-hidden mb-1.5">
                 <div
-                  className="h-full rounded-full transition-all duration-300"
+                  className="h-full rounded-full transition-[width] duration-[400ms] ease-out"
                   style={{ width: `${pct}%`, backgroundColor: stat.color }}
                 />
               </div>

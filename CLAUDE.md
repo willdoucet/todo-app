@@ -17,11 +17,17 @@ Family task and responsibility management app with a FastAPI backend and React f
 | [BACKEND_STRUCTURE.md](./.claude/BACKEND_STRUCTURE.md) | Database schema, API contracts, code organization |
 | [FRONTEND_STRUCTURE.md](./.claude/FRONTEND_STRUCTURE.md) | Frontend directory layout, component inventory |
 | [IMPLEMENTATION_PLAN.md](./.claude/IMPLEMENTATION_PLAN.md) | Step-by-step build sequence for remaining features |
-| [tasks/lessons.md](./.claude/tasks/lessons.md) | Patterns and mistakes to avoid (self-improvement log) |
+| [LESSONS.md](./.claude/LESSONS.md) | Canonical mistakes, corrections, and project lessons |
 
 ## Development Commands
 
-**IMPORTANT: All commands must be run through Docker Compose. Never run npm, uv, or pytest directly on the host.**
+**IMPORTANT: App commands must run through Docker Compose. Never run `npm`, backend app `uv`, or backend app `pytest` directly on the host.**
+
+Exception:
+
+- local workflow tooling under `.claude/` is host-side by design
+- the Obsidian helper at `.claude/skills/bin/obsidian-workflow` should be run directly on the host
+- tests for that helper live under `.claude/tests/` and should be run on the host, not through Docker Compose
 
 ### Full Stack (Docker Compose)
 ```bash
@@ -83,6 +89,14 @@ docker-compose exec frontend npm run test:run              # Single run (CI)
 docker-compose exec frontend npm run test:coverage         # With coverage report
 ```
 
+### Local Workflow Helper Tests (host-side)
+```bash
+cd /path/to/repo
+python3 -m pytest .claude/tests/test_obsidian_workflow.py -q
+```
+
+These tests cover the local Obsidian workflow helper only. They are intentionally separate from the Dockerized backend test suite.
+
 CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 
 ## Workflow Orchestration
@@ -100,7 +114,7 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 - One task per subagent for focused execution
 
 ### 3.  Self-Improvement Loop
-- After ANY correction from the user: update `.claude/tasks/lessons.md` with the pattern
+- After ANY correction from the user: update `.claude/LESSONS.md` with the pattern
 - Write rules for yourself that prevent the same mistake
 - Ruthlessly iterate on these lessons until mistake rate drops
 - Review lessons at session start for relevant project
@@ -125,7 +139,7 @@ CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
 3. **Track Progress**: Mark items complete as you go
 4. **Explain Progress**: High-level summary at each step
 5. **Document Results**: Add review section to `tasks/todo.md`
-6. **Capture Lessons**: Update `tasks/lessons.md` after corrections
+6. **Capture Lessons**: Update `.claude/LESSONS.md` after corrections
 
 ## Core Principles
 

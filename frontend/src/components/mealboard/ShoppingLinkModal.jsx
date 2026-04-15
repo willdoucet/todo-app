@@ -81,7 +81,7 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
   )
 
   return (
-    <Transition show={isOpen} as="div">
+    <Transition show={isOpen} as="div" appear>
       <Dialog onClose={onClose} className="relative z-50">
         <Transition.Child
           enter="ease-out duration-300"
@@ -285,8 +285,8 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
                         bg-gradient-to-br from-sage-500 to-sage-600
                         dark:from-green-500 dark:to-green-600
                         flex items-center justify-center
-                        animate-in zoom-in duration-500
                       "
+                      style={{ animation: 'bounce-in 0.5s ease-out both' }}
                     >
                       <svg className="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />

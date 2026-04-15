@@ -23,6 +23,7 @@ export const VOLUME_UNITS = [
 ]
 
 export const COUNT_UNITS = [
+  { value: 'each', label: 'each', name: 'each', group: 'count' },
   { value: 'piece', label: 'piece', name: 'piece', group: 'count' },
   { value: 'clove', label: 'clove', name: 'clove', group: 'count' },
   { value: 'slice', label: 'slice', name: 'slice', group: 'count' },
@@ -32,6 +33,7 @@ export const COUNT_UNITS = [
   { value: 'head', label: 'head', name: 'head', group: 'count' },
   { value: 'stalk', label: 'stalk', name: 'stalk', group: 'count' },
   { value: 'sprig', label: 'sprig', name: 'sprig', group: 'count' },
+  { value: 'ear', label: 'ear', name: 'ear', group: 'count' },
 ]
 
 // All units in grouped structure (for combobox dropdown)

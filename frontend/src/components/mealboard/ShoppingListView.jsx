@@ -6,15 +6,24 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function ShoppingListView() {
   const [lists, setLists] = useState([])
-  const [linkedListId, setLinkedListId] = useState(() => {
-    return localStorage.getItem('mealboard_shopping_list_id') || null
-  })
+  const [linkedListId, setLinkedListId] = useState(null)
   const [linkedList, setLinkedList] = useState(null)
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [newItemTitle, setNewItemTitle] = useState('')
 
+  // Load linked list ID from AppSettings (single source of truth)
   useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/app-settings/`)
+        const id = res.data.mealboard_shopping_list_id
+        setLinkedListId(id ? String(id) : null)
+      } catch (err) {
+        console.error('Failed to load app settings:', err)
+      }
+    }
+    loadSettings()
     fetchLists()
   }, [])
 
@@ -56,13 +65,21 @@ export default function ShoppingListView() {
     }
   }
 
-  const handleLinkList = (listId) => {
-    localStorage.setItem('mealboard_shopping_list_id', listId)
-    setLinkedListId(listId)
+  const handleLinkList = async (listId) => {
+    try {
+      await axios.patch(`${API_BASE}/app-settings/`, { mealboard_shopping_list_id: parseInt(listId) })
+      setLinkedListId(String(listId))
+    } catch (err) {
+      console.error('Failed to link list:', err)
+    }
   }
 
-  const handleUnlinkList = () => {
-    localStorage.removeItem('mealboard_shopping_list_id')
+  const handleUnlinkList = async () => {
+    try {
+      await axios.patch(`${API_BASE}/app-settings/`, { mealboard_shopping_list_id: null })
+    } catch (err) {
+      console.error('Failed to unlink list:', err)
+    }
     setLinkedListId(null)
     setLinkedList(null)
     setTasks([])

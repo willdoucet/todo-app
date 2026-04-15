@@ -25,9 +25,9 @@ class TestUnitValidation:
         assert UNIT_TO_GROUP["cup"] == "volume"
         assert UNIT_TO_GROUP["clove"] == "count"
 
-    def test_has_22_total_units(self):
-        # 4 weight + 9 volume + 9 count = 22
-        assert len(VALID_UNITS) == 22
+    def test_has_24_total_units(self):
+        # 4 weight + 9 volume + 11 count (each, piece, clove, slice, bunch, can, package, head, stalk, sprig, ear) = 24
+        assert len(VALID_UNITS) == 24
 
 
 class TestToBaseUnit:

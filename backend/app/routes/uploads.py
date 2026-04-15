@@ -16,6 +16,12 @@ async def upload_responsibility_icon(file: UploadFile = File(...)):
     return {"url": url}
 
 
+@router.post("/recipe-image")
+async def upload_recipe_image(file: UploadFile = File(...)):
+    url = await save_upload(file, "recipe_images")
+    return {"url": url}
+
+
 @router.get("/stock-icons")
 async def list_stock_icons():
     """Return list of available stock icons."""

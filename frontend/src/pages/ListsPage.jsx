@@ -554,7 +554,7 @@ export default function ListsPage() {
       )}
 
       {/* Create / Edit Modal — mobile only on desktop, always available on mobile */}
-      <Transition show={isOpen} as="div">
+      <Transition show={isOpen} as="div" appear>
         <Dialog onClose={() => setIsOpen(false)} className="relative z-50">
           {/* Backdrop */}
           <Transition.Child

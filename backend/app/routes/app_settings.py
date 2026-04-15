@@ -25,7 +25,22 @@ async def update_settings(
     update: schemas.AppSettingsUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    settings = await crud_app_settings.update_settings(db, update)
+    update_data = update.model_dump(exclude_unset=True)
+
+    # If mealboard_shopping_list_id is changing, route through the atomic
+    # domain service (handles swap/unlink/link with side effects).
+    if "mealboard_shopping_list_id" in update_data:
+        new_list_id = update_data.pop("mealboard_shopping_list_id")
+        from ..services.shopping_sync import change_mealboard_list
+        await change_mealboard_list(db, new_list_id)
+
+    # Apply remaining fields via generic CRUD (stateless mutations)
+    if update_data:
+        remaining_update = schemas.AppSettingsUpdate(**update_data)
+        await crud_app_settings.update_settings(db, remaining_update)
+
+    # Return fresh settings
+    settings = await crud_app_settings.get_settings(db)
     return settings
 
 

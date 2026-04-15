@@ -93,7 +93,7 @@ export default function TaskFormModal({
       : null
 
   return (
-    <Transition show={isOpen} as="div">
+    <Transition show={isOpen} as="div" appear>
       <Dialog onClose={onClose} className="relative z-50">
         <Transition.Child
           enter="ease-out duration-300"

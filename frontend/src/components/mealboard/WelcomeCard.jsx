@@ -12,6 +12,7 @@ export default function WelcomeCard({ onDismiss, onAddFirst }) {
         dark:from-blue-900/20 dark:to-gray-800
         border border-terracotta-200 dark:border-blue-800
       "
+      style={{ animation: 'swimlane-enter 0.4s ease-out both' }}
     >
       <button
         type="button"

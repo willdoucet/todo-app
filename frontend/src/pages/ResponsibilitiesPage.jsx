@@ -245,7 +245,7 @@ export default function ResponsibilitiesPage() {
       }} />
 
       {/* Create / Edit Modal */}
-      <Transition show={isOpen} as="div">
+      <Transition show={isOpen} as="div" appear>
         <Dialog onClose={() => setIsOpen(false)} className="relative z-50">
           {/* Backdrop */}
           <Transition.Child

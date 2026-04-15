@@ -535,21 +535,28 @@ def sync_shopping_list_add(self, meal_entry_id: int):
     max_retries=3,
     default_retry_delay=10,
 )
-def sync_shopping_list_remove(self, meal_entry_id: int):
+def sync_shopping_list_remove(self, meal_entry_id: int, synced_to_list_id: int | None = None):
     """Remove a meal entry's contributions from the shopping list.
 
-    Called before/after a meal entry is deleted. Subtracts ingredient
-    quantities and deletes tasks that reach zero.
+    Uses synced_to_list_id (provenance) to target the correct list.
+    If None, no-op (meal was never synced or already cleaned up).
     """
     from .services.shopping_sync import remove_meal_from_shopping_list
 
+    if synced_to_list_id is None:
+        logger.info(
+            "Shopping sync (remove) for meal entry %d — no synced_to_list_id, no-op",
+            meal_entry_id,
+        )
+        return
+
     async def _remove():
         async with AsyncSessionLocal() as db:
-            await remove_meal_from_shopping_list(db, meal_entry_id)
+            await remove_meal_from_shopping_list(db, meal_entry_id, target_list_id=synced_to_list_id)
 
     try:
         run_async(_remove())
-        logger.info("Shopping sync (remove) complete for meal entry %d", meal_entry_id)
+        logger.info("Shopping sync (remove) complete for meal entry %d from list %d", meal_entry_id, synced_to_list_id)
     except Exception as e:
         logger.error(
             "Shopping sync (remove) failed for meal entry %d: %s",
