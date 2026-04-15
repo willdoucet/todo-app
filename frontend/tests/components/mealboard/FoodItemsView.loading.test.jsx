@@ -2,8 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import axios from 'axios'
 import FoodItemsView from '../../../src/components/mealboard/FoodItemsView'
+import { UndoToastProvider } from '../../../src/components/shared/UndoToast'
 
 vi.mock('axios')
+
+function renderWithProviders(ui) {
+  return render(<UndoToastProvider>{ui}</UndoToastProvider>)
+}
 
 describe('FoodItemsView loading behavior', () => {
   beforeEach(() => {
@@ -18,7 +23,7 @@ describe('FoodItemsView loading behavior', () => {
     axios.get.mockResolvedValue({ data: [{ id: 1, name: 'Apple', category: 'fruit' }] })
 
     await act(async () => {
-      render(<FoodItemsView />)
+      renderWithProviders(<FoodItemsView />)
     })
 
     // Flush microtasks
@@ -35,7 +40,7 @@ describe('FoodItemsView loading behavior', () => {
     axios.get.mockImplementation(() => new Promise(() => {}))
 
     await act(async () => {
-      render(<FoodItemsView />)
+      renderWithProviders(<FoodItemsView />)
     })
 
     // Initially no spinner

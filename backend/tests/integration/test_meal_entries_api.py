@@ -1,4 +1,9 @@
-"""Integration tests for /meal-entries API endpoints."""
+"""Integration tests for /meal-entries API endpoints.
+
+Migrated to the unified Item model: meal entries now reference items via `item_id`
+instead of split `recipe_id` / `food_item_id` columns. The nested response payload
+has `entry.item` (with its detail eager-loaded) instead of `entry.recipe` / `entry.food_item`.
+"""
 
 import pytest
 from datetime import date, timedelta
@@ -34,8 +39,8 @@ class TestGetMealEntries:
         data = response.json()
         assert len(data) == 1
         assert data[0]["id"] == test_meal_entry.id
-        assert data[0]["item_type"] == "recipe"
-        assert data[0]["recipe"]["name"] == "Test Recipe"
+        assert data[0]["item"]["item_type"] == "recipe"
+        assert data[0]["item"]["name"] == "Test Recipe"
         assert data[0]["meal_slot_type"]["name"] == "Dinner"
 
     async def test_excludes_entries_outside_range(self, client, test_meal_entry):
@@ -49,12 +54,11 @@ class TestGetMealEntries:
         from app.models import MealEntry, meal_entry_participants
         today = date.today()
 
-        # Create entry with explicit participant
+        # Create entry with explicit participant — custom meal (no item_id)
         entry = MealEntry(
             date=today,
             meal_slot_type_id=test_meal_slot_dinner.id,
             custom_meal_name="Sandwich",
-            item_type="custom",
         )
         db_session.add(entry)
         await db_session.commit()
@@ -81,38 +85,38 @@ class TestGetMealEntries:
 class TestCreateMealEntry:
     """Tests for POST /meal-entries/"""
 
-    async def test_creates_recipe_meal_entry(self, client, test_recipe, test_meal_slot_dinner, test_family_member):
+    async def test_creates_meal_entry_with_recipe_item(self, client, test_recipe, test_meal_slot_dinner, test_family_member):
         response = await client.post(
             "/meal-entries/",
             json={
                 "date": date.today().isoformat(),
                 "meal_slot_type_id": test_meal_slot_dinner.id,
-                "recipe_id": test_recipe.id,
-                "item_type": "recipe",
+                "item_id": test_recipe.id,
             },
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["item_type"] == "recipe"
-        assert data["recipe"]["name"] == "Test Recipe"
+        assert data["item_id"] == test_recipe.id
+        assert data["item"]["name"] == "Test Recipe"
+        assert data["item"]["item_type"] == "recipe"
         # Participants auto-materialized from slot type defaults (empty = everyone)
         assert len(data["participants"]) >= 1
 
-    async def test_creates_food_item_entry(self, client, test_food_item, test_meal_slot_types):
+    async def test_creates_meal_entry_with_food_item(self, client, test_food_item, test_meal_slot_types):
         snack = next(s for s in test_meal_slot_types if s.name == "Snack")
         response = await client.post(
             "/meal-entries/",
             json={
                 "date": date.today().isoformat(),
                 "meal_slot_type_id": snack.id,
-                "food_item_id": test_food_item.id,
-                "item_type": "food_item",
+                "item_id": test_food_item.id,
             },
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["item_type"] == "food_item"
-        assert data["food_item"]["name"] == "Banana"
+        assert data["item_id"] == test_food_item.id
+        assert data["item"]["name"] == "Banana"
+        assert data["item"]["item_type"] == "food_item"
 
     async def test_creates_custom_meal_entry(self, client, test_meal_slot_dinner):
         response = await client.post(
@@ -121,15 +125,24 @@ class TestCreateMealEntry:
                 "date": date.today().isoformat(),
                 "meal_slot_type_id": test_meal_slot_dinner.id,
                 "custom_meal_name": "Leftover pizza",
-                "item_type": "custom",
             },
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["item_type"] == "custom"
+        assert data["item_id"] is None
         assert data["custom_meal_name"] == "Leftover pizza"
-        assert data["recipe"] is None
-        assert data["food_item"] is None
+        assert data["item"] is None
+
+    async def test_rejects_entry_without_item_or_custom_name(self, client, test_meal_slot_dinner):
+        """Schema validator enforces `item_id IS NOT NULL OR custom_meal_name IS NOT NULL`."""
+        response = await client.post(
+            "/meal-entries/",
+            json={
+                "date": date.today().isoformat(),
+                "meal_slot_type_id": test_meal_slot_dinner.id,
+            },
+        )
+        assert response.status_code == 422
 
     async def test_explicit_participants(self, client, test_meal_slot_dinner, test_family_member, test_system_member):
         response = await client.post(
@@ -138,13 +151,11 @@ class TestCreateMealEntry:
                 "date": date.today().isoformat(),
                 "meal_slot_type_id": test_meal_slot_dinner.id,
                 "custom_meal_name": "Kid lunch",
-                "item_type": "custom",
                 "participant_ids": [test_family_member.id],
             },
         )
         assert response.status_code == 201
         data = response.json()
-        # Only the explicit participant, not the system member
         participant_ids = [p["id"] for p in data["participants"]]
         assert participant_ids == [test_family_member.id]
 
@@ -197,7 +208,8 @@ class TestUpdateMealEntry:
 
 
 class TestDeleteMealEntry:
-    """Tests for DELETE /meal-entries/{id}"""
+    """Tests for DELETE /meal-entries/{id}. Meal entries are hard-deleted (only items
+    are soft-deleted — the soft_hidden_at column is cascaded by Item soft-delete)."""
 
     async def test_deletes_meal_entry(self, client, test_meal_entry):
         entry_id = test_meal_entry.id
@@ -213,24 +225,20 @@ class TestDeleteMealEntry:
         assert response.status_code == 404
 
 
-class TestRecipeCascade:
-    """Tests for recipe FK cascade behavior."""
+class TestItemFKRestrict:
+    """The meal_entries.item_id FK is ON DELETE RESTRICT. A raw hard-delete of an
+    Item that has meal_entries must fail with an FK violation — the supported
+    deletion path is soft-delete via /items/{id}."""
 
-    async def test_meal_entry_preserved_when_recipe_deleted(
+    async def test_raw_item_delete_blocked_by_fk_restrict(
         self, client, db_session, test_meal_entry, test_recipe
     ):
-        """Recipe deletion sets food_item_id to NULL but meal entry remains."""
-        entry_id = test_meal_entry.id
+        from app.models import Item
+        from sqlalchemy.exc import IntegrityError
 
-        # Delete recipe
-        response = await client.delete(f"/recipes/{test_recipe.id}")
-        assert response.status_code == 200
-
-        # Entry still exists, recipe_id is NULL
-        today = date.today()
-        response = await client.get(f"/meal-entries/?start_date={today}&end_date={today}")
-        data = response.json()
-        assert len(data) == 1
-        assert data[0]["id"] == entry_id
-        assert data[0]["recipe_id"] is None
-        assert data[0]["recipe"] is None
+        # Try to hard-delete the Item directly (bypassing the soft-delete flow)
+        item = await db_session.get(Item, test_recipe.id)
+        await db_session.delete(item)
+        with pytest.raises(IntegrityError):
+            await db_session.commit()
+        await db_session.rollback()

@@ -8,14 +8,33 @@ from . import models, schemas
 logger = logging.getLogger(__name__)
 
 
-async def _eager_load_options():
-    """Standard eager loading for meal entries to prevent N+1 queries."""
+def _eager_load_options():
+    """Standard eager loading for meal entries to prevent N+1 queries.
+
+    Loads the unified Item (with both detail relationships), meal slot type,
+    and participants. Use with `visible_meal_entries_stmt()` below.
+    """
     return [
-        selectinload(models.MealEntry.recipe),
-        selectinload(models.MealEntry.food_item),
+        selectinload(models.MealEntry.item).selectinload(models.Item.recipe_detail),
+        selectinload(models.MealEntry.item).selectinload(models.Item.food_item_detail),
         selectinload(models.MealEntry.meal_slot_type),
         selectinload(models.MealEntry.participants),
     ]
+
+
+def visible_meal_entries_stmt():
+    """Canonical statement builder for non-hidden meal entries.
+
+    Applies `soft_hidden_at IS NULL` so soft-hidden rows (from Expansion B
+    cascade delete) drop out of all UI/CRUD reads. See Eng Review #3 Issue 6:
+    never use `item.meal_entries` directly — that relationship loads soft-hidden
+    rows too. Always go through this helper for UI reads.
+    """
+    return (
+        select(models.MealEntry)
+        .where(models.MealEntry.soft_hidden_at.is_(None))
+        .options(*_eager_load_options())
+    )
 
 
 async def get_meal_entries(
@@ -25,10 +44,8 @@ async def get_meal_entries(
     family_member_id: int | None = None,
 ):
     """Get meal entries for a date range, with optional per-person filter."""
-    options = await _eager_load_options()
     stmt = (
-        select(models.MealEntry)
-        .options(*options)
+        visible_meal_entries_stmt()
         .where(models.MealEntry.date >= start_date)
         .where(models.MealEntry.date <= end_date)
         .order_by(
@@ -52,12 +69,7 @@ async def get_meal_entries(
 
 async def get_meal_entry(db: AsyncSession, entry_id: int):
     """Get a single meal entry by ID with all relationships loaded."""
-    options = await _eager_load_options()
-    stmt = (
-        select(models.MealEntry)
-        .options(*options)
-        .where(models.MealEntry.id == entry_id)
-    )
+    stmt = visible_meal_entries_stmt().where(models.MealEntry.id == entry_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -181,11 +193,13 @@ async def delete_meal_entry(db: AsyncSession, entry_id: int):
         return None
 
     # Dispatch shopping list removal BEFORE deleting the entry
-    # (the removal task needs the entry's data to find related shopping items)
+    # Pass synced_to_list_id so the task knows which list to target
+    # (the entry will be deleted by the time the Celery task runs)
+    synced_to_list_id = entry.synced_to_list_id
     try:
         from .tasks import sync_shopping_list_remove
-        sync_shopping_list_remove.delay(entry_id)
-        logger.info(f"Dispatched shopping removal for meal entry {entry_id}")
+        sync_shopping_list_remove.delay(entry_id, synced_to_list_id)
+        logger.info(f"Dispatched shopping removal for meal entry {entry_id} (list {synced_to_list_id})")
     except Exception as e:
         logger.warning(f"Failed to dispatch shopping removal: {e}")
 

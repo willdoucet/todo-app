@@ -5,34 +5,42 @@ import MemberAvatar from '../shared/MemberAvatar'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
- * Meal card for the swimlane grid.
- * Has 3 variants: recipe (full card), food_item (lighter), custom (text only).
- * All variants support cooked state + participant avatars + hover actions.
+ * Meal card for the swimlane grid — text-only design (approved mockup D v3).
+ *
+ * Layout (center-aligned):
+ *   1. Participant avatars (only when non-default) — stacked above name
+ *   2. Name — text-lg font-medium, dominant
+ *   3. Metadata row — cook time · servings
+ *   4. Cooked badge — "✓ Cooked" text below metadata
+ *   5. Hover action icons — bottom, 32×32px: view-recipe / cooked / delete
  */
-export default function MealCard({ entry, slotType, familyMembers, onUpdated, onDeleted }) {
+export default function MealCard({ entry, slotType, familyMembers, onUpdated, onDeleted, onViewRecipe }) {
   const [isWorking, setIsWorking] = useState(false)
 
-  const isRecipe = entry.item_type === 'recipe' && entry.recipe
-  const isFoodItem = entry.item_type === 'food_item' && entry.food_item
-  const isCustom = entry.item_type === 'custom'
+  // Unified item model: entry.item replaces entry.recipe + entry.food_item
+  const item = entry.item || null
+  const isRecipe = item?.item_type === 'recipe'
+  const displayName = item?.name || entry.custom_meal_name || 'Untitled meal'
 
-  const displayName =
-    (isRecipe && entry.recipe.name) ||
-    (isFoodItem && entry.food_item.name) ||
-    entry.custom_meal_name ||
-    'Untitled meal'
+  const rd = item?.recipe_detail || {}
+  const cookTime = isRecipe ? (rd.prep_time_minutes || 0) + (rd.cook_time_minutes || 0) : null
+  const servings = isRecipe ? rd.servings : null
 
-  const emoji = isFoodItem ? entry.food_item.emoji : null
-  const cookTime = isRecipe ? entry.recipe.cook_time_minutes : null
-  const isFavorite = isRecipe ? entry.recipe.is_favorite : false
-
-  // Participant display logic: if all household members → show "Everyone" badge
-  // Otherwise show avatars
+  // Participant display: hide when participants match slot defaults or all members
   const participants = entry.participants || []
   const allMembers = familyMembers.filter((m) => !m.is_system)
   const isEveryone =
     participants.length === 0 ||
     (participants.length === allMembers.length && allMembers.length > 0)
+
+  // Check if participants match slot defaults (by ID set equality)
+  const slotDefaults = slotType?.default_participants || []
+  const hasDefaultParticipants =
+    isEveryone ||
+    (slotDefaults.length > 0 &&
+      participants.length === slotDefaults.length &&
+      new Set(participants.map((p) => p.id)).size === new Set([...participants.map((p) => p.id), ...slotDefaults]).size)
+  const showAvatars = !isEveryone && !hasDefaultParticipants
 
   const handleToggleCooked = async (e) => {
     e.stopPropagation()
@@ -63,94 +71,66 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     }
   }
 
-  // Food item variant: lighter, translucent
-  if (isFoodItem) {
-    return (
-      <div
-        className={`
-          meal-card-enter
-          group relative flex items-center gap-1.5 px-2 py-1.5 rounded-lg
-          bg-white/65 dark:bg-white/10
-          hover:bg-white/90 dark:hover:bg-white/15
-          text-xs font-medium text-text-secondary dark:text-gray-300
-          transition-all
-          ${entry.was_cooked ? 'opacity-60' : ''}
-        `}
-      >
-        {emoji && <span className="text-sm leading-none">{emoji}</span>}
-        <span className={`flex-1 truncate ${entry.was_cooked ? 'line-through' : ''}`}>
-          {displayName}
-        </span>
-
-        {/* Participant mini-avatars */}
-        {!isEveryone && participants.length > 0 && (
-          <div className="flex -space-x-1">
-            {participants.slice(0, 3).map((p) => (
-              <MemberAvatar
-                key={p.id}
-                name={p.name}
-                photoUrl={p.photo_url}
-                color={p.color}
-                size="xs"
-                className="ring-2 ring-white dark:ring-gray-800"
-              />
-            ))}
-          </div>
-        )}
-
-        <HoverActions
-          wasCooked={entry.was_cooked}
-          onToggleCooked={handleToggleCooked}
-          onDelete={handleDelete}
-          isWorking={isWorking}
-        />
-      </div>
-    )
+  const handleViewRecipe = (e) => {
+    e.stopPropagation()
+    if (isRecipe && onViewRecipe && item) {
+      onViewRecipe(item.id)
+    }
   }
 
-  // Recipe + Custom variants: full white card
+  const handleCardClick = () => {
+    if (isRecipe && onViewRecipe && item) {
+      onViewRecipe(item.id)
+    }
+  }
+
   return (
     <div
       className={`
         meal-card-enter
-        group relative rounded-xl border border-card-border/60 dark:border-gray-700
-        bg-card-bg dark:bg-gray-800
-        p-2 transition-all
-        hover:shadow-md
-        ${entry.was_cooked ? 'bg-sage-50 dark:bg-green-900/10' : ''}
+        group relative flex flex-col items-center justify-center text-center
+        rounded-xl border transition-all cursor-pointer select-none
+        px-2 py-3 min-h-[100px]
+        ${entry.was_cooked
+          ? 'bg-sage-50 dark:bg-green-900/10 border-sage-200 dark:border-green-800'
+          : 'bg-card-bg dark:bg-gray-800 border-card-border/60 dark:border-gray-700 hover:shadow-md'
+        }
       `}
+      onClick={handleCardClick}
     >
-      {/* Cooked badge (top-right) */}
-      {entry.was_cooked && (
-        <div
-          className="
-            bounce-in
-            absolute top-1.5 right-1.5 w-5 h-5 rounded-full
-            bg-gradient-to-br from-sage-500 to-sage-600
-            dark:from-green-500 dark:to-green-600
-            text-white text-xs font-bold
-            flex items-center justify-center shadow
-          "
-        >
-          ✓
+      {/* Participant avatars — only when non-default */}
+      {showAvatars && (
+        <div className="flex -space-x-1 mb-1.5">
+          {participants.slice(0, 5).map((p) => (
+            <MemberAvatar
+              key={p.id}
+              name={p.name}
+              photoUrl={p.photo_url}
+              color={p.color}
+              size="xs"
+              className="w-5 h-5 ring-2 ring-card-bg dark:ring-gray-800"
+            />
+          ))}
         </div>
       )}
 
-      {/* Name */}
+      {/* Name — dominant element */}
       <div
         className={`
-          text-xs font-semibold leading-tight pr-6
-          text-text-primary dark:text-gray-100
-          ${entry.was_cooked ? 'line-through text-sage-600 dark:text-green-500' : ''}
+          text-base font-medium leading-tight
+          ${entry.was_cooked
+            ? 'line-through text-sage-600 dark:text-green-500'
+            : 'text-text-primary dark:text-gray-100'
+          }
         `}
       >
         {displayName}
       </div>
 
-      {/* Meta: cook time + favorite */}
-      {(cookTime || isFavorite) && (
-        <div className="flex items-center gap-1.5 mt-1 text-[10px] text-text-muted dark:text-gray-400">
-          {cookTime && (
+      {/* Metadata row */}
+      {(cookTime || servings) && (
+        <div className="flex items-center gap-1.5 mt-1 text-xs text-text-muted dark:text-gray-400">
+          {cookTime > 0 && (
             <span className="flex items-center gap-0.5">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <circle cx="12" cy="12" r="10" />
@@ -159,95 +139,90 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
               {cookTime}m
             </span>
           )}
-          {isFavorite && (
-            <span className="px-1.5 py-0.5 rounded bg-gradient-to-r from-terracotta-500 to-peach-200 dark:from-blue-600 dark:to-blue-400 text-white text-[9px] font-bold">
-              ★ FAV
-            </span>
-          )}
+          {cookTime > 0 && servings && <span>·</span>}
+          {servings && <span>{servings} servings</span>}
         </div>
       )}
 
-      {/* Notes */}
-      {entry.notes && (
-        <div className="mt-1 text-[10px] italic text-text-muted dark:text-gray-400 line-clamp-1">
-          {entry.notes}
+      {/* Cooked badge */}
+      {entry.was_cooked && (
+        <div className="bounce-in mt-1.5 text-xs font-semibold text-sage-600 dark:text-green-400">
+          ✓ Cooked
         </div>
       )}
 
-      {/* Footer: participants + actions */}
-      <div className="flex items-center justify-between mt-1.5">
-        {isEveryone ? (
-          <span className="text-[9px] font-semibold text-text-muted dark:text-gray-400 px-1.5 py-0.5 bg-warm-beige dark:bg-gray-700 rounded">
-            Everyone
-          </span>
-        ) : (
-          <div className="flex -space-x-1">
-            {participants.slice(0, 4).map((p) => (
-              <MemberAvatar
-                key={p.id}
-                name={p.name}
-                photoUrl={p.photo_url}
-                color={p.color}
-                size="xs"
-                className="ring-2 ring-card-bg dark:ring-gray-800"
-              />
-            ))}
-            {participants.length > 4 && (
-              <span className="text-[9px] text-text-muted ml-0.5 self-center">
-                +{participants.length - 4}
-              </span>
-            )}
-          </div>
+      {/* Hover action icons — desktop: hover-reveal, mobile: always visible */}
+      <div
+        className="
+          absolute bottom-2 left-1/2 -translate-x-1/2
+          flex items-center gap-1.5
+          max-md:opacity-100
+          md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100
+          transition-opacity duration-150
+        "
+      >
+        {/* View recipe (only for recipe entries) */}
+        {isRecipe && (
+          <button
+            type="button"
+            onClick={handleViewRecipe}
+            title="View recipe"
+            aria-label="View recipe"
+            className="
+              w-8 h-8 flex items-center justify-center rounded-full
+              bg-warm-sand dark:bg-gray-700
+              border border-card-border dark:border-gray-600
+              text-text-secondary dark:text-gray-300
+              hover:bg-warm-beige dark:hover:bg-gray-600
+              transition-colors
+            "
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+            </svg>
+          </button>
         )}
 
-        <HoverActions
-          wasCooked={entry.was_cooked}
-          onToggleCooked={handleToggleCooked}
-          onDelete={handleDelete}
-          isWorking={isWorking}
-        />
-      </div>
-    </div>
-  )
-}
+        {/* Cooked toggle */}
+        <button
+          type="button"
+          onClick={handleToggleCooked}
+          disabled={isWorking}
+          title={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
+          aria-label={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
+          className="
+            w-8 h-8 flex items-center justify-center rounded-full
+            bg-sage-50 dark:bg-green-900/20
+            text-sage-600 dark:text-green-400
+            hover:bg-sage-100 dark:hover:bg-green-900/30
+            transition-colors disabled:opacity-50
+          "
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
 
-function HoverActions({ wasCooked, onToggleCooked, onDelete, isWorking }) {
-  return (
-    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-      <button
-        type="button"
-        onClick={onToggleCooked}
-        disabled={isWorking}
-        title={wasCooked ? 'Mark as not cooked' : 'Mark as cooked'}
-        aria-label={wasCooked ? 'Mark as not cooked' : 'Mark as cooked'}
-        className="
-          p-1 rounded text-text-muted dark:text-gray-500
-          hover:text-sage-600 dark:hover:text-green-400
-          hover:bg-sage-50 dark:hover:bg-green-900/20
-          transition-colors disabled:opacity-50
-        "
-      >
-        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        disabled={isWorking}
-        title="Delete"
-        aria-label="Delete meal"
-        className="
-          p-1 rounded text-text-muted dark:text-gray-500
-          hover:text-red-600 dark:hover:text-red-400
-          hover:bg-red-50 dark:hover:bg-red-900/20
-          transition-colors disabled:opacity-50
-        "
-      >
-        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+        {/* Delete */}
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={isWorking}
+          title="Delete meal"
+          aria-label="Delete meal"
+          className="
+            w-8 h-8 flex items-center justify-center rounded-full
+            bg-terracotta-50 dark:bg-red-900/20
+            text-terracotta-600 dark:text-red-400
+            hover:bg-terracotta-100 dark:hover:bg-red-900/30
+            transition-colors disabled:opacity-50
+          "
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }

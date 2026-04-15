@@ -5,16 +5,21 @@ import axios from 'axios'
 
 vi.mock('axios')
 
-// Mock RecipeDetailDrawer to avoid unrelated rendering.
-vi.mock('../../../src/components/mealboard/RecipeDetailDrawer', () => ({
+// Mock ItemDetailDrawer to avoid unrelated rendering during skeleton tests.
+vi.mock('../../../src/components/mealboard/ItemDetailDrawer', () => ({
   default: () => null,
 }))
 
 // Import after mocks are set up
 const { default: RecipesView } = await import('../../../src/components/mealboard/RecipesView')
+const { UndoToastProvider } = await import('../../../src/components/shared/UndoToast')
 
-function renderWithRouter(ui) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>)
+function renderWithProviders(ui) {
+  return render(
+    <MemoryRouter>
+      <UndoToastProvider>{ui}</UndoToastProvider>
+    </MemoryRouter>
+  )
 }
 
 describe('RecipesView skeleton behavior', () => {
@@ -30,7 +35,7 @@ describe('RecipesView skeleton behavior', () => {
     axios.get.mockResolvedValue({ data: [{ id: 1, name: 'Test Recipe', tags: [], is_favorite: false }] })
 
     await act(async () => {
-      renderWithRouter(<RecipesView />)
+      renderWithProviders(<RecipesView />)
     })
 
     // Flush microtasks for the resolved promise
@@ -48,7 +53,7 @@ describe('RecipesView skeleton behavior', () => {
     axios.get.mockImplementation(() => new Promise(() => {}))
 
     await act(async () => {
-      renderWithRouter(<RecipesView />)
+      renderWithProviders(<RecipesView />)
     })
 
     // Initially no skeletons (delay hasn't elapsed)

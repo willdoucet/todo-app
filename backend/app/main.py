@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
-from .routes import tasks, family_members, responsibilities, uploads, lists, recipes, meal_plans, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, food_items, meal_entries
+from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 
@@ -32,15 +32,13 @@ app.include_router(family_members.router)
 app.include_router(responsibilities.router)
 app.include_router(uploads.router)
 app.include_router(lists.router)
-app.include_router(recipes.router)
-app.include_router(meal_plans.router)
+app.include_router(items.router)
 app.include_router(calendar_events.router)
 app.include_router(integrations.router)
 app.include_router(app_settings.router)
 app.include_router(calendars.router)
 app.include_router(sections.router)
 app.include_router(meal_slot_types.router)
-app.include_router(food_items.router)
 app.include_router(meal_entries.router)
 
 

@@ -12,6 +12,7 @@ describe('MealCard', () => {
     name: 'Dinner',
     color: '#E8927C',
     icon: '🍽',
+    default_participants: [],
   }
 
   const mockFamilyMembers = [
@@ -20,25 +21,53 @@ describe('MealCard', () => {
     { id: 3, name: 'Kid', color: '#F5A623' },
   ]
 
-  const mockRecipe = {
+  // Post-refactor: meal_entries reference an Item via item_id, and the response
+  // embeds the full Item object (with detail eager-loaded) under entry.item.
+  const mockRecipeItem = {
     id: 1,
     name: 'Honey Garlic Chicken',
-    cook_time_minutes: 30,
+    item_type: 'recipe',
+    icon_emoji: null,
+    icon_url: null,
+    tags: [],
     is_favorite: true,
+    recipe_detail: {
+      description: null,
+      ingredients: [],
+      instructions: null,
+      prep_time_minutes: 10,
+      cook_time_minutes: 30,
+      servings: 4,
+      image_url: null,
+    },
+    food_item_detail: null,
+  }
+
+  const mockFoodItem = {
+    id: 5,
+    name: 'Banana',
+    item_type: 'food_item',
+    icon_emoji: '🍌',
+    icon_url: null,
+    tags: [],
+    is_favorite: false,
+    recipe_detail: null,
+    food_item_detail: {
+      category: 'fruit',
+      shopping_quantity: 1,
+      shopping_unit: 'each',
+    },
   }
 
   const mockRecipeEntry = {
     id: 10,
     date: '2026-04-04',
     meal_slot_type_id: 3,
-    recipe_id: 1,
-    food_item_id: null,
+    item_id: 1,
+    item: mockRecipeItem,
     custom_meal_name: null,
-    item_type: 'recipe',
     was_cooked: false,
     notes: null,
-    recipe: mockRecipe,
-    food_item: null,
     participants: mockFamilyMembers, // all members = "everyone"
   }
 
@@ -48,6 +77,7 @@ describe('MealCard', () => {
     familyMembers: mockFamilyMembers,
     onUpdated: vi.fn(),
     onDeleted: vi.fn(),
+    onViewRecipe: vi.fn(),
   }
 
   beforeEach(() => {
@@ -61,60 +91,38 @@ describe('MealCard', () => {
     expect(screen.getByText('Honey Garlic Chicken')).toBeInTheDocument()
   })
 
-  it('renders custom meal name when item_type is custom', () => {
+  it('renders custom meal name for an entry with no item', () => {
     const entry = {
       ...mockRecipeEntry,
-      item_type: 'custom',
-      recipe_id: null,
-      recipe: null,
+      item_id: null,
+      item: null,
       custom_meal_name: 'Leftover pizza',
     }
     render(<MealCard {...defaultProps} entry={entry} />)
     expect(screen.getByText('Leftover pizza')).toBeInTheDocument()
   })
 
-  it('renders food item with emoji for food_item type', () => {
+  it('renders food item name for food_item type', () => {
     const entry = {
       ...mockRecipeEntry,
-      item_type: 'food_item',
-      recipe_id: null,
-      recipe: null,
-      food_item_id: 5,
-      food_item: { id: 5, name: 'Banana', emoji: '🍌', category: 'fruit' },
+      item_id: 5,
+      item: mockFoodItem,
     }
     render(<MealCard {...defaultProps} entry={entry} />)
     expect(screen.getByText('Banana')).toBeInTheDocument()
-    expect(screen.getByText('🍌')).toBeInTheDocument()
   })
 
-  it('shows cook time for recipe meals', () => {
+  it('shows combined cook time and servings for recipe meals', () => {
     render(<MealCard {...defaultProps} />)
-    expect(screen.getByText(/30m/)).toBeInTheDocument()
+    // prep (10) + cook (30) = 40m
+    expect(screen.getByText(/40m/)).toBeInTheDocument()
+    expect(screen.getByText(/4 servings/)).toBeInTheDocument()
   })
 
-  it('shows favorite badge for favorite recipes', () => {
+  it('hides participant avatars when all family members are participants (everyone)', () => {
     render(<MealCard {...defaultProps} />)
-    expect(screen.getByText(/★\s*FAV/)).toBeInTheDocument()
-  })
-
-  it('does not show favorite badge for non-favorite recipes', () => {
-    const entry = {
-      ...mockRecipeEntry,
-      recipe: { ...mockRecipe, is_favorite: false },
-    }
-    render(<MealCard {...defaultProps} entry={entry} />)
-    expect(screen.queryByText(/★\s*FAV/)).not.toBeInTheDocument()
-  })
-
-  it('displays notes when present', () => {
-    const entry = { ...mockRecipeEntry, notes: 'Extra garlic tonight' }
-    render(<MealCard {...defaultProps} entry={entry} />)
-    expect(screen.getByText('Extra garlic tonight')).toBeInTheDocument()
-  })
-
-  it('shows "Everyone" badge when all family members are participants', () => {
-    render(<MealCard {...defaultProps} />)
-    expect(screen.getByText('Everyone')).toBeInTheDocument()
+    const avatarContainer = document.querySelector('.-space-x-1')
+    expect(avatarContainer).not.toBeInTheDocument()
   })
 
   it('shows individual avatars when only some members are participants', () => {
@@ -123,7 +131,8 @@ describe('MealCard', () => {
       participants: [mockFamilyMembers[0]], // Only Dad
     }
     render(<MealCard {...defaultProps} entry={entry} />)
-    expect(screen.queryByText('Everyone')).not.toBeInTheDocument()
+    const avatarContainer = document.querySelector('.-space-x-1')
+    expect(avatarContainer).toBeInTheDocument()
   })
 
   it('calls onUpdated via axios when toggling cooked', async () => {
@@ -147,11 +156,34 @@ describe('MealCard', () => {
     expect(defaultProps.onDeleted).toHaveBeenCalledWith(10)
   })
 
-  it('shows cooked state with strikethrough and checkmark when was_cooked is true', () => {
+  it('shows cooked state with strikethrough and cooked badge', () => {
     const entry = { ...mockRecipeEntry, was_cooked: true }
-    const { container } = render(<MealCard {...defaultProps} entry={entry} />)
+    render(<MealCard {...defaultProps} entry={entry} />)
     const name = screen.getByText('Honey Garlic Chicken')
     expect(name.className).toContain('line-through')
-    expect(container.querySelector('.from-sage-500')).toBeInTheDocument()
+    expect(screen.getByText('✓ Cooked')).toBeInTheDocument()
+  })
+
+  it('shows view recipe button for recipe entries', () => {
+    render(<MealCard {...defaultProps} />)
+    expect(screen.getByLabelText('View recipe')).toBeInTheDocument()
+  })
+
+  it('calls onViewRecipe when view recipe button is clicked', async () => {
+    const user = userEvent.setup()
+    render(<MealCard {...defaultProps} />)
+    await user.click(screen.getByLabelText('View recipe'))
+    // onViewRecipe is called with the item.id (was recipe.id pre-refactor)
+    expect(defaultProps.onViewRecipe).toHaveBeenCalledWith(1)
+  })
+
+  it('hides view recipe button for non-recipe entries', () => {
+    const entry = {
+      ...mockRecipeEntry,
+      item_id: 5,
+      item: mockFoodItem,
+    }
+    render(<MealCard {...defaultProps} entry={entry} />)
+    expect(screen.queryByLabelText('View recipe')).not.toBeInTheDocument()
   })
 })

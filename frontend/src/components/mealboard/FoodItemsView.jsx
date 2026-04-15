@@ -1,13 +1,12 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
-import FoodItemCard from './FoodItemCard'
-import FoodItemRow from './FoodItemRow'
-import FoodItemFormModal from './FoodItemFormModal'
+import { useState, useMemo } from 'react'
+import ItemCard from './ItemCard'
+import ItemRow from './ItemRow'
+import ItemFormModal from './ItemFormModal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ToolbarCount from './ToolbarCount'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { useItems } from '../../hooks/useItems'
+import { useUndoToast } from '../shared/UndoToast'
 
 const CATEGORIES = [
   { value: 'all', label: 'All' },
@@ -19,71 +18,43 @@ const CATEGORIES = [
 ]
 
 export default function FoodItemsView() {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const { items, loading, error, refetch, createItem, updateItem, deleteItem, undoDeleteItem, toggleFavorite } =
+    useItems({ type: 'food_item' })
+  const { show: showUndoToast } = useUndoToast()
   const showSpinner = useDelayedFlag(loading, 200)
 
-  // View + filter state
-  const [view, setView] = useState('grid') // 'grid' or 'list'
+  const [view, setView] = useState('grid')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
 
-  // Modal state
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, item: null })
 
-  useEffect(() => {
-    fetchItems()
-  }, [])
-
-  const fetchItems = async () => {
-    setLoading(true)
-    try {
-      const response = await axios.get(`${API_BASE}/food-items/`)
-      setItems(response.data)
-      setError(null)
-    } catch (err) {
-      setError('Failed to load food items')
-      console.error('Error fetching food items:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCreate = async (data) => {
-    const response = await axios.post(`${API_BASE}/food-items/`, data)
-    setItems([...items, response.data])
+  const handleCreate = async (payload) => {
+    await createItem(payload)
     setIsFormOpen(false)
   }
 
-  const handleUpdate = async (data) => {
-    const response = await axios.patch(`${API_BASE}/food-items/${editingItem.id}`, data)
-    setItems(items.map((i) => (i.id === editingItem.id ? response.data : i)))
+  const handleUpdate = async (payload) => {
+    await updateItem(editingItem.id, payload)
     setEditingItem(null)
     setIsFormOpen(false)
   }
 
   const handleDelete = async () => {
-    if (!deleteConfirm.item) return
+    const doomed = deleteConfirm.item
+    if (!doomed) return
+    setDeleteConfirm({ open: false, item: null })
     try {
-      await axios.delete(`${API_BASE}/food-items/${deleteConfirm.item.id}`)
-      setItems(items.filter((i) => i.id !== deleteConfirm.item.id))
-      setDeleteConfirm({ open: false, item: null })
-    } catch (err) {
-      console.error('Error deleting food item:', err)
-    }
-  }
-
-  const handleToggleFavorite = async (item) => {
-    try {
-      const response = await axios.patch(`${API_BASE}/food-items/${item.id}`, {
-        is_favorite: !item.is_favorite,
+      const { undo_token } = await deleteItem(doomed.id)
+      showUndoToast({
+        item: doomed,
+        undoToken: undo_token,
+        onUndo: (token) => undoDeleteItem(doomed.id, token),
       })
-      setItems(items.map((i) => (i.id === item.id ? response.data : i)))
     } catch (err) {
-      console.error('Error toggling favorite:', err)
+      console.error('Delete failed:', err)
     }
   }
 
@@ -97,14 +68,18 @@ export default function FoodItemsView() {
     setEditingItem(null)
   }
 
-  // Filter items
-  const filteredItems = items
-    .filter((item) => {
-      if (category !== 'all' && item.category !== category) return false
-      if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false
-      return true
-    })
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const filteredItems = useMemo(() => {
+    return items
+      .filter((it) => {
+        const cat = it.food_item_detail?.category || 'Other'
+        if (category !== 'all' && cat !== category) return false
+        if (search && !it.name.toLowerCase().includes(search.toLowerCase())) return false
+        return true
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [items, search, category])
+
+  const isFiltered = search || category !== 'all'
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -113,39 +88,21 @@ export default function FoodItemsView() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 max-w-xs">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-gray-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search food items..."
-              className="
-                w-full pl-9 pr-3 py-2 text-sm rounded-lg
-                border border-card-border dark:border-gray-600
-                bg-white dark:bg-gray-700
-                text-text-primary dark:text-gray-100
-                placeholder-text-muted dark:placeholder-gray-500
-                focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500
-              "
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-card-border dark:border-gray-600 bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 placeholder-text-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
             />
           </div>
 
-          {/* Food item count */}
           <ToolbarCount
             count={filteredItems.length}
-            totalCount={(search || category !== 'all') ? items.length : undefined}
+            totalCount={isFiltered ? items.length : undefined}
             singular="food item"
             plural="food items"
           />
@@ -234,7 +191,7 @@ export default function FoodItemsView() {
         ) : error ? (
           <div className="text-center py-12 text-red-500 dark:text-red-400">
             {error}
-            <button onClick={fetchItems} className="block mx-auto mt-3 underline">Retry</button>
+            <button onClick={refetch} className="block mx-auto mt-3 underline">Retry</button>
           </div>
         ) : filteredItems.length === 0 ? (
           <div className="text-center py-16">
@@ -257,48 +214,50 @@ export default function FoodItemsView() {
             )}
           </div>
         ) : view === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          // Grid = horizontal pill layout (mockup food-items-pill-option-a).
+          // 3 columns on desktop, collapsing to 2/1 on narrower viewports.
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-5xl mx-auto">
             {filteredItems.map((item) => (
-              <FoodItemCard
+              <ItemCard
                 key={item.id}
                 item={item}
+                onClick={() => handleEdit(item)}
                 onEdit={() => handleEdit(item)}
-                onDelete={() => setDeleteConfirm({ open: true, item })}
-                onToggleFavorite={() => handleToggleFavorite(item)}
+                onToggleFavorite={() => toggleFavorite(item)}
               />
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-card-border dark:border-gray-700 bg-card-bg dark:bg-gray-800 overflow-hidden">
+          <div className="rounded-xl border border-card-border dark:border-gray-700 bg-card-bg dark:bg-gray-800 overflow-hidden max-w-5xl mx-auto">
             {filteredItems.map((item, idx) => (
-              <FoodItemRow
+              <ItemRow
                 key={item.id}
                 item={item}
                 isLast={idx === filteredItems.length - 1}
+                onClick={() => handleEdit(item)}
                 onEdit={() => handleEdit(item)}
                 onDelete={() => setDeleteConfirm({ open: true, item })}
-                onToggleFavorite={() => handleToggleFavorite(item)}
+                onToggleFavorite={() => toggleFavorite(item)}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* Create/Edit Modal */}
-      <FoodItemFormModal
+      <ItemFormModal
         isOpen={isFormOpen}
         onClose={handleCloseForm}
         onSubmit={editingItem ? handleUpdate : handleCreate}
+        type="food_item"
         initialItem={editingItem}
       />
 
-      {/* Delete confirmation */}
       <ConfirmDialog
         isOpen={deleteConfirm.open}
         onClose={() => setDeleteConfirm({ open: false, item: null })}
         onConfirm={handleDelete}
         title="Delete food item?"
-        message={`"${deleteConfirm.item?.name}" will be removed. Meal entries that used it will keep their data.`}
+        message={`"${deleteConfirm.item?.name}" will be removed. You'll have 15 seconds to undo.`}
         confirmLabel="Delete"
         variant="danger"
       />

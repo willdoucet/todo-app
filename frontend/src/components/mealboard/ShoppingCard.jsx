@@ -1,7 +1,12 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import ShoppingLinkModal from './ShoppingLinkModal'
+
+const OVERFLOW_ITEMS = [
+  { key: 'change', label: 'Change list', icon: '🔄' },
+  { key: 'unlink', label: 'Unlink', icon: '🔗' },
+]
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -23,9 +28,11 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
   const [linkedListName, setLinkedListName] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [warningOpen, setWarningOpen] = useState(false)
+  const [overflowOpen, setOverflowOpen] = useState(false)
   const [syncPending, setSyncPending] = useState(false)
   const warningPanelRef = useRef(null)
   const warningTriggerRef = useRef(null)
+  const overflowRef = useRef(null)
   const navigate = useNavigate()
 
   const listId = settings?.mealboard_shopping_list_id
@@ -147,10 +154,42 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
     setModalOpen(false)
   }
 
+  const handleUnlink = async () => {
+    setOverflowOpen(false)
+    try {
+      const res = await axios.patch(`${API_BASE}/app-settings/`, {
+        mealboard_shopping_list_id: null,
+      })
+      onSettingsChange(res.data)
+    } catch (err) {
+      console.error('Failed to unlink shopping list:', err)
+    }
+  }
+
+  const handleOverflowAction = (key) => {
+    setOverflowOpen(false)
+    if (key === 'change') {
+      setModalOpen(true)
+    } else if (key === 'unlink') {
+      handleUnlink()
+    }
+  }
+
+  // Close overflow menu on click outside
+  useEffect(() => {
+    if (!overflowOpen) return
+    const handler = (e) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target)) {
+        setOverflowOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [overflowOpen])
+
   // Format meal name for display in the warning panel
   const formatMealName = (meal) => {
-    if (meal.recipe) return meal.recipe.name
-    if (meal.food_item) return meal.food_item.name
+    if (meal.item?.name) return meal.item.name
     return meal.custom_meal_name || 'Untitled meal'
   }
 
@@ -159,28 +198,37 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   }
 
-  // Determine display text
-  let displayText = '🛒 Add a shopping list'
+  // Determine display content (the count gets its own styling)
+  let displayContent = <>🛒 Add a shopping list</>
   if (listId) {
     if (itemCount === null) {
-      displayText = '🛒 Loading...'
+      displayContent = <>🛒 Loading...</>
     } else if (itemCount === 0) {
-      displayText = '🛒 Shopping list empty'
+      displayContent = <>🛒 Shopping list empty</>
     } else {
-      displayText = `🛒 ${itemCount} item${itemCount === 1 ? '' : 's'} on shopping list`
+      displayContent = (
+        <>
+          🛒{' '}
+          <span className="font-bold text-terracotta-500 dark:text-blue-400">{itemCount}</span>
+          {' '}item{itemCount === 1 ? '' : 's'} in shopping list
+        </>
+      )
     }
   }
 
   const hasFailures = failedMeals.length > 0
 
+  // Don't render until settings have loaded — prevents flash of "Add a shopping list"
+  if (!settings) return null
+
   return (
-    <div className="relative flex items-center gap-2">
+    <div className="relative flex items-center gap-2" style={{ animation: 'swimlane-enter 0.4s ease-out both' }}>
       {/* Main shopping card button */}
       <button
         type="button"
         onClick={handleClick}
         className={`
-          relative px-3 py-2 rounded-xl
+          relative px-4 py-2 rounded-2xl
           bg-card-bg dark:bg-gray-800
           border border-card-border dark:border-gray-700
           hover:border-terracotta-500 dark:hover:border-blue-500
@@ -191,7 +239,7 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
         `}
         title={listId ? `Open ${linkedListName}` : 'Link a shopping list to auto-sync meal ingredients'}
       >
-        {displayText}
+        {displayContent}
         {/* Pulsing dot for pending sync */}
         {syncPending && !hasFailures && (
           <span
@@ -200,6 +248,60 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
           />
         )}
       </button>
+
+      {/* Overflow menu (⋯) — shown only when a list is linked */}
+      {listId && (
+        <div className="relative" ref={overflowRef}>
+          <button
+            type="button"
+            onClick={() => setOverflowOpen(!overflowOpen)}
+            className="
+              p-2 rounded-lg
+              text-text-muted dark:text-gray-500
+              hover:bg-warm-beige dark:hover:bg-gray-700
+              hover:text-text-secondary dark:hover:text-gray-300
+              transition-colors
+            "
+            aria-label="Shopping list options"
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </button>
+          {overflowOpen && (
+            <div
+              className="
+                absolute top-full right-0 mt-1 z-50
+                min-w-[140px]
+                bg-card-bg dark:bg-gray-800
+                border border-card-border dark:border-gray-700
+                rounded-lg shadow-xl
+                py-1 overflow-hidden origin-top-right
+              "
+              style={{ animation: 'view-crossfade 150ms ease both, scale-pop 150ms ease both' }}
+              role="menu"
+            >
+              {OVERFLOW_ITEMS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => handleOverflowAction(item.key)}
+                  className="
+                    w-full flex items-center gap-2 px-3 py-2
+                    text-sm text-text-secondary dark:text-gray-300
+                    hover:bg-warm-beige dark:hover:bg-gray-700
+                    transition-colors text-left
+                  "
+                  role="menuitem"
+                >
+                  <span className="text-xs">{item.icon}</span>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Failure warning button */}
       {hasFailures && (

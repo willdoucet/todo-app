@@ -192,11 +192,26 @@ async def test_responsibility(db_session, test_family_member):
 
 @pytest_asyncio.fixture
 async def test_recipe(db_session):
-    """Create a test recipe in the database."""
-    from app.models import Recipe
+    """Create a test recipe as an Item + RecipeDetail pair.
 
-    recipe = Recipe(
+    Migrated from the legacy Recipe model after the item-model refactor. The return
+    value is an Item with .recipe_detail populated so existing tests that access
+    recipe.name / recipe.id / recipe.is_favorite still work; tests that read detail
+    fields (description, ingredients, instructions, prep/cook time, servings) must
+    go through .recipe_detail.
+    """
+    from app.models import Item, RecipeDetail
+
+    item = Item(
         name="Test Recipe",
+        item_type="recipe",
+        is_favorite=False,
+        tags=["test"],
+    )
+    db_session.add(item)
+    await db_session.flush()
+    detail = RecipeDetail(
+        item_id=item.id,
         description="A test recipe",
         ingredients=[
             {"name": "Test ingredient", "quantity": 1, "unit": "cup", "category": "Pantry"}
@@ -205,35 +220,39 @@ async def test_recipe(db_session):
         prep_time_minutes=10,
         cook_time_minutes=20,
         servings=4,
-        is_favorite=False,
-        tags=["test"],
     )
-    db_session.add(recipe)
+    db_session.add(detail)
     await db_session.commit()
-    await db_session.refresh(recipe)
-    return recipe
+    await db_session.refresh(item)
+    return item
 
 
 @pytest_asyncio.fixture
 async def test_favorite_recipe(db_session):
-    """Create a favorite test recipe in the database."""
-    from app.models import Recipe
+    """Create a favorite test recipe as an Item + RecipeDetail pair."""
+    from app.models import Item, RecipeDetail
 
-    recipe = Recipe(
+    item = Item(
         name="Favorite Recipe",
+        item_type="recipe",
+        is_favorite=True,
+        tags=["favorite", "test"],
+    )
+    db_session.add(item)
+    await db_session.flush()
+    detail = RecipeDetail(
+        item_id=item.id,
         description="A favorite recipe",
         ingredients=[{"name": "Ingredient", "quantity": 2, "unit": "cup", "category": "Pantry"}],
         instructions="Favorite instructions",
         prep_time_minutes=15,
         cook_time_minutes=30,
         servings=6,
-        is_favorite=True,
-        tags=["favorite", "test"],
     )
-    db_session.add(recipe)
+    db_session.add(detail)
     await db_session.commit()
-    await db_session.refresh(recipe)
-    return recipe
+    await db_session.refresh(item)
+    return item
 
 
 @pytest_asyncio.fixture
@@ -263,11 +282,25 @@ async def test_meal_slot_dinner(test_meal_slot_types):
 
 @pytest_asyncio.fixture
 async def test_food_item(db_session):
-    """Create a test food item (Banana)."""
-    from app.models import FoodItem
+    """Create a test food item as an Item + FoodItemDetail pair."""
+    from app.models import Item, FoodItemDetail
+    from decimal import Decimal
 
-    item = FoodItem(name="Banana", emoji="🍌", category="fruit", is_favorite=False)
+    item = Item(
+        name="Banana",
+        item_type="food_item",
+        icon_emoji="🍌",
+        is_favorite=False,
+    )
     db_session.add(item)
+    await db_session.flush()
+    detail = FoodItemDetail(
+        item_id=item.id,
+        category="fruit",
+        shopping_quantity=Decimal("1.0"),
+        shopping_unit="each",
+    )
+    db_session.add(detail)
     await db_session.commit()
     await db_session.refresh(item)
     return item
@@ -282,8 +315,7 @@ async def test_meal_entry(db_session, test_recipe, test_meal_slot_dinner):
     entry = MealEntry(
         date=date.today(),
         meal_slot_type_id=test_meal_slot_dinner.id,
-        recipe_id=test_recipe.id,
-        item_type="recipe",
+        item_id=test_recipe.id,
         was_cooked=False,
     )
     db_session.add(entry)

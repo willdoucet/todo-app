@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAutoAnimate } from '@formkit/auto-animate/react'
-import axios from 'axios'
 import MealboardNav from './MealboardNav'
-import RecipeCard from './RecipeCard'
-import RecipeRow from './RecipeRow'
-import RecipeFormModal from './RecipeFormModal'
-import RecipeDetailDrawer from './RecipeDetailDrawer'
+import ItemCard from './ItemCard'
+import ItemRow from './ItemRow'
+import ItemFormModal from './ItemFormModal'
+import ItemDetailDrawer from './ItemDetailDrawer'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import FoodItemsView from './FoodItemsView'
 import ToolbarCount from './ToolbarCount'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
+import { useItems } from '../../hooks/useItems'
+import { useUndoToast } from '../shared/UndoToast'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const VIEW_PREF_KEY = 'recipe_view_preference'
 
 export default function RecipesView() {
@@ -75,9 +75,9 @@ const FAVORITE_FILTERS = [
 ]
 
 function RecipesTab() {
-  const [recipes, setRecipes] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const { items, loading, error, refetch, createItem, updateItem, deleteItem, undoDeleteItem, toggleFavorite } =
+    useItems({ type: 'recipe' })
+  const { show: showUndoToast } = useUndoToast()
   const showSkeleton = useDelayedFlag(loading, 200)
 
   // View, filter, search, sort state
@@ -103,7 +103,6 @@ function RecipesTab() {
         { opacity: 0, transform: 'scale(0.95)' },
       ]
     } else {
-      // 'remain' — slide from old position to new
       const dx = oldCoords.left - newCoords.left
       const dy = oldCoords.top - newCoords.top
       keyframes = [
@@ -111,21 +110,16 @@ function RecipesTab() {
         { transform: 'translate(0, 0)' },
       ]
     }
-    return new KeyframeEffect(el, keyframes, {
-      duration: 250,
-      easing: 'ease-out',
-    })
+    return new KeyframeEffect(el, keyframes, { duration: 250, easing: 'ease-out' })
   }
   const [gridAnimRef] = useAutoAnimate(gridAnimation)
   const [listAnimRef] = useAutoAnimate({ duration: 200, easing: 'ease-out' })
 
   // Modal/drawer state
   const [isFormOpen, setIsFormOpen] = useState(false)
-  const [editingRecipe, setEditingRecipe] = useState(null)
-  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, recipe: null })
-  const [drawerRecipeId, setDrawerRecipeId] = useState(null)
-
-  useEffect(() => { fetchRecipes() }, [])
+  const [editingItem, setEditingItem] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, item: null })
+  const [drawerItemId, setDrawerItemId] = useState(null)
 
   // Close sort popover on click outside
   useEffect(() => {
@@ -137,46 +131,35 @@ function RecipesTab() {
     return () => document.removeEventListener('mousedown', handler)
   }, [sortOpen])
 
-  const fetchRecipes = async () => {
-    setLoading(true)
-    try {
-      const res = await axios.get(`${API_BASE}/recipes`)
-      setRecipes(res.data)
-      setError(null)
-    } catch {
-      setError('Failed to load recipes')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCreate = async (data) => {
-    const res = await axios.post(`${API_BASE}/recipes`, data)
-    setRecipes([...recipes, res.data])
+  const handleCreate = async (payload) => {
+    await createItem(payload)
     setIsFormOpen(false)
   }
 
-  const handleUpdate = async (data) => {
-    const res = await axios.patch(`${API_BASE}/recipes/${editingRecipe.id}`, data)
-    setRecipes(recipes.map(r => r.id === editingRecipe.id ? res.data : r))
-    setEditingRecipe(null)
+  const handleUpdate = async (payload) => {
+    await updateItem(editingItem.id, payload)
+    setEditingItem(null)
     setIsFormOpen(false)
   }
 
   const handleDelete = async () => {
-    if (!deleteConfirm.recipe) return
-    await axios.delete(`${API_BASE}/recipes/${deleteConfirm.recipe.id}`)
-    setRecipes(recipes.filter(r => r.id !== deleteConfirm.recipe.id))
-    setDeleteConfirm({ open: false, recipe: null })
+    const doomed = deleteConfirm.item
+    if (!doomed) return
+    setDeleteConfirm({ open: false, item: null })
+    try {
+      const { undo_token } = await deleteItem(doomed.id)
+      showUndoToast({
+        item: doomed,
+        undoToken: undo_token,
+        onUndo: (token) => undoDeleteItem(doomed.id, token),
+      })
+    } catch (err) {
+      console.error('Delete failed:', err)
+    }
   }
 
-  const handleToggleFavorite = async (recipe) => {
-    const res = await axios.patch(`${API_BASE}/recipes/${recipe.id}`, { is_favorite: !recipe.is_favorite })
-    setRecipes(recipes.map(r => r.id === recipe.id ? res.data : r))
-  }
-
-  const handleEdit = (recipe) => { setEditingRecipe(recipe); setIsFormOpen(true) }
-  const handleCloseForm = () => { setIsFormOpen(false); setEditingRecipe(null) }
+  const handleEdit = (item) => { setEditingItem(item); setIsFormOpen(true) }
+  const handleCloseForm = () => { setIsFormOpen(false); setEditingItem(null) }
 
   const handleViewToggle = (v) => {
     setView(v)
@@ -184,7 +167,7 @@ function RecipesTab() {
   }
 
   const handleTagToggle = (tag) => {
-    setSelectedTags(prev => {
+    setSelectedTags((prev) => {
       const next = new Set(prev)
       if (next.has(tag)) next.delete(tag)
       else next.add(tag)
@@ -195,33 +178,33 @@ function RecipesTab() {
   // Extract unique tags
   const allTags = useMemo(() => {
     const tags = new Set()
-    for (const r of recipes) {
-      for (const t of (r.tags || [])) tags.add(t)
+    for (const it of items) {
+      for (const t of (it.tags || [])) tags.add(t)
     }
     return [...tags].sort()
-  }, [recipes])
+  }, [items])
 
   // Filter + search + sort
-  const filteredRecipes = useMemo(() => {
+  const filteredItems = useMemo(() => {
     const q = searchQuery.toLowerCase()
-    return recipes
-      .filter(r => !q || r.name.toLowerCase().includes(q))
-      .filter(r => filterFavorite === 'all' || (filterFavorite === 'yes' ? r.is_favorite : !r.is_favorite))
-      .filter(r => selectedTags.size === 0 || r.tags?.some(t => selectedTags.has(t)))
+    return items
+      .filter((it) => !q || it.name.toLowerCase().includes(q))
+      .filter((it) => filterFavorite === 'all' || (filterFavorite === 'yes' ? it.is_favorite : !it.is_favorite))
+      .filter((it) => selectedTags.size === 0 || it.tags?.some((t) => selectedTags.has(t)))
       .sort((a, b) => {
         switch (sortBy) {
           case 'name_asc': return a.name.localeCompare(b.name)
           case 'name_desc': return b.name.localeCompare(a.name)
           case 'recent': return new Date(b.created_at) - new Date(a.created_at)
-          case 'cook_time': return (a.cook_time_minutes || 0) - (b.cook_time_minutes || 0)
+          case 'cook_time': return (a.recipe_detail?.cook_time_minutes || 0) - (b.recipe_detail?.cook_time_minutes || 0)
           default: return 0
         }
       })
-  }, [recipes, searchQuery, filterFavorite, selectedTags, sortBy])
+  }, [items, searchQuery, filterFavorite, selectedTags, sortBy])
 
   const isFiltered = searchQuery || filterFavorite !== 'all' || selectedTags.size > 0
 
-  const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Sort'
+  const currentSortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label || 'Sort'
 
   return (
     <>
@@ -242,10 +225,9 @@ function RecipesTab() {
             />
           </div>
 
-          {/* Recipe count */}
           <ToolbarCount
-            count={filteredRecipes.length}
-            totalCount={isFiltered ? recipes.length : undefined}
+            count={filteredItems.length}
+            totalCount={isFiltered ? items.length : undefined}
             singular="recipe"
             plural="recipes"
           />
@@ -338,7 +320,6 @@ function RecipesTab() {
 
         {/* Filter rows */}
         <div className="mt-3 space-y-2">
-          {/* Favorite pills */}
           <div className="flex flex-wrap gap-2">
             {FAVORITE_FILTERS.map((f) => (
               <button
@@ -356,7 +337,6 @@ function RecipesTab() {
             ))}
           </div>
 
-          {/* Tag chips — horizontal scroll */}
           {allTags.length > 0 && (
             <div className="relative">
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -385,7 +365,6 @@ function RecipesTab() {
                   </button>
                 )}
               </div>
-              {/* Fade hint for overflow */}
               <div className="absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-white dark:from-gray-900 to-transparent pointer-events-none" />
             </div>
           )}
@@ -401,20 +380,20 @@ function RecipesTab() {
         ) : error ? (
           <div className="text-center py-12">
             <p className="text-red-500 dark:text-red-400">{error}</p>
-            <button onClick={fetchRecipes} className="mt-4 text-terracotta-600 dark:text-blue-400 hover:underline text-sm">Try again</button>
+            <button onClick={refetch} className="mt-4 text-terracotta-600 dark:text-blue-400 hover:underline text-sm">Try again</button>
           </div>
-        ) : filteredRecipes.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16">
             <span className="text-3xl text-text-muted dark:text-gray-500 mb-3">🍳</span>
             <p className="text-lg font-medium text-text-primary dark:text-gray-100">
-              {recipes.length === 0 ? 'No recipes yet' : 'No recipes match your filter'}
+              {items.length === 0 ? 'No recipes yet' : 'No recipes match your filter'}
             </p>
             <p className="text-sm text-text-secondary dark:text-gray-400 mt-1">
-              {recipes.length === 0
+              {items.length === 0
                 ? 'Add your first recipe to get started with meal planning.'
                 : 'Try a different search, filter, or tag.'}
             </p>
-            {recipes.length === 0 && (
+            {items.length === 0 && (
               <button
                 onClick={() => setIsFormOpen(true)}
                 className="mt-4 px-4 py-2 bg-terracotta-500 hover:bg-terracotta-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition-colors"
@@ -433,56 +412,57 @@ function RecipesTab() {
               animation: 'view-crossfade 150ms ease both',
             }}
           >
-            {filteredRecipes.map((recipe, i) => (
-              <RecipeCard
-                key={recipe.id}
-                recipe={recipe}
+            {filteredItems.map((item, i) => (
+              <ItemCard
+                key={item.id}
+                item={item}
                 index={i}
-                onClick={() => setDrawerRecipeId(recipe.id)}
-                onEdit={() => handleEdit(recipe)}
-                onDelete={() => setDeleteConfirm({ open: true, recipe })}
-                onToggleFavorite={() => handleToggleFavorite(recipe)}
+                onClick={() => setDrawerItemId(item.id)}
+                onEdit={() => handleEdit(item)}
+                onDelete={() => setDeleteConfirm({ open: true, item })}
+                onToggleFavorite={() => toggleFavorite(item)}
               />
             ))}
           </div>
         ) : (
           <div ref={listAnimRef} className="rounded-xl border border-card-border dark:border-gray-700 bg-card-bg dark:bg-gray-800 overflow-hidden max-w-[1400px] mx-auto">
-            {filteredRecipes.map((recipe, i) => (
-              <RecipeRow
-                key={recipe.id}
-                recipe={recipe}
+            {filteredItems.map((item, i) => (
+              <ItemRow
+                key={item.id}
+                item={item}
                 index={i}
-                isLast={i === filteredRecipes.length - 1}
-                onClick={() => setDrawerRecipeId(recipe.id)}
-                onEdit={() => handleEdit(recipe)}
-                onDelete={() => setDeleteConfirm({ open: true, recipe })}
-                onToggleFavorite={() => handleToggleFavorite(recipe)}
+                isLast={i === filteredItems.length - 1}
+                onClick={() => setDrawerItemId(item.id)}
+                onEdit={() => handleEdit(item)}
+                onDelete={() => setDeleteConfirm({ open: true, item })}
+                onToggleFavorite={() => toggleFavorite(item)}
               />
             ))}
           </div>
         )}
       </div>
 
-      <RecipeFormModal
+      <ItemFormModal
         isOpen={isFormOpen}
         onClose={handleCloseForm}
-        onSubmit={editingRecipe ? handleUpdate : handleCreate}
-        recipe={editingRecipe}
+        onSubmit={editingItem ? handleUpdate : handleCreate}
+        type="recipe"
+        initialItem={editingItem}
       />
 
-      <RecipeDetailDrawer
-        recipeId={drawerRecipeId}
-        isOpen={drawerRecipeId !== null}
-        onClose={() => setDrawerRecipeId(null)}
-        onEditRecipe={(recipe) => { setDrawerRecipeId(null); handleEdit(recipe) }}
+      <ItemDetailDrawer
+        itemId={drawerItemId}
+        isOpen={drawerItemId !== null}
+        onClose={() => setDrawerItemId(null)}
+        onEditItem={(item) => { setDrawerItemId(null); handleEdit(item) }}
       />
 
       <ConfirmDialog
         isOpen={deleteConfirm.open}
-        onClose={() => setDeleteConfirm({ open: false, recipe: null })}
+        onClose={() => setDeleteConfirm({ open: false, item: null })}
         onConfirm={handleDelete}
         title="Delete Recipe"
-        message={`Are you sure you want to delete "${deleteConfirm.recipe?.name}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${deleteConfirm.item?.name}"? You'll have 15 seconds to undo.`}
         confirmLabel="Delete"
         variant="danger"
       />

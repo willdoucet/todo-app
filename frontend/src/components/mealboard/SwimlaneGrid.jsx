@@ -37,6 +37,8 @@ export default function SwimlaneGrid({
   onAddMeal,
   onMealUpdated,
   onMealDeleted,
+  onViewRecipe,
+  initialLoaded,
 }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -61,7 +63,28 @@ export default function SwimlaneGrid({
     return entriesByDaySlot[key] || []
   }
 
+  // Compute prep-time summary per day (sum of prep_time + cook_time across all recipe meals)
+  const prepTimeByDay = useMemo(() => {
+    const map = {}
+    for (const date of weekDates) {
+      const key = formatDateKey(date)
+      let total = 0
+      for (const entry of mealEntries) {
+        if (entry.date === key && entry.item?.item_type === 'recipe' && entry.item.recipe_detail) {
+          const rd = entry.item.recipe_detail
+          total += (rd.prep_time_minutes || 0) + (rd.cook_time_minutes || 0)
+        }
+      }
+      map[key] = total
+    }
+    return map
+  }, [weekDates, mealEntries])
+
   if (slotTypes.length === 0) {
+    // During initial load, slotTypes is [] because the API hasn't responded yet.
+    // Return null so the parent's delayed spinner overlay handles the loading state.
+    // Only show the "no slots" message after data has loaded and there truly are none.
+    if (!initialLoaded) return null
     return (
       <div className="text-center py-16">
         <p className="text-sm text-text-muted dark:text-gray-400 mb-2">
@@ -114,6 +137,12 @@ export default function SwimlaneGrid({
               ) : (
                 <div className="text-lg font-bold text-text-primary dark:text-gray-100 mt-0.5">
                   {date.getDate()}
+                </div>
+              )}
+              {/* Prep-time summary */}
+              {prepTimeByDay[formatDateKey(date)] > 0 && (
+                <div className="text-[10px] text-text-muted dark:text-gray-400 mt-0.5">
+                  ⏲ {prepTimeByDay[formatDateKey(date)]}m
                 </div>
               )}
             </div>
@@ -178,6 +207,7 @@ export default function SwimlaneGrid({
                     onAddMeal={onAddMeal}
                     onMealUpdated={onMealUpdated}
                     onMealDeleted={onMealDeleted}
+                    onViewRecipe={onViewRecipe}
                   />
                 )
               })}
@@ -193,7 +223,7 @@ export default function SwimlaneGrid({
  * Single cell in the swimlane grid (one day × one slot type).
  * Shows either empty state (dashed + button) or stacked meal cards with hover-add button.
  */
-function LaneCell({ date, slotType, entries, familyMembers, isToday, isLast, onAddMeal, onMealUpdated, onMealDeleted }) {
+function LaneCell({ date, slotType, entries, familyMembers, isToday, isLast, onAddMeal, onMealUpdated, onMealDeleted, onViewRecipe }) {
   const hasMeals = entries.length > 0
 
   const handleAddClick = (e) => {
@@ -222,18 +252,18 @@ function LaneCell({ date, slotType, entries, familyMembers, isToday, isLast, onA
               familyMembers={familyMembers}
               onUpdated={onMealUpdated}
               onDeleted={onMealDeleted}
+              onViewRecipe={onViewRecipe}
             />
           ))}
-          {/* Inline add button (hover-reveal) */}
+          {/* Inline add button — always visible, subtle */}
           <button
             type="button"
             onClick={handleAddClick}
             className="
-              opacity-0 group-hover/cell:opacity-100
               flex items-center justify-center
               px-2 py-1 rounded-md text-xs
-              border border-dashed border-black/10 dark:border-white/10
-              text-text-muted dark:text-gray-500
+              border border-dashed border-black/8 dark:border-white/8
+              text-text-muted/50 dark:text-gray-600
               hover:border-terracotta-500 hover:text-terracotta-500
               dark:hover:border-blue-500 dark:hover:text-blue-400
               transition-all

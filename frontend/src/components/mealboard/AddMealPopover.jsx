@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
+import { Dialog, Transition } from '@headlessui/react'
 import axios from 'axios'
 import MemberAvatar from '../shared/MemberAvatar'
 
@@ -13,26 +14,29 @@ const FILTER_OPTIONS = [
 /**
  * Add meal popover. Opens when user clicks + in any swimlane cell.
  *
- * Features:
- *  - Unified search across recipes + food items
- *  - Optional filter chips (Recipes | Food Items | All)
- *  - Grouped results (Recipes section, Food Items section)
- *  - Custom fallback row: "+ Add '<query>' as custom meal"
- *  - Participant avatar toggles (default = slot type default / everyone)
- *  - Notes field
- *  - Pre-populated slot type + date from the clicked cell
+ * Always mounted; `isOpen` drives Headless UI `Transition.Root` so that
+ * mount/unmount animations actually play (CSS transitions on a
+ * conditionally-rendered element are inert — see lessons.md 2026-04-05).
+ *
+ * `context` may still hold the last value while the leave animation runs;
+ * parent clears it via `onAfterLeave`.
  */
 export default function AddMealPopover({
-  context, // { date, slotTypeId, anchorRect }
+  context, // { date, slotTypeId, anchorRect } | null
+  isOpen,
   slotTypes,
-  recipes,
-  foodItems,
+  items,  // unified Item model — contains both recipes and food_items
   familyMembers,
   onClose,
   onCreated,
+  onAfterLeave,
 }) {
-  const slot = slotTypes.find((s) => s.id === context.slotTypeId)
-  const panelRef = useRef(null)
+  // Keep the last non-null context alive so the leave animation has data to render
+  const lastContextRef = useRef(null)
+  if (context) lastContextRef.current = context
+  const ctx = context || lastContextRef.current
+
+  const slot = ctx ? slotTypes.find((s) => s.id === ctx.slotTypeId) : null
   const searchInputRef = useRef(null)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -51,44 +55,34 @@ export default function AddMealPopover({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
-  // Focus search on open
+  // Reset form state each time the popover opens with a new context
   useEffect(() => {
-    setTimeout(() => searchInputRef.current?.focus(), 50)
-  }, [])
+    if (isOpen && context) {
+      setSearchQuery('')
+      setFilter(null)
+      setSelectedParticipantIds(defaultParticipantIds)
+      setNotes('')
+      setError(null)
+      setIsSubmitting(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, context?.slotTypeId, context?.date?.toString()])
 
-  // Close on click-outside or Escape
-  useEffect(() => {
-    const handleClick = (e) => {
-      if (panelRef.current && !panelRef.current.contains(e.target)) {
-        onClose()
-      }
-    }
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('mousedown', handleClick)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [onClose])
-
-  // Filter search results
+  // Split the unified items list by item_type, apply search + filter
   const { filteredRecipes, filteredFoodItems } = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     const matchRecipes = !filter || filter === 'recipes'
     const matchFoodItems = !filter || filter === 'food_items'
 
-    return {
-      filteredRecipes: matchRecipes
-        ? recipes.filter((r) => !q || r.name.toLowerCase().includes(q)).slice(0, 8)
-        : [],
-      filteredFoodItems: matchFoodItems
-        ? foodItems.filter((f) => !q || f.name.toLowerCase().includes(q)).slice(0, 8)
-        : [],
-    }
-  }, [searchQuery, filter, recipes, foodItems])
+    const recipes = matchRecipes
+      ? items.filter((it) => it.item_type === 'recipe' && (!q || it.name.toLowerCase().includes(q))).slice(0, 8)
+      : []
+    const foodItems = matchFoodItems
+      ? items.filter((it) => it.item_type === 'food_item' && (!q || it.name.toLowerCase().includes(q))).slice(0, 8)
+      : []
+
+    return { filteredRecipes: recipes, filteredFoodItems: foodItems }
+  }, [searchQuery, filter, items])
 
   const handleToggleParticipant = (memberId) => {
     setSelectedParticipantIds((prev) =>
@@ -96,15 +90,15 @@ export default function AddMealPopover({
     )
   }
 
-  const handleCreate = async (itemType, payload) => {
+  const handleCreate = async (payload) => {
+    if (!ctx) return
     setIsSubmitting(true)
     setError(null)
     try {
       const body = {
-        date: formatDateKey(context.date),
-        meal_slot_type_id: context.slotTypeId,
-        item_type: itemType,
-        ...payload,
+        date: formatDateKey(ctx.date),
+        meal_slot_type_id: ctx.slotTypeId,
+        ...payload,  // either { item_id } or { custom_meal_name }
         participant_ids: selectedParticipantIds,
         notes: notes.trim() || null,
       }
@@ -118,48 +112,66 @@ export default function AddMealPopover({
     }
   }
 
-  const handleRecipeSelect = (recipe) => {
-    handleCreate('recipe', { recipe_id: recipe.id })
-  }
-
-  const handleFoodItemSelect = (item) => {
-    handleCreate('food_item', { food_item_id: item.id })
+  const handleItemSelect = (item) => {
+    handleCreate({ item_id: item.id })
   }
 
   const handleCustomCreate = () => {
     if (!searchQuery.trim()) return
-    handleCreate('custom', { custom_meal_name: searchQuery.trim() })
+    handleCreate({ custom_meal_name: searchQuery.trim() })
   }
 
-  const dateLabel = context.date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  })
+  const dateLabel = ctx
+    ? ctx.date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      })
+    : ''
 
   const hasAnyResults = filteredRecipes.length > 0 || filteredFoodItems.length > 0
 
-  return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/30 dark:bg-black/50 z-40" onClick={onClose} />
+  // Never-opened state: render nothing (Transition.Root needs consistent children)
+  if (!ctx) return null
 
-      {/* Popover */}
-      <div
-        ref={panelRef}
-        className="
-          fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-          w-[min(420px,calc(100vw-2rem))]
-          max-h-[min(600px,calc(100vh-4rem))]
-          bg-card-bg dark:bg-gray-800
-          rounded-2xl shadow-2xl
-          border border-card-border dark:border-gray-700
-          flex flex-col
-          animate-in fade-in zoom-in-95 duration-150
-        "
-        role="dialog"
-        aria-label="Add meal"
-      >
+  return (
+    <Transition.Root show={isOpen} as={Fragment} appear afterLeave={onAfterLeave}>
+      <Dialog onClose={onClose} className="relative z-50" initialFocus={searchInputRef}>
+        {/* Backdrop — fade in/out */}
+        <Transition.Child
+          as={Fragment}
+          enter="transition-opacity duration-150 ease-out"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="transition-opacity duration-100 ease-in"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
+        </Transition.Child>
+
+        {/* Panel container (centers the panel) */}
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Transition.Child
+            as={Fragment}
+            enter="transition-all duration-150 ease-out"
+            enterFrom="opacity-0 scale-95"
+            enterTo="opacity-100 scale-100"
+            leave="transition-all duration-100 ease-in"
+            leaveFrom="opacity-100 scale-100"
+            leaveTo="opacity-0 scale-95"
+          >
+            <Dialog.Panel
+              aria-label="Add meal"
+              className="
+                w-[min(420px,calc(100vw-2rem))]
+                max-h-[min(600px,calc(100vh-4rem))]
+                bg-card-bg dark:bg-gray-800
+                rounded-2xl shadow-2xl
+                border border-card-border dark:border-gray-700
+                flex flex-col
+              "
+            >
         {/* Header with slot + date */}
         <div className="p-4 border-b border-card-border dark:border-gray-700">
           <div className="flex items-center gap-2 mb-2">
@@ -244,32 +256,35 @@ export default function AddMealPopover({
               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted dark:text-gray-400">
                 Recipes
               </div>
-              {filteredRecipes.map((recipe) => (
-                <button
-                  key={recipe.id}
-                  type="button"
-                  onClick={() => handleRecipeSelect(recipe)}
-                  disabled={isSubmitting}
-                  className="
-                    w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left
-                    hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors
-                    disabled:opacity-50
-                  "
-                >
-                  <span className="text-base">📖</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-text-primary dark:text-gray-100 truncate">
-                      {recipe.name}
-                    </div>
-                    {(recipe.cook_time_minutes || recipe.is_favorite) && (
-                      <div className="text-[10px] text-text-muted dark:text-gray-400 flex items-center gap-2">
-                        {recipe.cook_time_minutes && <span>🕐 {recipe.cook_time_minutes}m</span>}
-                        {recipe.is_favorite && <span className="text-terracotta-500 dark:text-blue-400 font-bold">★</span>}
+              {filteredRecipes.map((recipe) => {
+                const cookTime = recipe.recipe_detail?.cook_time_minutes
+                return (
+                  <button
+                    key={recipe.id}
+                    type="button"
+                    onClick={() => handleItemSelect(recipe)}
+                    disabled={isSubmitting}
+                    className="
+                      w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left
+                      hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors
+                      disabled:opacity-50
+                    "
+                  >
+                    <span className="text-base">📖</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-text-primary dark:text-gray-100 truncate">
+                        {recipe.name}
                       </div>
-                    )}
-                  </div>
-                </button>
-              ))}
+                      {(cookTime || recipe.is_favorite) && (
+                        <div className="text-[10px] text-text-muted dark:text-gray-400 flex items-center gap-2">
+                          {cookTime && <span>🕐 {cookTime}m</span>}
+                          {recipe.is_favorite && <span className="text-terracotta-500 dark:text-blue-400 font-bold">★</span>}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -278,31 +293,34 @@ export default function AddMealPopover({
               <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted dark:text-gray-400">
                 Food Items
               </div>
-              {filteredFoodItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleFoodItemSelect(item)}
-                  disabled={isSubmitting}
-                  className="
-                    w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left
-                    hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors
-                    disabled:opacity-50
-                  "
-                >
-                  <span className="text-base">{item.emoji || '🍽'}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-text-primary dark:text-gray-100 truncate">
-                      {item.name}
-                    </div>
-                    {item.category && (
-                      <div className="text-[10px] text-text-muted dark:text-gray-400 capitalize">
-                        {item.category}
+              {filteredFoodItems.map((item) => {
+                const category = item.food_item_detail?.category
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleItemSelect(item)}
+                    disabled={isSubmitting}
+                    className="
+                      w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left
+                      hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors
+                      disabled:opacity-50
+                    "
+                  >
+                    <span className="text-base">{item.icon_emoji || '🍽'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-text-primary dark:text-gray-100 truncate">
+                        {item.name}
                       </div>
-                    )}
-                  </div>
-                </button>
-              ))}
+                      {category && category !== 'Other' && (
+                        <div className="text-[10px] text-text-muted dark:text-gray-400 capitalize">
+                          {category}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -399,8 +417,11 @@ export default function AddMealPopover({
             />
           </details>
         </div>
-      </div>
-    </>
+            </Dialog.Panel>
+          </Transition.Child>
+        </div>
+      </Dialog>
+    </Transition.Root>
   )
 }
 

@@ -9,7 +9,7 @@ import FamilyStrip from './FamilyStrip'
 import ShoppingCard from './ShoppingCard'
 import AddMealPopover from './AddMealPopover'
 import WelcomeCard from './WelcomeCard'
-import RecipeDetailDrawer from './RecipeDetailDrawer'
+import ItemDetailDrawer from './ItemDetailDrawer'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
 
 const WELCOME_DISMISSED_KEY = 'mealboard_welcome_dismissed'
@@ -50,8 +50,7 @@ export default function MealPlannerView() {
   const [slotTypes, setSlotTypes] = useState([])
   const [mealEntries, setMealEntries] = useState([])
   const [familyMembers, setFamilyMembers] = useState([])
-  const [recipes, setRecipes] = useState([])
-  const [foodItems, setFoodItems] = useState([])
+  const [items, setItems] = useState([])  // unified Item model (recipes + food items)
   const [loading, setLoading] = useState(true)
   const [initialLoaded, setInitialLoaded] = useState(false)
 
@@ -76,8 +75,8 @@ export default function MealPlannerView() {
     typeof window !== 'undefined' ? !!localStorage.getItem(WELCOME_DISMISSED_KEY) : true
   )
 
-  // Recipe drawer state
-  const [drawerRecipeId, setDrawerRecipeId] = useState(null)
+  // Item detail drawer state
+  const [drawerItemId, setDrawerItemId] = useState(null)
 
   const dismissWelcome = () => {
     localStorage.setItem(WELCOME_DISMISSED_KEY, '1')
@@ -91,18 +90,16 @@ export default function MealPlannerView() {
 
   const loadInitialData = async () => {
     try {
-      const [settingsRes, slotsRes, familyRes, recipesRes, foodsRes] = await Promise.all([
+      const [settingsRes, slotsRes, familyRes, itemsRes] = await Promise.all([
         axios.get(`${API_BASE}/app-settings/`),
         axios.get(`${API_BASE}/meal-slot-types/`),
         axios.get(`${API_BASE}/family-members/`),
-        axios.get(`${API_BASE}/recipes`),
-        axios.get(`${API_BASE}/food-items/`),
+        axios.get(`${API_BASE}/items/`),  // unified — fetches both recipes and food items
       ])
       setSettings(settingsRes.data)
       setSlotTypes(slotsRes.data.filter((s) => s.is_active))
       setFamilyMembers(familyRes.data.filter((m) => !m.is_system))
-      setRecipes(recipesRes.data)
-      setFoodItems(foodsRes.data)
+      setItems(itemsRes.data)
 
       // Recalculate week dates with actual week_start_day setting
       const dates = getWeekDates(new Date(), settingsRes.data.week_start_day)
@@ -291,7 +288,8 @@ export default function MealPlannerView() {
               onAddMeal={handleOpenAddMeal}
               onMealUpdated={handleMealUpdated}
               onMealDeleted={handleMealDeleted}
-              onViewRecipe={(recipeId) => setDrawerRecipeId(recipeId)}
+              onViewRecipe={(itemId) => setDrawerItemId(itemId)}
+              initialLoaded={initialLoaded}
             />
           )}
           {/* Delayed spinner overlay — bare spinner, no backdrop (design review 1A) */}
@@ -313,22 +311,21 @@ export default function MealPlannerView() {
         context={addMealContext}
         isOpen={isAddMealOpen}
         slotTypes={slotTypes}
-        recipes={recipes}
-        foodItems={foodItems}
+        items={items}
         familyMembers={familyMembers}
         onClose={handleCloseAddMeal}
         onCreated={handleMealCreated}
         onAfterLeave={() => setAddMealContext(null)}
       />
 
-      {/* Recipe detail drawer */}
-      <RecipeDetailDrawer
-        recipeId={drawerRecipeId}
-        isOpen={drawerRecipeId !== null}
-        onClose={() => setDrawerRecipeId(null)}
-        onEditRecipe={(recipe) => {
-          // TODO: wire to RecipeFormModal edit mode in Phase 3
-          console.log('Edit recipe:', recipe.id)
+      {/* Item detail drawer */}
+      <ItemDetailDrawer
+        itemId={drawerItemId}
+        isOpen={drawerItemId !== null}
+        onClose={() => setDrawerItemId(null)}
+        onEditItem={(item) => {
+          // TODO: wire to ItemFormModal edit mode in a future chunk
+          console.log('Edit item:', item.id)
         }}
       />
     </div>
