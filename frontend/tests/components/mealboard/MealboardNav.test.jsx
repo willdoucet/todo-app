@@ -17,11 +17,13 @@ describe('MealboardNav', () => {
     it('renders all menu items', () => {
       renderWithRouter(<MealboardNav variant="sidebar" />)
 
+      // Note: "Shopping" was removed in Chunk 1 — /mealboard/shopping now
+      // redirects to /lists, and the nav entry is gone entirely.
       expect(screen.getByText('Mealboard')).toBeInTheDocument()
       expect(screen.getByText('Meal Planner')).toBeInTheDocument()
       expect(screen.getByText('Recipes')).toBeInTheDocument()
-      expect(screen.getByText('Shopping')).toBeInTheDocument()
       expect(screen.getByText('Recipe Finder')).toBeInTheDocument()
+      expect(screen.queryByText('Shopping')).not.toBeInTheDocument()
     })
 
     it('highlights active menu item', () => {
@@ -60,7 +62,8 @@ describe('MealboardNav', () => {
 
       expect(screen.getAllByText('Meal Planner')).toHaveLength(2)
       expect(screen.getByText('Recipes')).toBeInTheDocument()
-      expect(screen.getByText('Shopping')).toBeInTheDocument()
+      expect(screen.getByText('Recipe Finder')).toBeInTheDocument()
+      expect(screen.queryByText('Shopping')).not.toBeInTheDocument()
     })
 
     it('closes dropdown when clicking outside', async () => {

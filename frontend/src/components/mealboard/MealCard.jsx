@@ -1,18 +1,22 @@
 import { useState } from 'react'
 import axios from 'axios'
 import MemberAvatar from '../shared/MemberAvatar'
+import ItemIcon from './ItemIcon'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
- * Meal card for the swimlane grid — text-only design (approved mockup D v3).
+ * Meal card for the swimlane grid. Branches on `entry.item?.item_type`:
  *
- * Layout (center-aligned):
- *   1. Participant avatars (only when non-default) — stacked above name
- *   2. Name — text-lg font-medium, dominant
- *   3. Metadata row — cook time · servings
- *   4. Cooked badge — "✓ Cooked" text below metadata
- *   5. Hover action icons — bottom, 32×32px: view-recipe / cooked / delete
+ * - Recipe variant — vertical text-only card (approved mockup D v3): participant
+ *   avatars top, name centered, cook time + servings metadata, cooked badge,
+ *   hover action icons.
+ * - Food-item variant — horizontal pill (Chunk 2 item 5): ItemIcon 24px left +
+ *   name right, single row, ≤60px tall, no cook-time metadata. Plan success
+ *   criterion (§2030): "emoji to the left of the title, both on a single row,
+ *   card height ≤60% of baseline".
+ *
+ * Outer chrome (background, border, hover states) is shared across both variants.
  */
 export default function MealCard({ entry, slotType, familyMembers, onUpdated, onDeleted, onViewRecipe }) {
   const [isWorking, setIsWorking] = useState(false)
@@ -20,6 +24,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
   // Unified item model: entry.item replaces entry.recipe + entry.food_item
   const item = entry.item || null
   const isRecipe = item?.item_type === 'recipe'
+  const isFoodItem = item?.item_type === 'food_item'
   const displayName = item?.name || entry.custom_meal_name || 'Untitled meal'
 
   const rd = item?.recipe_detail || {}
@@ -84,18 +89,91 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     }
   }
 
+  // Outer chrome shared by both variants
+  const containerBase = `meal-card-enter group relative transition-all cursor-pointer select-none rounded-xl border`
+  const containerColor = entry.was_cooked
+    ? 'bg-sage-50 dark:bg-green-900/10 border-sage-200 dark:border-green-800'
+    : 'bg-card-bg dark:bg-gray-800 border-card-border/60 dark:border-gray-700 hover:shadow-md'
+
+  // Food-item variant: horizontal pill, compact, icon-left + name-right.
+  // Height target ≤60% of the recipe baseline (≤60px) per plan §2030.
+  if (isFoodItem) {
+    return (
+      <div
+        className={`${containerBase} ${containerColor} flex items-center gap-2 px-2.5 py-1.5 min-h-[48px]`}
+        onClick={handleCardClick}
+      >
+        <ItemIcon item={item} size={24} />
+        <span
+          className={`flex-1 text-sm font-medium leading-tight truncate ${
+            entry.was_cooked
+              ? 'line-through text-sage-600 dark:text-green-500'
+              : 'text-text-primary dark:text-gray-100'
+          }`}
+        >
+          {displayName}
+        </span>
+        {showAvatars && (
+          <div className="flex -space-x-1 flex-shrink-0">
+            {participants.slice(0, 3).map((p) => (
+              <MemberAvatar
+                key={p.id}
+                name={p.name}
+                photoUrl={p.photo_url}
+                color={p.color}
+                size="xs"
+                className="w-4 h-4 ring-2 ring-card-bg dark:ring-gray-800"
+              />
+            ))}
+          </div>
+        )}
+        {entry.was_cooked && (
+          <span className="bounce-in text-[10px] font-semibold text-sage-600 dark:text-green-400 flex-shrink-0">✓</span>
+        )}
+
+        {/* Hover action icons — 24×24 for the dense food-item row, top-right */}
+        <div
+          className="
+            absolute top-1 right-1
+            flex items-center gap-1
+            max-md:opacity-100
+            md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100
+            transition-opacity duration-150
+          "
+        >
+          <button
+            type="button"
+            onClick={handleToggleCooked}
+            disabled={isWorking}
+            title={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
+            aria-label={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
+            className="w-6 h-6 flex items-center justify-center rounded-full bg-sage-50 dark:bg-green-900/20 text-sage-600 dark:text-green-400 hover:bg-sage-100 dark:hover:bg-green-900/30 transition-colors disabled:opacity-50"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isWorking}
+            title="Delete meal"
+            aria-label="Delete meal"
+            className="w-6 h-6 flex items-center justify-center rounded-full bg-terracotta-50 dark:bg-red-900/20 text-terracotta-600 dark:text-red-400 hover:bg-terracotta-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Recipe variant (and custom meals): vertical text-only card, preserved as-is
   return (
     <div
-      className={`
-        meal-card-enter
-        group relative flex flex-col items-center justify-center text-center
-        rounded-xl border transition-all cursor-pointer select-none
-        px-2 py-3 min-h-[100px]
-        ${entry.was_cooked
-          ? 'bg-sage-50 dark:bg-green-900/10 border-sage-200 dark:border-green-800'
-          : 'bg-card-bg dark:bg-gray-800 border-card-border/60 dark:border-gray-700 hover:shadow-md'
-        }
-      `}
+      className={`${containerBase} ${containerColor} flex flex-col items-center justify-center text-center px-2 py-3 min-h-[100px]`}
       onClick={handleCardClick}
     >
       {/* Participant avatars — only when non-default */}

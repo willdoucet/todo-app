@@ -106,14 +106,26 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
     if (!isOpen) return
     if (initialItem) {
       const rd = initialItem.recipe_detail || {}
+      // Normalize null → '' on every ingredient field so controlled inputs don't
+      // warn about `value={null}`. The backend returns `quantity: null` for pantry
+      // staples and `unit: null` for items with no unit — both would otherwise flow
+      // straight into an input's value prop.
+      const normalizedIngredients = rd.ingredients?.length > 0
+        ? rd.ingredients.map((ing) => ({
+            name: ing.name ?? '',
+            quantity: ing.quantity ?? '',
+            unit: ing.unit ?? '',
+            category: ing.category ?? 'Pantry',
+          }))
+        : [{ ...emptyIngredient }]
       setFormData({
         name: initialItem.name || '',
         description: rd.description || '',
-        ingredients: rd.ingredients?.length > 0 ? rd.ingredients : [{ ...emptyIngredient }],
+        ingredients: normalizedIngredients,
         instructions: rd.instructions || '',
-        prep_time_minutes: rd.prep_time_minutes || '',
-        cook_time_minutes: rd.cook_time_minutes || '',
-        servings: rd.servings || 4,
+        prep_time_minutes: rd.prep_time_minutes ?? '',
+        cook_time_minutes: rd.cook_time_minutes ?? '',
+        servings: rd.servings ?? 4,
         image_url: rd.image_url || '',
         is_favorite: initialItem.is_favorite || false,
         tags: (initialItem.tags || []).join(', '),
@@ -245,7 +257,7 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
                       disabled={!ingredient.unit}
                       className="col-span-2 px-3 py-2 border border-card-border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500 disabled:bg-warm-beige disabled:text-text-muted dark:disabled:bg-gray-800 dark:disabled:text-gray-500 disabled:cursor-not-allowed"
                       placeholder={ingredient.unit ? 'Qty' : '—'}
-                      step="0.1" min="0"
+                      step="any" min="0"
                     />
                     <div className="col-span-2">
                       <UnitCombobox

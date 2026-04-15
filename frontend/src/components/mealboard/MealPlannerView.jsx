@@ -10,6 +10,7 @@ import ShoppingCard from './ShoppingCard'
 import AddMealPopover from './AddMealPopover'
 import WelcomeCard from './WelcomeCard'
 import ItemDetailDrawer from './ItemDetailDrawer'
+import ItemFormModal from './ItemFormModal'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
 
 const WELCOME_DISMISSED_KEY = 'mealboard_welcome_dismissed'
@@ -77,6 +78,9 @@ export default function MealPlannerView() {
 
   // Item detail drawer state
   const [drawerItemId, setDrawerItemId] = useState(null)
+
+  // Item edit modal state — opened from the detail drawer's Edit button
+  const [editingItem, setEditingItem] = useState(null)
 
   const dismissWelcome = () => {
     localStorage.setItem(WELCOME_DISMISSED_KEY, '1')
@@ -207,40 +211,65 @@ export default function MealPlannerView() {
     setFilterFamilyMemberId((prev) => (prev === memberId ? null : memberId))
   }
 
+  // Jump to Today disabled state: the displayed week already contains today
+  const isOnCurrentWeek = (() => {
+    if (weekDates.length !== 7) return false
+    const t = new Date()
+    t.setHours(0, 0, 0, 0)
+    const start = new Date(weekDates[0])
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(weekDates[6])
+    end.setHours(0, 0, 0, 0)
+    return t >= start && t <= end
+  })()
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="px-4 sm:px-6 lg:px-8 py-2.5 border-b border-card-border dark:border-gray-700 bg-card-bg/50 dark:bg-gray-800/50">
-        {/* Desktop header (>=1200px) — single row */}
+        {/* Desktop header (>=1280px / xl) — single row */}
         <div className="hidden xl:flex xl:items-center xl:gap-6">
           <h1 className="text-xl font-bold text-terracotta-600 dark:text-blue-400 tracking-tight">
             What's Cooking?
           </h1>
           <div className="flex-1" />
+          <JumpToTodayButton disabled={isOnCurrentWeek} onClick={handleGoToToday} />
           <WeekSelector
             weekDates={weekDates}
             onPrevWeek={handlePrevWeek}
             onNextWeek={handleNextWeek}
-            onToday={handleGoToToday}
             compact={false}
           />
         </div>
 
-        {/* Mobile/Tablet header */}
-        <div className="grid grid-cols-3 items-center xl:hidden">
-          <div>
+        {/* Mobile/Tablet header (<xl).
+            Responsive behavior per plan §1654-1662:
+              - <768px: button stacks below the nav/selector row (flex-wrap)
+              - 768-1199px: button sits left of the selector inline */}
+        <div className="xl:hidden flex flex-col gap-2 md:grid md:grid-cols-[auto_1fr_auto] md:items-center md:gap-3">
+          <div className="flex items-center justify-between md:justify-start">
             <MealboardNav variant="dropdown" compact={isCompactMode} />
           </div>
-          <div className="flex justify-center">
+          <div className="flex items-center justify-center gap-2">
+            <div className="hidden md:block">
+              <JumpToTodayButton disabled={isOnCurrentWeek} onClick={handleGoToToday} />
+            </div>
             <WeekSelector
               weekDates={weekDates}
               onPrevWeek={handlePrevWeek}
               onNextWeek={handleNextWeek}
-              onToday={handleGoToToday}
               compact={isCompactMode}
             />
           </div>
-          <div />
+          {/* mobile-only: full-width Jump to Today, stacked below the row */}
+          <div className="md:hidden">
+            <JumpToTodayButton
+              disabled={isOnCurrentWeek}
+              onClick={handleGoToToday}
+              className="w-full justify-center min-h-[44px]"
+            />
+          </div>
+          <div className="hidden md:block" />
         </div>
       </div>
 
@@ -323,11 +352,63 @@ export default function MealPlannerView() {
         itemId={drawerItemId}
         isOpen={drawerItemId !== null}
         onClose={() => setDrawerItemId(null)}
-        onEditItem={(item) => {
-          // TODO: wire to ItemFormModal edit mode in a future chunk
-          console.log('Edit item:', item.id)
+        onEditItem={(item) => setEditingItem(item)}
+      />
+
+      {/* Item edit modal — opened from the drawer's "Edit recipe" button.
+          After a successful save, refetch both the items list (for
+          AddMealPopover search) and the meal entries (so meal cards pick up
+          the renamed item). */}
+      <ItemFormModal
+        isOpen={editingItem !== null}
+        onClose={() => setEditingItem(null)}
+        type={editingItem?.item_type}
+        initialItem={editingItem}
+        onSubmit={async (payload) => {
+          const res = await axios.patch(`${API_BASE}/items/${editingItem.id}`, payload)
+          setItems((prev) => prev.map((it) => (it.id === editingItem.id ? res.data : it)))
+          setEditingItem(null)
+          // Meal cards display entry.item.name from the meal-entries payload;
+          // refetching rehydrates them with the new name.
+          fetchMealEntries()
         }}
       />
     </div>
+  )
+}
+
+/**
+ * "Jump to Today" button — extracted from WeekSelector in Chunk 2 item 7.
+ *
+ * Secondary-styled (bg-warm-sand, not primary terracotta) because Jump to Today
+ * is a navigation utility, not the primary action on the planner (primary is
+ * "Add meal"). Shows a disabled visual when the displayed week already contains
+ * today, per plan §1145. Label is always "Jump to Today" at every viewport
+ * (no "Today" abbreviation — too thin a target per the Design Review IA call).
+ */
+function JumpToTodayButton({ onClick, disabled, className = '' }) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-label="Jump to current week"
+      aria-disabled={disabled}
+      className={`
+        inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+        text-xs font-medium whitespace-nowrap transition-colors
+        ${disabled
+          ? 'bg-warm-beige dark:bg-gray-700 text-text-muted dark:text-gray-500 cursor-default'
+          : 'bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 cursor-pointer'
+        }
+        ${className}
+      `}
+    >
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+      Jump to Today
+    </button>
   )
 }

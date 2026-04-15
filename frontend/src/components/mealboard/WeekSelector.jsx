@@ -1,4 +1,12 @@
-export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek, onToday, compact = false }) {
+/**
+ * Week selector — prev / range label / next. The Today / "Jump to Today" button
+ * used to live inside this pill; Chunk 2 item 7 extracted it so the caller
+ * renders a standalone "Jump to Today" button next to the selector with
+ * responsive layout (mobile stacks above, tablet+ sits left). The `onToday`
+ * prop is accepted but intentionally unused here — it's kept for API
+ * backwards-compat until all callers pass it directly into the external button.
+ */
+export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek, compact = false }) {
   const formatWeekRange = () => {
     const start = weekDates[0]
     const end = weekDates[6]
@@ -13,19 +21,6 @@ export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek, onToda
     }
     return `${startMonth} ${startDay} – ${endMonth} ${endDay}`
   }
-
-  // Show Today button only when today is NOT in the displayed week
-  const isCurrentWeek = () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const start = new Date(weekDates[0])
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(weekDates[6])
-    end.setHours(0, 0, 0, 0)
-    return today >= start && today <= end
-  }
-
-  const showToday = onToday && !isCurrentWeek()
 
   return (
     <div
@@ -59,25 +54,6 @@ export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek, onToda
           <span className="flex items-center px-4 text-[13px] font-semibold text-text-primary dark:text-gray-100 whitespace-nowrap">
             {formatWeekRange()}
           </span>
-        </>
-      )}
-
-      {showToday && (
-        <>
-          <div className="w-px bg-card-border dark:bg-gray-700 my-1.5" />
-          <button
-            type="button"
-            onClick={onToday}
-            className="
-              flex items-center px-3.5 text-xs font-semibold
-              bg-terracotta-500 dark:bg-blue-500 text-white
-              hover:bg-terracotta-600 dark:hover:bg-blue-600
-              transition-colors
-            "
-            aria-label="Jump to current week"
-          >
-            Today
-          </button>
         </>
       )}
 

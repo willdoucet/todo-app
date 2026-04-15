@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import useMediaQuery from '../../hooks/useMediaQuery'
 import MealCard from './MealCard'
 
 // Gradient backgrounds per slot type (light mode → dark mode)
@@ -41,6 +42,7 @@ export default function SwimlaneGrid({
   initialLoaded,
 }) {
   const today = new Date()
+  const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   today.setHours(0, 0, 0, 0)
 
   // Group meal entries by (date, slot_type_id) for fast lookup
@@ -105,12 +107,24 @@ export default function SwimlaneGrid({
         role="row"
       >
         <div role="columnheader" /> {/* Spacer for slot label column */}
-        {weekDates.map((date) => {
+        {weekDates.map((date, dayIdx) => {
           const isToday = isSameDay(date, today)
+          // Day/date entrance animation (Chunk 2 item 6): staggered fade-up.
+          // 30ms stagger per day, 200ms duration each → 7 days land inside 380ms
+          // (last day starts at 180ms + 200ms duration). Uses the existing
+          // fade-in keyframe from index.css (translateY 4px → 0). Respects
+          // prefers-reduced-motion per plan §1251.
+          const dayAnimStyle = prefersReducedMotion
+            ? undefined
+            : {
+                animation: `fade-in 200ms ease-out both`,
+                animationDelay: `${dayIdx * 30}ms`,
+              }
           return (
             <div
               key={date.toISOString()}
               className="text-center px-1 py-2"
+              style={dayAnimStyle}
               role="columnheader"
               aria-label={date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             >
