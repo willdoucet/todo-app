@@ -16,7 +16,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
  * Mobile (<768px): bottom sheet, ~85% viewport height.
  * Focus trapped inside (via Headless UI Dialog).
  */
-export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem }) {
+export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem, onDeleteItem }) {
   const [item, setItem] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null) // null | '404' | 'network'
@@ -54,6 +54,16 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem }
     onClose()
     if (item && onEditItem) {
       onEditItem(item)
+    }
+  }
+
+  const handleDelete = () => {
+    // Close drawer, then hand the item up to the parent which owns the
+    // ConfirmDialog + soft-delete + undo toast flow. Matches the same
+    // delete path used by the card hover actions.
+    onClose()
+    if (item && onDeleteItem) {
+      onDeleteItem(item)
     }
   }
 
@@ -198,8 +208,11 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem }
 
                 {!loading && !error && item && (
                   <div className="px-5 py-4 space-y-5" style={{ animation: 'view-crossfade 250ms ease both' }}>
-                    {/* Action buttons */}
-                    <div className="flex gap-2">
+                    {/* Action buttons — Edit (primary) | Favorite | Delete (ghost far-right)
+                        Per plan §1667 (Design Review IA pass issue 5A): Delete lives in
+                        the action row alongside Edit and Favorite, ghost-styled, no
+                        border/background. The ConfirmDialog provides the safety net. */}
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleEdit}
@@ -216,6 +229,21 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem }
                         }`}
                       >
                         {item.is_favorite ? '❤ Favorite' : '♡ Favorite'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        aria-label={`Delete ${item.name}`}
+                        className="
+                          px-3 py-2 min-h-[44px] text-sm font-medium
+                          text-text-muted dark:text-gray-500
+                          hover:text-red-600 dark:hover:text-red-400
+                          hover:bg-red-50 dark:hover:bg-red-900/20
+                          rounded-lg transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
+                        "
+                      >
+                        Delete
                       </button>
                     </div>
 

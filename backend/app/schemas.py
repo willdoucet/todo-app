@@ -389,6 +389,11 @@ class ItemRead(ItemBase):
     updated_at: Optional[datetime] = None
     recipe_detail: Optional[RecipeDetailRead] = None
     food_item_detail: Optional[FoodItemDetailRead] = None
+    # Usage count: non-hidden meal_entries that reference this item. Populated
+    # by crud_items._attach_usage_counts on every read path. Defaults to 0 so
+    # the delete confirm dialog copy always has a value even when the backend
+    # hasn't attached it yet (older sessions, unit tests with mock items).
+    meal_entry_count: int = 0
 
 
 # =============================================================================

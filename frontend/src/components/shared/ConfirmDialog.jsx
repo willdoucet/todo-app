@@ -1,11 +1,26 @@
 import { Dialog, Transition } from '@headlessui/react'
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 
+/**
+ * Reusable confirm dialog.
+ *
+ * API (plan §1699-1717 additive change for Chunk 3):
+ *   - `titleIcon` — optional ReactNode slot inline-left of the title text
+ *     (e.g. <ItemIcon item={item} size={24} /> for the item-delete flow).
+ *     When omitted, the existing round variant icon (warning triangle etc.) renders.
+ *   - `description` — optional ReactNode slot that replaces the plain string
+ *     `message`. Lets callers render structured descriptions (e.g. primary line
+ *     "Recipe · used in 2 meals" + secondary line "You can undo this for 15s").
+ *   - `message` — still accepted for backwards compatibility. If `description`
+ *     is provided it wins; otherwise `message` renders as a plain paragraph.
+ */
 export default function ConfirmDialog({
   isOpen,
   onClose,
   onConfirm,
   title = 'Confirm Action',
+  titleIcon = null,
+  description = null,
   message = 'Are you sure you want to proceed?',
   confirmLabel = 'Delete',
   cancelLabel = 'Cancel',
@@ -58,19 +73,28 @@ export default function ConfirmDialog({
           >
             <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-2xl bg-card-bg dark:bg-gray-800 p-6 text-left align-middle shadow-2xl transition-all">
               <div className="flex items-start gap-4">
-                {/* Icon */}
-                <div className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full ${styles.icon}`}>
-                  <ExclamationTriangleIcon className={`w-6 h-6 ${styles.iconColor}`} />
-                </div>
+                {/* Leading visual — custom titleIcon slot (e.g. ItemIcon) or the
+                    default round variant icon (warning triangle etc.) */}
+                {titleIcon ? (
+                  <div className="flex-shrink-0 flex items-center justify-center w-10 h-10">
+                    {titleIcon}
+                  </div>
+                ) : (
+                  <div className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full ${styles.icon}`}>
+                    <ExclamationTriangleIcon className={`w-6 h-6 ${styles.iconColor}`} />
+                  </div>
+                )}
 
                 {/* Content */}
                 <div className="flex-1">
                   <Dialog.Title className="text-lg font-semibold text-text-primary dark:text-gray-100">
                     {title}
                   </Dialog.Title>
-                  <p className="mt-2 text-sm text-text-secondary dark:text-gray-400">
-                    {message}
-                  </p>
+                  {description ? (
+                    <div className="mt-2">{description}</div>
+                  ) : (
+                    <p className="mt-2 text-sm text-text-secondary dark:text-gray-400">{message}</p>
+                  )}
                 </div>
               </div>
 

@@ -2,7 +2,9 @@ import { useState, useMemo } from 'react'
 import ItemCard from './ItemCard'
 import ItemRow from './ItemRow'
 import ItemFormModal from './ItemFormModal'
+import ItemIcon from './ItemIcon'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import { buildDeleteDescription } from './itemDeleteCopy'
 import ToolbarCount from './ToolbarCount'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
 import { useItems } from '../../hooks/useItems'
@@ -248,6 +250,13 @@ export default function FoodItemsView() {
         isOpen={isFormOpen}
         onClose={handleCloseForm}
         onSubmit={editingItem ? handleUpdate : handleCreate}
+        onDelete={(item) => {
+          // Close the form first, then open the ConfirmDialog — same flow
+          // as the pre-Chunk-4 hover delete path.
+          setIsFormOpen(false)
+          setEditingItem(null)
+          setDeleteConfirm({ open: true, item })
+        }}
         type="food_item"
         initialItem={editingItem}
       />
@@ -256,8 +265,9 @@ export default function FoodItemsView() {
         isOpen={deleteConfirm.open}
         onClose={() => setDeleteConfirm({ open: false, item: null })}
         onConfirm={handleDelete}
-        title="Delete food item?"
-        message={`"${deleteConfirm.item?.name}" will be removed. You'll have 15 seconds to undo.`}
+        title={deleteConfirm.item ? `Delete "${deleteConfirm.item.name}"?` : 'Delete food item?'}
+        titleIcon={deleteConfirm.item ? <ItemIcon item={deleteConfirm.item} size={40} /> : null}
+        description={buildDeleteDescription(deleteConfirm.item)}
         confirmLabel="Delete"
         variant="danger"
       />

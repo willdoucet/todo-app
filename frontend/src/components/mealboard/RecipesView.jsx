@@ -5,7 +5,9 @@ import ItemCard from './ItemCard'
 import ItemRow from './ItemRow'
 import ItemFormModal from './ItemFormModal'
 import ItemDetailDrawer from './ItemDetailDrawer'
+import ItemIcon from './ItemIcon'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import { buildDeleteDescription } from './itemDeleteCopy'
 import FoodItemsView from './FoodItemsView'
 import ToolbarCount from './ToolbarCount'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
@@ -455,14 +457,16 @@ function RecipesTab() {
         isOpen={drawerItemId !== null}
         onClose={() => setDrawerItemId(null)}
         onEditItem={(item) => { setDrawerItemId(null); handleEdit(item) }}
+        onDeleteItem={(item) => setDeleteConfirm({ open: true, item })}
       />
 
       <ConfirmDialog
         isOpen={deleteConfirm.open}
         onClose={() => setDeleteConfirm({ open: false, item: null })}
         onConfirm={handleDelete}
-        title="Delete Recipe"
-        message={`Are you sure you want to delete "${deleteConfirm.item?.name}"? You'll have 15 seconds to undo.`}
+        title={deleteConfirm.item ? `Delete "${deleteConfirm.item.name}"?` : 'Delete recipe?'}
+        titleIcon={deleteConfirm.item ? <ItemIcon item={deleteConfirm.item} size={40} /> : null}
+        description={buildDeleteDescription(deleteConfirm.item)}
         confirmLabel="Delete"
         variant="danger"
       />

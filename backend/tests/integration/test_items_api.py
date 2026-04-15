@@ -103,6 +103,30 @@ class TestGetItem:
         assert float(fid["shopping_quantity"]) == 1.0
         assert fid["shopping_unit"] == "each"
 
+    async def test_meal_entry_count_zero_for_unused_item(self, client, test_recipe):
+        """Item with no meal entries shows meal_entry_count=0 (Chunk 3 delete copy)."""
+        response = await client.get(f"/items/{test_recipe.id}")
+        assert response.status_code == 200
+        assert response.json()["meal_entry_count"] == 0
+
+    async def test_meal_entry_count_populated_for_used_item(self, client, test_meal_entry, test_recipe):
+        """Item with a linked meal entry shows meal_entry_count=1 so the delete
+        confirm renders the "used in 1 meal" copy."""
+        response = await client.get(f"/items/{test_recipe.id}")
+        assert response.status_code == 200
+        assert response.json()["meal_entry_count"] == 1
+
+    async def test_list_items_attaches_meal_entry_count(self, client, test_meal_entry, test_recipe, test_food_item):
+        """The list endpoint attaches meal_entry_count on every row so hover-delete
+        from a card has the count without a second fetch."""
+        response = await client.get("/items/")
+        assert response.status_code == 200
+        data = response.json()
+        recipe_row = next(it for it in data if it["id"] == test_recipe.id)
+        food_row = next(it for it in data if it["id"] == test_food_item.id)
+        assert recipe_row["meal_entry_count"] == 1
+        assert food_row["meal_entry_count"] == 0
+
     async def test_returns_404_when_not_found(self, client):
         response = await client.get("/items/99999")
         assert response.status_code == 404

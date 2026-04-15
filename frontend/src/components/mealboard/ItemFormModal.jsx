@@ -28,7 +28,7 @@ const emptyIngredient = { name: '', quantity: '', unit: '', category: 'Pantry' }
  *
  * Submits to the unified `/items` POST/PATCH API with the nested detail schema.
  */
-export default function ItemFormModal({ isOpen, onClose, onSubmit, type, initialItem }) {
+export default function ItemFormModal({ isOpen, onClose, onSubmit, onDelete, type, initialItem }) {
   const isEditing = !!initialItem
   // Defensive invariant: if the parent re-opens the modal with a different type,
   // the form state must reset. The useEffect below handles this by keying on `type`.
@@ -40,6 +40,7 @@ export default function ItemFormModal({ isOpen, onClose, onSubmit, type, initial
         isOpen={isOpen}
         onClose={onClose}
         onSubmit={onSubmit}
+        onDelete={onDelete}
         initialItem={initialItem}
         isEditing={isEditing}
       />
@@ -50,6 +51,7 @@ export default function ItemFormModal({ isOpen, onClose, onSubmit, type, initial
       isOpen={isOpen}
       onClose={onClose}
       onSubmit={onSubmit}
+      onDelete={onDelete}
       initialItem={initialItem}
       isEditing={isEditing}
     />
@@ -379,7 +381,7 @@ function initialRecipeState() {
 const ICON_MODE_EMOJI = 'emoji'
 const ICON_MODE_URL = 'url'
 
-function FoodItemFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
+function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, isEditing }) {
   const [name, setName] = useState('')
   const [iconMode, setIconMode] = useState(ICON_MODE_EMOJI)
   const [iconEmoji, setIconEmoji] = useState('')
@@ -584,21 +586,41 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing })
           {/* Favorite */}
           <FavoriteToggle value={isFavorite} onChange={setIsFavorite} compact />
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-2">
-            <button
-              type="submit"
-              disabled={isSubmitting || !name.trim()}
-              className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-terracotta-500 dark:bg-blue-600 hover:bg-terracotta-600 dark:hover:bg-blue-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Create'}
-            </button>
+          {/* Actions — plan §2039 Chunk 4: "The edit modal contains a destructive-
+              styled Delete button." In edit mode, Delete sits in the left slot
+              (destructive red), Save + Cancel on the right. In create mode, no
+              Delete button (nothing to delete yet). */}
+          <div className="flex items-center gap-2 pt-2">
+            {isEditing && onDelete && (
+              <button
+                type="button"
+                onClick={() => onDelete(initialItem)}
+                aria-label={`Delete ${initialItem?.name || 'food item'}`}
+                className="
+                  px-3 py-2 text-sm font-medium rounded-lg
+                  text-red-600 dark:text-red-400
+                  hover:bg-red-50 dark:hover:bg-red-900/20
+                  transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
+                "
+              >
+                Delete
+              </button>
+            )}
+            <div className="flex-1" />
             <button
               type="button"
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium rounded-lg text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-700 transition-colors"
             >
               Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || !name.trim()}
+              className="px-5 py-2 text-sm font-medium rounded-lg bg-terracotta-500 dark:bg-blue-600 hover:bg-terracotta-600 dark:hover:bg-blue-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Saving...' : isEditing ? 'Save Changes' : 'Create'}
             </button>
           </div>
         </form>

@@ -12,11 +12,34 @@ from datetime import datetime, timedelta
 import secrets
 from decimal import Decimal
 
-from sqlalchemy import select, update, delete, and_
+from sqlalchemy import func, select, update, delete, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from . import models, schemas
+
+
+async def _attach_usage_counts(db: AsyncSession, items: list[models.Item]) -> None:
+    """Populate `item.meal_entry_count` on each passed Item in place.
+
+    Single GROUP BY over meal_entries, filtered to non-hidden rows only (matches
+    the `visible_meal_entries_stmt()` invariant in crud_meal_entries — we don't
+    count soft-hidden rows since they're already associated with a soft-deleted
+    item in the cascade path). Household scale is cheap; for larger data this
+    would want a correlated subquery at SELECT time instead.
+    """
+    if not items:
+        return
+    ids = [it.id for it in items]
+    result = await db.execute(
+        select(models.MealEntry.item_id, func.count(models.MealEntry.id))
+        .where(models.MealEntry.soft_hidden_at.is_(None))
+        .where(models.MealEntry.item_id.in_(ids))
+        .group_by(models.MealEntry.item_id)
+    )
+    counts = dict(result.all())
+    for it in items:
+        it.meal_entry_count = counts.get(it.id, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -78,14 +101,19 @@ async def list_items(
         item_type=item_type, favorites_only=favorites_only, search=search
     ).order_by(models.Item.name)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    items = list(result.scalars().all())
+    await _attach_usage_counts(db, items)
+    return items
 
 
 async def get_item(
     db: AsyncSession, item_id: int, *, include_deleted: bool = False
 ) -> models.Item | None:
     result = await db.execute(items_by_id_stmt(item_id, include_deleted=include_deleted))
-    return result.scalar_one_or_none()
+    item = result.scalar_one_or_none()
+    if item is not None:
+        await _attach_usage_counts(db, [item])
+    return item
 
 
 # ---------------------------------------------------------------------------
