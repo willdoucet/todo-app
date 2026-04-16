@@ -498,8 +498,7 @@ export const handlers = [
     return HttpResponse.json({ detail: 'Not found' }, { status: 404 })
   }),
 
-  http.post(`${API_BASE}/integrations/icloud/validate`, async ({ request }) => {
-    const body = await request.json()
+  http.post(`${API_BASE}/integrations/icloud/validate`, async () => {
     return HttpResponse.json([
       { url: 'https://caldav.icloud.com/cal1', name: 'Personal', color: '#FF0000', event_count: 5, already_synced_by: null },
       { url: 'https://caldav.icloud.com/cal2', name: 'Work', color: '#0000FF', event_count: 12, already_synced_by: null },

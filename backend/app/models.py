@@ -123,12 +123,19 @@ class Task(Base):
             "calendar_integration_id",
             name="uq_task_external_integration",
         ),
-        UniqueConstraint(
+        # Partial unique index over the aggregation key, with NULLS NOT DISTINCT
+        # so pantry staples (NULL aggregation_unit) are properly deduplicated.
+        # Scoped to mealboard aggregation rows only via a partial WHERE clause —
+        # plain user-created tasks (aggregation_source IS NULL) are unaffected.
+        Index(
+            "uq_task_ingredient_aggregate",
             "list_id",
             "aggregation_source",
             "aggregation_key_name",
             "aggregation_unit",
-            name="uq_task_ingredient_aggregate",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+            postgresql_where=text("aggregation_source IS NOT NULL"),
         ),
     )
 

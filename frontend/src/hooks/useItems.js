@@ -74,20 +74,31 @@ export function useItems({ type, favoritesOnly = false, search = '', skip = fals
 
   const deleteItem = useCallback(async (id) => {
     // Optimistic hide: remove from the local list immediately so the UI feels snappy.
-    // On API error, the caller should call refetch() to restore.
-    const removed = items.find((it) => it.id === id)
-    setItems((prev) => prev.filter((it) => it.id !== id))
+    // Capture the original index inside the functional updater so the rollback
+    // can splice it back into its original sort position rather than appending.
+    let removed = null
+    let removedIndex = -1
+    setItems((prev) => {
+      removedIndex = prev.findIndex((it) => it.id === id)
+      if (removedIndex < 0) return prev
+      removed = prev[removedIndex]
+      return prev.filter((it) => it.id !== id)
+    })
     try {
       const res = await axios.delete(`${API_BASE}/items/${id}`)
       return res.data  // { id, undo_token, expires_at }
     } catch (err) {
-      // Rollback on failure
+      // Rollback on failure: restore the item at its original index.
       if (removed) {
-        setItems((prev) => [...prev, removed])
+        setItems((prev) => {
+          const next = [...prev]
+          next.splice(Math.min(removedIndex, next.length), 0, removed)
+          return next
+        })
       }
       throw err
     }
-  }, [items])
+  }, [])
 
   const undoDeleteItem = useCallback(async (id, undoToken) => {
     const res = await axios.post(`${API_BASE}/items/${id}/undo`, { undo_token: undoToken })

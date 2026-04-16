@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import ShoppingLinkModal from './ShoppingLinkModal'
@@ -49,6 +49,32 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
     [mealEntries]
   )
 
+  const refreshCount = async () => {
+    if (!listId) return
+    try {
+      const [listRes, tasksRes] = await Promise.all([
+        axios.get(`${API_BASE}/lists/${listId}`),
+        axios.get(`${API_BASE}/tasks?list_id=${listId}`),
+      ])
+      setLinkedListName(listRes.data.name)
+      setItemCount(tasksRes.data.filter((t) => !t.completed).length)
+    } catch (err) {
+      if (err.response?.status === 404) {
+        // Linked list was deleted — clear the link
+        try {
+          const res = await axios.patch(`${API_BASE}/app-settings/`, {
+            mealboard_shopping_list_id: null,
+          })
+          onSettingsChange(res.data)
+        } catch (e) {
+          console.error('Failed to clear stale list link:', e)
+        }
+      } else {
+        console.error('Failed to load shopping list:', err)
+      }
+    }
+  }
+
   // Auto-refresh count on meal entry changes + short poll after changes (catches Celery async)
   useEffect(() => {
     if (!listId) {
@@ -77,6 +103,7 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
     } else {
       setSyncPending(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId, mealEntries.length, pendingMeals.length])
 
   // Close warning panel on click-outside / Escape
@@ -101,32 +128,6 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
     }
   }, [warningOpen])
 
-  const refreshCount = async () => {
-    if (!listId) return
-    try {
-      const [listRes, tasksRes] = await Promise.all([
-        axios.get(`${API_BASE}/lists/${listId}`),
-        axios.get(`${API_BASE}/tasks?list_id=${listId}`),
-      ])
-      setLinkedListName(listRes.data.name)
-      setItemCount(tasksRes.data.filter((t) => !t.completed).length)
-    } catch (err) {
-      if (err.response?.status === 404) {
-        // Linked list was deleted — clear the link
-        try {
-          const res = await axios.patch(`${API_BASE}/app-settings/`, {
-            mealboard_shopping_list_id: null,
-          })
-          onSettingsChange(res.data)
-        } catch (e) {
-          console.error('Failed to clear stale list link:', e)
-        }
-      } else {
-        console.error('Failed to load shopping list:', err)
-      }
-    }
-  }
-
   const handleClick = () => {
     if (!listId) {
       setModalOpen(true)
@@ -135,14 +136,11 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
     }
   }
 
-  const handleRetryMeal = async (meal) => {
+  const handleRetryMeal = async () => {
     try {
-      // Re-create the dispatch by "touching" the meal — use an axios call
-      // to re-trigger the Celery task. For now, we POST to a retry endpoint if
-      // it exists, or just patch the entry to re-queue the sync.
-      // Simplest approach: delete + recreate isn't safe. Instead, PATCH to
-      // reset sync_status to "pending" — the backend will re-dispatch.
-      // For now, as a simple workaround, we'll re-fetch all meals.
+      // Stub: real re-dispatch would PATCH the meal entry to reset
+      // shopping_sync_status to "pending"; for now we just refetch the
+      // current meal list so the parent picks up any backend-side changes.
       if (onRetrySync) onRetrySync()
     } catch (err) {
       console.error('Failed to retry sync:', err)
@@ -366,7 +364,7 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleRetryMeal(meal)}
+                      onClick={handleRetryMeal}
                       className="
                         text-[10px] font-semibold px-2 py-1 rounded
                         bg-orange-500 dark:bg-orange-600 text-white

@@ -29,7 +29,7 @@ export default function ListsPage() {
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [_isSubmitting, setIsSubmitting] = useState(false)
   const [addToSectionId, setAddToSectionId] = useState(null)
 
   // Inline editing state

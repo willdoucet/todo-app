@@ -18,12 +18,12 @@ export default function ResponsibilitiesPage() {
   // UI state
   const [isOpen, setIsOpen] = useState(false)
   const [editingResponsibility, setEditingResponsibility] = useState(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [_isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('responsibilitiesPageActiveTab') || 'daily'
   })
-  const [everyoneID, setEveryoneID] = useState(1)
+  const [everyoneID] = useState(1)
 
   // Delete confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)

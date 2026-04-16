@@ -247,10 +247,21 @@ class List(ListBase):
 
 
 class Ingredient(BaseModel):
-    name: str
-    quantity: Optional[float] = None
+    name: str = Field(..., min_length=1, max_length=200)
+    quantity: Optional[float] = Field(None, ge=0)
     unit: Optional[str] = None  # Predefined unit (lb, oz, g, cup, tbsp, etc.) or None for pantry staples
-    category: str = "Other"
+    category: str = Field(default="Other", max_length=50)
+
+    @field_validator("quantity")
+    @classmethod
+    def validate_quantity_finite(cls, v):
+        # Pydantic accepts NaN and ±Inf for float by default; both poison the
+        # shopping aggregation totals (nan + 1 = nan forever).
+        if v is not None:
+            import math
+            if not math.isfinite(v):
+                raise ValueError("quantity must be a finite number")
+        return v
 
     @field_validator("unit")
     @classmethod
@@ -538,6 +549,13 @@ class CalendarEventBase(BaseModel):
         if v is not None and not _TIME_RE.match(v):
             raise ValueError("Time must be in HH:MM format")
         return v
+
+    @model_validator(mode="after")
+    def validate_time_order(self):
+        if self.start_time is not None and self.end_time is not None:
+            if self.end_time <= self.start_time:
+                raise ValueError("end_time must be after start_time")
+        return self
 
 
 class CalendarEventCreate(CalendarEventBase):

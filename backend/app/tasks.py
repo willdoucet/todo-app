@@ -569,14 +569,29 @@ def sync_shopping_list_remove(self, meal_entry_id: int, synced_to_list_id: int |
 # Chunk 6 — Soft-delete hard-delete sweeper (Expansion B)
 # =============================================================================
 
-@celery_app.task(name="app.tasks.hard_delete_expired_soft_deletes")
-def hard_delete_expired_soft_deletes():
+@celery_app.task(
+    name="app.tasks.hard_delete_expired_soft_deletes",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,  # cap exponential backoff at 10 minutes
+    retry_jitter=True,
+    max_retries=3,
+)
+def hard_delete_expired_soft_deletes(self):
     """Hourly sweeper that permanently removes items whose soft-delete window
     has expired (items.deleted_at older than 24 hours).
 
     Thin wrapper around `crud_items.hard_delete_expired_soft_deletes_async()`.
     The real cascade-in-code + assertion-gate logic lives there so tests can
     await it directly with their own db_session fixture.
+
+    Failure handling: Celery autoretry kicks in for any exception (3 retries
+    with exponential backoff). After exhaustion the task fails and Celery's
+    next beat tick re-dispatches a fresh attempt at the next hour. A persistent
+    failure logs `HARD_DELETE_SWEEP_DEAD_LETTER` so an operator can grep logs
+    for the zombie-state condition (the assertion-gate from
+    crud_items.hard_delete_expired_soft_deletes_async).
     """
     from .crud_items import hard_delete_expired_soft_deletes_async
 
@@ -591,6 +606,17 @@ def hard_delete_expired_soft_deletes():
                 "Hard-delete sweep: removed %d expired soft-deleted items",
                 deleted_count,
             )
+        return {"deleted_count": deleted_count}
     except Exception as e:
-        logger.error("Hard-delete sweep failed: %s", str(e), exc_info=True)
+        attempt = self.request.retries + 1
+        if attempt > self.max_retries:
+            logger.error(
+                "HARD_DELETE_SWEEP_DEAD_LETTER attempts=%d error=%s",
+                attempt, str(e), exc_info=True,
+            )
+        else:
+            logger.warning(
+                "Hard-delete sweep attempt %d/%d failed: %s",
+                attempt, self.max_retries + 1, str(e),
+            )
         raise

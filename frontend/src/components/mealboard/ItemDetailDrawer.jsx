@@ -67,6 +67,19 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem, 
     }
   }
 
+  const handleToggleFavorite = async () => {
+    if (!item) return
+    const next = !item.is_favorite
+    // Optimistic: flip locally so the button responds instantly.
+    setItem({ ...item, is_favorite: next })
+    try {
+      await axios.patch(`${API_BASE}/items/${item.id}`, { is_favorite: next })
+    } catch {
+      // Roll back on failure
+      setItem({ ...item, is_favorite: !next })
+    }
+  }
+
   const rd = item?.recipe_detail || {}
   const heroSrc = rd.image_url
     ? (rd.image_url.startsWith('http') ? rd.image_url : `${API_BASE}${rd.image_url}`)
@@ -222,6 +235,9 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem, 
                       </button>
                       <button
                         type="button"
+                        onClick={handleToggleFavorite}
+                        aria-pressed={item.is_favorite}
+                        aria-label={item.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
                         className={`px-4 py-2 rounded-lg border transition-colors text-sm font-medium ${
                           item.is_favorite
                             ? 'bg-terracotta-50 dark:bg-red-900/20 border-terracotta-200 dark:border-red-800 text-terracotta-600 dark:text-red-400'

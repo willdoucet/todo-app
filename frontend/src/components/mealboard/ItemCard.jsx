@@ -149,18 +149,31 @@ function FoodItemPill({ item, onClick, onToggleFavorite }) {
   const categoryKey = fid.category || 'Other'
   const dotClass = CATEGORY_COLORS[categoryKey] || 'bg-warm-sand'
 
+  // The pill is a div+role=button rather than a real <button> because it
+  // contains a sibling interactive control (the favorite heart). Nesting
+  // a button inside a button is invalid HTML and breaks screen reader
+  // semantics + Safari click handling.
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onClick?.()
+    }
+  }
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       className="
         flex items-center gap-3 px-3 py-2.5
         rounded-xl border border-card-border dark:border-gray-700
         bg-card-bg dark:bg-gray-800
         hover:bg-warm-beige dark:hover:bg-gray-700
         hover:border-terracotta-200 dark:hover:border-blue-700
-        hover:shadow-sm transition-all text-left
-        focus:outline-none focus:ring-2 focus:ring-terracotta-500 focus:ring-offset-2
+        hover:shadow-sm transition-all text-left cursor-pointer
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 focus-visible:ring-offset-2
       "
       aria-label={`Edit ${item.name}`}
     >
@@ -170,20 +183,14 @@ function FoodItemPill({ item, onClick, onToggleFavorite }) {
       <span className="flex-1 text-sm font-medium text-text-primary dark:text-gray-100 truncate">
         {item.name}
       </span>
-      {/* Favorite heart — nested click target (stopPropagation) */}
-      <span
-        role="button"
-        tabIndex={0}
+      {/* Favorite heart — real button, sibling not child */}
+      <button
+        type="button"
         onClick={(e) => { e.stopPropagation(); onToggleFavorite?.() }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.stopPropagation()
-            e.preventDefault()
-            onToggleFavorite?.()
-          }
-        }}
-        className="flex-shrink-0 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5"
+        onKeyDown={(e) => e.stopPropagation()}
+        className="flex-shrink-0 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500"
         aria-label={item.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+        aria-pressed={item.is_favorite}
       >
         <svg
           className={`w-4 h-4 ${item.is_favorite ? 'text-terracotta-500 dark:text-blue-400' : 'text-text-muted dark:text-gray-500'}`}
@@ -194,12 +201,12 @@ function FoodItemPill({ item, onClick, onToggleFavorite }) {
         >
           <path strokeLinecap="round" strokeLinejoin="round" d={HEART_PATH} />
         </svg>
-      </span>
+      </button>
       <span
         className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`}
         title={categoryKey}
         aria-hidden="true"
       />
-    </button>
+    </div>
   )
 }

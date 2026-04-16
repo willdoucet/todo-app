@@ -8,10 +8,13 @@ which enforces `deleted_at IS NULL` and eager-loads both detail relationships vi
 
 See plan §0.3 for the full API contract.
 """
+import asyncio
+import os
 from datetime import datetime, timedelta
 import secrets
 from decimal import Decimal
 
+import redis.asyncio as redis
 from sqlalchemy import func, select, update, delete, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -277,36 +280,51 @@ async def update_item(
 # Soft-delete + undo (Expansion B minimal implementation)
 # ---------------------------------------------------------------------------
 
-# Undo token → (item_id, expires_at). In-memory for single-instance deployments;
-# for multi-instance this would live in Redis. Family-app scale = single-instance.
-_undo_tokens: dict[str, tuple[int, datetime]] = {}
+# Undo tokens live in Redis (already running for Celery) so any API worker can
+# consume a token issued by any other worker, and tokens survive an API restart.
+# Key: undo:item:{token}  Value: item id (string)  TTL: _UNDO_WINDOW seconds.
 _UNDO_WINDOW = timedelta(seconds=15)
+_UNDO_KEY_PREFIX = "undo:item:"
+_REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+
+# redis.asyncio binds connections to the running event loop, so we cache one
+# client per loop. Production runs a single loop forever (one entry); tests
+# create a fresh loop per case (one entry per test).
+_redis_clients: dict[int, redis.Redis] = {}
 
 
-def _issue_undo_token(item_id: int) -> tuple[str, datetime]:
+def _get_redis() -> redis.Redis:
+    loop = asyncio.get_running_loop()
+    key = id(loop)
+    client = _redis_clients.get(key)
+    if client is None:
+        client = redis.from_url(_REDIS_URL, decode_responses=True)
+        _redis_clients[key] = client
+    return client
+
+
+async def _issue_undo_token(item_id: int) -> tuple[str, datetime]:
     token = secrets.token_urlsafe(24)
     expires_at = datetime.utcnow() + _UNDO_WINDOW
-    _undo_tokens[token] = (item_id, expires_at)
-    # Opportunistic cleanup of expired tokens
-    now = datetime.utcnow()
-    for t in list(_undo_tokens.keys()):
-        if _undo_tokens[t][1] < now:
-            del _undo_tokens[t]
+    await _get_redis().set(
+        f"{_UNDO_KEY_PREFIX}{token}",
+        str(item_id),
+        ex=int(_UNDO_WINDOW.total_seconds()),
+    )
     return token, expires_at
 
 
-def _consume_undo_token(token: str, item_id: int) -> bool:
-    entry = _undo_tokens.get(token)
-    if entry is None:
+async def _consume_undo_token(token: str, item_id: int) -> bool:
+    """Atomically consume a token. Returns True iff the token existed, matched
+    the expected item id, and was not yet expired. Uses Redis GETDEL so two
+    concurrent undo requests can't both succeed."""
+    raw = await _get_redis().getdel(f"{_UNDO_KEY_PREFIX}{token}")
+    if raw is None:
         return False
-    expected_item_id, expires_at = entry
-    if expected_item_id != item_id:
+    try:
+        return int(raw) == item_id
+    except (TypeError, ValueError):
         return False
-    if expires_at < datetime.utcnow():
-        del _undo_tokens[token]
-        return False
-    del _undo_tokens[token]
-    return True
 
 
 async def soft_delete_item(
@@ -333,7 +351,7 @@ async def soft_delete_item(
     )
 
     await db.commit()
-    token, expires_at = _issue_undo_token(item_id)
+    token, expires_at = await _issue_undo_token(item_id)
     return item, token, expires_at
 
 
@@ -345,7 +363,7 @@ async def undo_soft_delete_item(
     Returns the restored item, or None if the token is invalid/expired/mismatched.
     Caller should map None to HTTP 410.
     """
-    if not _consume_undo_token(undo_token, item_id):
+    if not await _consume_undo_token(undo_token, item_id):
         return None
 
     item = await get_item(db, item_id, include_deleted=True)

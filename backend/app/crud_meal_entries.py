@@ -105,7 +105,14 @@ async def _resolve_participant_ids(
 async def create_meal_entry(db: AsyncSession, entry: schemas.MealEntryCreate):
     """Create a new meal entry with participant materialization."""
     entry_data = entry.model_dump(exclude={"participant_ids"})
-    db_entry = models.MealEntry(**entry_data)
+    db_entry = models.MealEntry(
+        **entry_data,
+        # Mark pending up-front so the meal entry and its sync state are committed
+        # atomically. A second commit-after-commit pattern can leave the row with
+        # NULL sync status if the second commit fails, permanently orphaning it
+        # from the shopping list pipeline.
+        shopping_sync_status="pending",
+    )
     db.add(db_entry)
     await db.flush()  # Get the ID before inserting participants
 
@@ -123,16 +130,9 @@ async def create_meal_entry(db: AsyncSession, entry: schemas.MealEntryCreate):
 
     await db.commit()
 
-    # Dispatch shopping list sync (async via Celery)
+    # Dispatch shopping list sync AFTER the commit so the worker can find the row.
     try:
         from .tasks import sync_shopping_list_add
-        # Set status to pending before dispatching
-        await db.execute(
-            update(models.MealEntry)
-            .where(models.MealEntry.id == db_entry.id)
-            .values(shopping_sync_status="pending")
-        )
-        await db.commit()
         sync_shopping_list_add.delay(db_entry.id)
         logger.info(f"Dispatched shopping sync for meal entry {db_entry.id}")
     except Exception as e:
@@ -187,15 +187,20 @@ async def update_meal_entry(
 
 
 async def delete_meal_entry(db: AsyncSession, entry_id: int):
-    """Delete a meal entry. Dispatches shopping list cleanup before deletion."""
+    """Delete a meal entry, then dispatch shopping list cleanup."""
     entry = await get_meal_entry(db, entry_id)
     if not entry:
         return None
 
-    # Dispatch shopping list removal BEFORE deleting the entry
-    # Pass synced_to_list_id so the task knows which list to target
-    # (the entry will be deleted by the time the Celery task runs)
+    # Capture the list id BEFORE deletion since the Celery task needs it to target
+    # the right list (the entry row no longer exists by the time the task runs).
     synced_to_list_id = entry.synced_to_list_id
+
+    # Commit the delete FIRST. If the commit fails, we must not have already told
+    # Celery to clean up shopping items for an entry that still exists.
+    await db.delete(entry)
+    await db.commit()
+
     try:
         from .tasks import sync_shopping_list_remove
         sync_shopping_list_remove.delay(entry_id, synced_to_list_id)
@@ -203,6 +208,4 @@ async def delete_meal_entry(db: AsyncSession, entry_id: int):
     except Exception as e:
         logger.warning(f"Failed to dispatch shopping removal: {e}")
 
-    await db.delete(entry)
-    await db.commit()
     return entry

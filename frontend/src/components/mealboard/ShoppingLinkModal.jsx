@@ -39,7 +39,7 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
     try {
       const res = await axios.get(`${API_BASE}/lists`)
       setLists(res.data)
-    } catch (err) {
+    } catch {
       setError('Failed to load lists')
     } finally {
       setLoading(false)
@@ -56,7 +56,7 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
       setStep(2)
       // Notify parent after success animation
       setTimeout(() => onLinked(settingsRes.data), 1200)
-    } catch (err) {
+    } catch {
       setError('Failed to link list')
     }
   }
@@ -71,7 +71,7 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
         icon: 'shopping-cart',
       })
       await handleLinkList(listRes.data.id)
-    } catch (err) {
+    } catch {
       setError('Failed to create list')
     }
   }

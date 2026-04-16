@@ -167,6 +167,14 @@ body {
   to { transform: scale(1); }
 }
 
+/* Undo toast countdown ring — animates the stroke-dashoffset of the ring's
+   foreground circle from 0 (full) to its full circumference (empty). The
+   compositor handles the animation so React doesn't re-render every frame. */
+@keyframes undo-countdown {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 37.7; }
+}
+
 /* Tag pill entrance — subtle fade + slide up, motion-safe only */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes tag-pill-enter {

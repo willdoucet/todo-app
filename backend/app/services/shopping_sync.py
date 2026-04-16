@@ -218,12 +218,15 @@ async def _upsert_shopping_item(
             aggregation_base_unit=agg_base_unit,
             aggregation_base_quantity=base_qty,
         )
-        db.add(new_task)
+        # Use a SAVEPOINT so a unique-constraint collision rolls back ONLY this
+        # insert, not every prior ingredient already added to the outer
+        # transaction by the caller's per-ingredient loop.
         try:
-            await db.flush()
+            async with db.begin_nested():
+                db.add(new_task)
+                await db.flush()
             logger.debug("Created shopping item '%s'", title)
         except IntegrityError:
-            await db.rollback()
             logger.debug("Unique constraint hit for '%s' — retrying as update", canonical)
             await _upsert_shopping_item(
                 db, list_id, meal_entry_id, source_kind, source_id,
@@ -405,11 +408,20 @@ async def remove_meal_from_shopping_list(
             logger.debug("Deleted shopping item '%s' (no remaining sources)", task.title)
         else:
             total_base_qty = sum(s.get("quantity", 0) for s in remaining)
+            # Preserve the user-facing display name from the remaining source(s)
+            # rather than regenerating from the canonicalized aggregation key,
+            # which would lowercase + singularize the title on every partial
+            # remove ("Tomatoes" → "tomato").
+            preserved_display_name = (
+                remaining[0].get("display_name")
+                or task.aggregation_key_name
+                or task.title
+            )
             title = _format_title(
                 total_base_qty,
                 task.aggregation_base_unit,
                 task.aggregation_unit_group,
-                task.aggregation_key_name or task.title.lower(),
+                preserved_display_name,
                 measurement_system,
             )
             task.title = title

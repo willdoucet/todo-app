@@ -40,19 +40,12 @@ export function useUndoToast() {
 export function UndoToastProvider({ children }) {
   const [toast, setToast] = useState(null)
   const [restoring, setRestoring] = useState(false)
-  // 0..1 fraction of time remaining (1 = full, 0 = expired)
-  const [progress, setProgress] = useState(1)
   const expireTimerRef = useRef(null)
-  const rafRef = useRef(null)
 
   const clearTimers = () => {
     if (expireTimerRef.current) {
       clearTimeout(expireTimerRef.current)
       expireTimerRef.current = null
-    }
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current)
-      rafRef.current = null
     }
   }
 
@@ -60,34 +53,22 @@ export function UndoToastProvider({ children }) {
     clearTimers()
     setToast(null)
     setRestoring(false)
-    setProgress(1)
   }, [])
 
   const show = useCallback(({ item, undoToken, onUndo, onExpire }) => {
     clearTimers()
-    const startedAt = performance.now()
-    setToast({ item, undoToken, onUndo, onExpire, startedAt })
+    setToast({ item, undoToken, onUndo, onExpire })
     setRestoring(false)
-    setProgress(1)
 
-    // Expiration
+    // The countdown ring animation lives entirely in CSS (see CountdownRing
+    // below). React only fires once at the start and once at expiry — no
+    // per-frame re-renders.
     expireTimerRef.current = setTimeout(() => {
       if (onExpire) {
         try { onExpire() } catch { /* swallow */ }
       }
       hide()
     }, UNDO_WINDOW_MS)
-
-    // Progress tick (for the countdown ring)
-    const tick = (now) => {
-      const elapsed = now - startedAt
-      const p = Math.max(0, 1 - elapsed / UNDO_WINDOW_MS)
-      setProgress(p)
-      if (p > 0) {
-        rafRef.current = requestAnimationFrame(tick)
-      }
-    }
-    rafRef.current = requestAnimationFrame(tick)
   }, [hide])
 
   const handleUndoClick = useCallback(async () => {
@@ -146,9 +127,7 @@ export function UndoToastProvider({ children }) {
               </span>
 
               {/* Slot 3: Countdown ring (or hidden while restoring) */}
-              {!restoring && (
-                <CountdownRing progress={progress} />
-              )}
+              {!restoring && <CountdownRing />}
 
               {/* Slot 4: Action — Undo button (or spinner during restore) */}
               {restoring ? (
@@ -196,10 +175,11 @@ function labelFor(item) {
   return 'Item deleted'
 }
 
-function CountdownRing({ progress }) {
-  // 16x16 SVG, stroke r=6, circumference = 2πr ≈ 37.7
+// Pure-CSS countdown ring — animates stroke-dashoffset over 15s via a
+// keyframe defined in index.css (`undo-countdown`). React doesn't re-render
+// during the animation; the browser compositor handles it for free.
+function CountdownRing() {
   const c = 37.7
-  const offset = c * (1 - progress)
   return (
     <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16" aria-hidden="true">
       <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.2)" strokeWidth="2" fill="none" />
@@ -207,9 +187,10 @@ function CountdownRing({ progress }) {
         cx="8" cy="8" r="6"
         stroke="white" strokeWidth="2" fill="none"
         strokeDasharray={c}
-        strokeDashoffset={offset}
         transform="rotate(-90 8 8)"
-        style={{ transition: 'stroke-dashoffset 80ms linear' }}
+        style={{
+          animation: `undo-countdown ${UNDO_WINDOW_MS}ms linear forwards`,
+        }}
       />
     </svg>
   )

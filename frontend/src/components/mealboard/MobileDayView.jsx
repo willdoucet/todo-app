@@ -44,10 +44,13 @@ export default function MobileDayView({
   const todayIdx = weekDates.findIndex((d) => isSameDay(d, today))
   const [selectedIdx, setSelectedIdx] = useState(todayIdx >= 0 ? todayIdx : 0)
 
-  // Reset selected index when weekDates changes (new week loaded)
+  // Reset selected index when weekDates changes (new week loaded). When the
+  // user navigates to a new week, snap selection back to today (or day 0).
   useEffect(() => {
     const newTodayIdx = weekDates.findIndex((d) => isSameDay(d, today))
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedIdx(newTodayIdx >= 0 ? newTodayIdx : 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekDates])
 
   // Group entries by (date, slot_type_id)

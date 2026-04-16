@@ -1,4 +1,4 @@
-import { formatDateKey, groupByDate, getMemberColor } from './calendarUtils'
+import { formatDateKey, groupByDate } from './calendarUtils'
 import MobileDayList from './MobileDayList'
 
 const DAY_ABBREVS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']

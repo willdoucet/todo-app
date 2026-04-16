@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import MealboardNav from './MealboardNav'
 import WeekSelector from './WeekSelector'
@@ -68,6 +68,10 @@ export default function MealPlannerView() {
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   )
 
+  // Tracks the latest in-flight fetch; stale responses (rapid prev/next clicks)
+  // are dropped instead of overwriting fresh data.
+  const fetchRequestIdRef = useRef(0)
+
   // Delayed spinner — only shows for genuinely slow loads (>200ms)
   const showSpinner = useDelayedFlag(!initialLoaded || loading, 200)
 
@@ -123,6 +127,7 @@ export default function MealPlannerView() {
   }, [weekDates, filterFamilyMemberId])
 
   const fetchMealEntries = async () => {
+    const requestId = ++fetchRequestIdRef.current
     setLoading(true)
     try {
       const startDate = formatDateKey(weekDates[0])
@@ -132,11 +137,18 @@ export default function MealPlannerView() {
         params.set('family_member_id', filterFamilyMemberId)
       }
       const res = await axios.get(`${API_BASE}/meal-entries/?${params}`)
-      setMealEntries(res.data)
+      // Drop stale responses if a newer fetch has already started.
+      if (requestId === fetchRequestIdRef.current) {
+        setMealEntries(res.data)
+      }
     } catch (err) {
-      console.error('Failed to load meal entries:', err)
+      if (requestId === fetchRequestIdRef.current) {
+        console.error('Failed to load meal entries:', err)
+      }
     } finally {
-      setLoading(false)
+      if (requestId === fetchRequestIdRef.current) {
+        setLoading(false)
+      }
     }
   }
 

@@ -49,7 +49,9 @@ export const FOOD_EMOJI_LOOKUP = {
   cupcake: '🧁',
 
   // Pantry / Condiments
-  'olive oil': '🫒', salt: '🧂', pepper: '🌶️', sugar: '🍬', honey: '🍯',
+  // Note: the vegetable "pepper" → 🫑 is defined in the produce section above.
+  // This entry is the spice (black/ground/chili pepper).
+  'olive oil': '🫒', salt: '🧂', 'black pepper': '🌶️', sugar: '🍬', honey: '🍯',
   'soy sauce': '🍶', vinegar: '🫗', mustard: '🟡', ketchup: '🍅',
   mayo: '🥚', mayonnaise: '🥚', 'peanut butter': '🥜', jelly: '🍓',
   jam: '🍓', nutella: '🍫', 'maple syrup': '🥞',

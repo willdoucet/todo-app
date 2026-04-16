@@ -10,8 +10,10 @@ export default function AddTaskRow({ isActive, onActivate, onSave, onCancel }) {
     }
   }, [isActive])
 
-  // Reset title when deactivated
+  // Reset title when deactivated. The component owns its own draft text but
+  // must clear it when the parent toggles the row out of the active state.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!isActive) setTitle('')
   }, [isActive])
 

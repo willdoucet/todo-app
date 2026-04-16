@@ -57,7 +57,6 @@ const TaskItem = memo(function TaskItem({
   const inputRef = useRef(null)
   const rowRef = useRef(null)
 
-  const isOverdue = task.due_date && !task.completed && new Date(task.due_date) < new Date()
   const memberColor = task.family_member?.color
   const isSystemMember = task.family_member?.is_system || task.family_member?.name === 'Everyone'
   const stripeColor = isSystemMember ? 'transparent' : (memberColor || 'transparent')
@@ -72,9 +71,12 @@ const TaskItem = memo(function TaskItem({
     }
   }, [isEditing])
 
-  // Sync editTitle when task changes externally (e.g., after reconcile)
+  // Sync editTitle when task changes externally (e.g., after server reconcile
+  // from another tab). Skipped while the user is mid-edit so we don't clobber
+  // their in-progress text.
   useEffect(() => {
     if (!isEditing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditTitle(task.title)
     }
   }, [task.title, isEditing])

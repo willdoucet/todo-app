@@ -39,6 +39,7 @@ export default function UnitCombobox({ value, onChange, className = '' }) {
   useEffect(() => {
     if (open) {
       setTimeout(() => searchInputRef.current?.focus(), 0)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHighlightIdx(0)
     }
   }, [open])
@@ -90,8 +91,10 @@ export default function UnitCombobox({ value, onChange, className = '' }) {
     }
   }
 
-  // Reset highlight when filter changes
+  // Reset highlight when filter changes — the previous index may now point to
+  // a row that's been filtered out.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHighlightIdx(0)
   }, [search])
 

@@ -8,16 +8,26 @@
  *
  * Consumed by ItemCard, ItemRow, ItemDetailDrawer, MealCard, and UndoToast.
  */
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
 export default function ItemIcon({ item, size = 32, className = '' }) {
   const px = `${size}px`
   const style = { width: px, height: px, minWidth: px, minHeight: px }
 
   if (item?.icon_url) {
+    // Uploaded icons return as relative `/uploads/item-icons/...` paths from the
+    // backend; Vite has no proxy, so bare-relative URLs would 404 against the SPA
+    // origin (5173) instead of the API origin (8000). Mirror the IconSquare prefix.
+    const src = item.icon_url.startsWith('http')
+      ? item.icon_url
+      : `${API_BASE}${item.icon_url}`
     return (
       <img
-        src={item.icon_url}
+        src={src}
         alt=""
         aria-hidden="true"
+        loading="lazy"
+        decoding="async"
         style={style}
         className={`object-cover rounded-lg ${className}`}
       />

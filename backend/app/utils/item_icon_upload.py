@@ -57,13 +57,30 @@ async def save_item_icon(file: UploadFile) -> str:
         HTTPException 413 if file is larger than MAX_FILE_SIZE
         HTTPException 415 if the magic bytes don't match PNG/JPEG/WebP
     """
-    content = await file.read()
-
-    if len(content) > MAX_FILE_SIZE:
+    # Cheap pre-check using the Content-Length header (set by Starlette when present).
+    # Lets us reject obviously-oversized uploads without touching the body.
+    if file.size is not None and file.size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File too large — max {MAX_FILE_SIZE // 1024 // 1024} MB",
         )
+
+    # Stream-read in chunks and abort the moment the running total exceeds the cap.
+    # Defends against clients that lie about Content-Length or use chunked encoding.
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large — max {MAX_FILE_SIZE // 1024 // 1024} MB",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
 
     ext = _sniff_ext(content)
     if ext is None:

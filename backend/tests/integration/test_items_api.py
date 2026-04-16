@@ -314,6 +314,32 @@ class TestSoftDeleteFlow:
         second = await client.post(f"/items/{test_recipe.id}/undo", json={"undo_token": token})
         assert second.status_code == 410
 
+    async def test_undo_token_survives_worker_switch(self, client, test_recipe):
+        """Regression: undo tokens must be consumable by a different process
+        than the one that issued them. We simulate a multi-worker deployment
+        by clearing the cached Redis client between issue and consume — that
+        forces the consume path to construct a fresh client from scratch, the
+        same way a separate API worker would. If undo state lived in process
+        memory instead of Redis, the consume would fail."""
+        from app import crud_items
+
+        delete_res = await client.delete(f"/items/{test_recipe.id}")
+        assert delete_res.status_code == 200
+        token = delete_res.json()["undo_token"]
+
+        # Wipe the per-loop client cache to simulate a different worker.
+        # Don't await aclose() on stale clients — they may be bound to a
+        # different (closed) event loop from an earlier test, and closing them
+        # crashes. The cached objects fall out of scope on .clear() and Python
+        # GC handles them eventually.
+        crud_items._redis_clients.clear()
+
+        undo_res = await client.post(
+            f"/items/{test_recipe.id}/undo", json={"undo_token": token}
+        )
+        assert undo_res.status_code == 200
+        assert undo_res.json()["deleted_at"] is None
+
     async def test_delete_cascades_soft_hide_on_meal_entries(
         self, client, test_meal_entry, test_recipe
     ):
