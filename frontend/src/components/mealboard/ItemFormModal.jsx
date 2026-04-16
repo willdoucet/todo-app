@@ -516,11 +516,12 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
         }
         setFieldErrors(errors)
         setError('Please fix the errors below')
-        // Focus the first invalid field in DOM order
-        const firstKey = Object.keys(errors)[0]
-        if (firstKey && foodFormRef.current) {
-          const el = foodFormRef.current.querySelector(`[name="${firstKey}"]`)
-          el?.focus()
+        // Focus the first invalid field in DOM order (not Pydantic validation order)
+        if (foodFormRef.current) {
+          const fields = foodFormRef.current.querySelectorAll('[name]')
+          for (const el of fields) {
+            if (errors[el.name]) { el.focus(); break }
+          }
         }
       } else {
         setError(typeof detail === 'string' ? detail : 'Failed to save food item')

@@ -123,6 +123,49 @@ describe('ItemFormModal', () => {
       expect(payload.recipe_detail).toBeUndefined()
     })
 
+    it('Cmd+S submits the form', async () => {
+      const user = userEvent.setup()
+      render(
+        <ItemFormModal isOpen type="food_item" onSubmit={onSubmit} onClose={onClose} initialItem={null} />
+      )
+
+      await user.type(screen.getByPlaceholderText(/e\.g\. Banana/), 'Grape')
+      // Cmd+S should trigger form submission
+      await user.keyboard('{Meta>}s{/Meta}')
+
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+      expect(onSubmit.mock.calls[0][0].name).toBe('Grape')
+    })
+
+    it('focuses the first invalid field on 422 error', async () => {
+      const user = userEvent.setup()
+      const rejectWith422 = vi.fn().mockRejectedValue({
+        response: {
+          status: 422,
+          data: {
+            detail: [
+              { loc: ['body', 'name'], msg: 'field required', type: 'value_error' },
+              { loc: ['body', 'food_item_detail.category'], msg: 'invalid value', type: 'value_error' },
+            ],
+          },
+        },
+      })
+      render(
+        <ItemFormModal isOpen type="food_item" onSubmit={rejectWith422} onClose={onClose} initialItem={null} />
+      )
+
+      // Type a name so we pass the client-side guard
+      await user.type(screen.getByPlaceholderText(/e\.g\. Banana/), 'Test')
+      await user.click(screen.getByRole('button', { name: /Create/ }))
+
+      // Wait for the error to render
+      expect(await screen.findByText('Please fix the errors below')).toBeInTheDocument()
+      // Field-level error should display
+      expect(screen.getByText('field required')).toBeInTheDocument()
+      // Focus should be on the name input (first in DOM order)
+      expect(document.activeElement).toBe(screen.getByPlaceholderText(/e\.g\. Banana/))
+    })
+
     it('pre-populates from initialItem in edit mode', () => {
       const initialItem = {
         id: 5,

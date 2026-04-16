@@ -8,7 +8,6 @@ import { useDarkMode } from '../../contexts/DarkModeContext'
  * so the Picker always has data when it mounts — no timing gap.
  *
  * Props:
- *   selected: current emoji string (optional)
  *   onSelect: (emoji: string | null) => void
  *   children: trigger element (rendered always; clicking it toggles the picker)
  */
