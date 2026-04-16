@@ -70,132 +70,127 @@ body {
   min-height: 100vh;
 }
 
-/* Custom animations */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
+/* Custom keyframes — in @layer base so Tailwind v4 preserves them
+   (unlayered @keyframes are tree-shaken unless referenced by a generated utility) */
+@layer base {
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  @keyframes scale-in {
+    from {
+      transform: scale(0);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes swimlane-enter {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes meal-card-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes bounce-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes recipe-card-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes recipe-row-enter {
+    from { opacity: 0; transform: translateX(-4px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes view-crossfade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes scale-pop {
+    from { transform: scale(0.95); }
+    to { transform: scale(1); }
+  }
+
+  /* Undo toast countdown ring */
+  @keyframes undo-countdown {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: 37.7; }
+  }
+
+  /* Motion-safe-only keyframes */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes meal-card-cooked-pulse {
+      0% { transform: scale(1); background-color: inherit; }
+      50% { transform: scale(1.05); background-color: #E5EDE6; }
+      100% { transform: scale(1); background-color: inherit; }
+    }
+    @keyframes meal-card-cooked-pulse-dark {
+      0% { transform: scale(1); background-color: inherit; }
+      50% { transform: scale(1.05); background-color: rgba(20, 83, 45, 0.3); }
+      100% { transform: scale(1); background-color: inherit; }
+    }
+    @keyframes tag-pill-enter {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   }
 }
 
-@keyframes scale-in {
-  from {
-    transform: scale(0);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-/* Swimlane entrance — staggered fade + slide up */
-@keyframes swimlane-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.swimlane-enter {
+/* Custom animation utilities — @utility so Tailwind v4 includes them when
+   the class name is detected in source files */
+@utility swimlane-enter {
   animation: swimlane-enter 0.4s ease-out both;
 }
 
-/* Meal card enter — fade + scale up */
-@keyframes meal-card-enter {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.meal-card-enter {
+@utility meal-card-enter {
   animation: meal-card-enter 0.25s ease-out both;
 }
 
-/* Cooked checkmark badge — bounce in */
-@keyframes bounce-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.bounce-in {
+@utility bounce-in {
   animation: bounce-in 0.3s ease-out both;
 }
 
-/* Recipe card entrance — staggered fade + slide up */
-@keyframes recipe-card-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Recipe row entrance — staggered fade + slide right */
-@keyframes recipe-row-enter {
-  from { opacity: 0; transform: translateX(-4px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-/* View crossfade — fade in incoming view */
-@keyframes view-crossfade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Popover/menu scale pop — 150ms fade + scale from 95% to 100% */
-@keyframes scale-pop {
-  from { transform: scale(0.95); }
-  to { transform: scale(1); }
-}
-
-/* Undo toast countdown ring — animates the stroke-dashoffset of the ring's
-   foreground circle from 0 (full) to its full circumference (empty). The
-   compositor handles the animation so React doesn't re-render every frame. */
-@keyframes undo-countdown {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: 37.7; }
-}
-
-/* Cooked-state pulse — 1x scale pulse + cooked tint flash, motion-safe only */
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes meal-card-cooked-pulse {
-    0% { transform: scale(1); background-color: inherit; }
-    50% { transform: scale(1.05); background-color: #E5EDE6; }
-    100% { transform: scale(1); background-color: inherit; }
-  }
-  @keyframes meal-card-cooked-pulse-dark {
-    0% { transform: scale(1); background-color: inherit; }
-    50% { transform: scale(1.05); background-color: rgba(20, 83, 45, 0.3); }
-    100% { transform: scale(1); background-color: inherit; }
-  }
-}
-
-/* Tag pill entrance — subtle fade + slide up, motion-safe only */
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes tag-pill-enter {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .tag-pill-enter {
+@utility tag-pill-enter {
+  @media (prefers-reduced-motion: no-preference) {
     animation: tag-pill-enter 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 }

@@ -110,13 +110,15 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
   if (isFoodItem) {
     return (
       <div
-        className={`${containerBase} ${containerColor} flex items-center gap-2 px-2.5 py-1.5 min-h-[48px]`}
+        className={`${containerBase} ${containerColor} flex items-center justify-center px-2.5 py-1.5 min-h-[48px]`}
         onClick={handleCardClick}
         style={pulseStyle}
       >
-        <ItemIcon item={item} size={24} />
+        <span className="absolute left-2.5">
+          <ItemIcon item={item} size={24} />
+        </span>
         <span
-          className={`flex-1 text-sm font-medium leading-tight truncate ${
+          className={`text-sm font-medium leading-tight truncate min-w-0 text-center ${
             entry.was_cooked
               ? 'line-through text-sage-600 dark:text-green-500'
               : 'text-text-primary dark:text-gray-100'

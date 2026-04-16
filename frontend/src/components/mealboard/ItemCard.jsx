@@ -29,7 +29,7 @@ const POT_ICON = (
  */
 export default function ItemCard({ item, index = 0, onClick, onEdit, onDelete, onToggleFavorite }) {
   if (item.item_type === 'food_item') {
-    return <FoodItemCard item={item} onClick={onClick || onEdit} onToggleFavorite={onToggleFavorite} />
+    return <FoodItemCard item={item} index={index} onClick={onClick || onEdit} onToggleFavorite={onToggleFavorite} />
   }
   return <RecipeTile item={item} index={index} onClick={onClick} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 }
@@ -145,10 +145,15 @@ function RecipeTile({ item, index, onClick, onEdit, onDelete, onToggleFavorite }
 // (redesigned per plan 20260415-164719 Chunk 3)
 // ---------------------------------------------------------------------------
 
-function FoodItemCard({ item, onClick, onToggleFavorite }) {
+function FoodItemCard({ item, index = 0, onClick, onToggleFavorite }) {
   const fid = item.food_item_detail || {}
   const categoryKey = fid.category || 'Other'
   const stripeClass = CATEGORY_COLORS[categoryKey] || 'bg-warm-sand'
+
+  const animStyle = {
+    animation: `recipe-card-enter 0.3s ease both`,
+    animationDelay: `${Math.min(index * 40, 800)}ms`,
+  }
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -172,6 +177,7 @@ function FoodItemCard({ item, onClick, onToggleFavorite }) {
         hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden
         focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 focus-visible:ring-offset-2
       "
+      style={animStyle}
       aria-label={`Edit ${item.name}`}
     >
       <span className="text-3xl flex-shrink-0 leading-none" aria-hidden="true">
