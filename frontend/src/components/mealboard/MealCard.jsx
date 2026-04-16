@@ -20,6 +20,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
  */
 export default function MealCard({ entry, slotType, familyMembers, onUpdated, onDeleted, onViewRecipe }) {
   const [isWorking, setIsWorking] = useState(false)
+  const [isPulsing, setIsPulsing] = useState(false)
 
   // Unified item model: entry.item replaces entry.recipe + entry.food_item
   const item = entry.item || null
@@ -52,9 +53,15 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     if (isWorking) return
     setIsWorking(true)
     try {
+      const markingCooked = !entry.was_cooked
       const res = await axios.patch(`${API_BASE}/meal-entries/${entry.id}`, {
-        was_cooked: !entry.was_cooked,
+        was_cooked: markingCooked,
       })
+      // Pulse only on false → true (marking cooked), not on unmarking
+      if (markingCooked) {
+        setIsPulsing(true)
+        setTimeout(() => setIsPulsing(false), 300)
+      }
       onUpdated(res.data)
     } catch (err) {
       console.error('Failed to toggle cooked:', err)
@@ -94,6 +101,9 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
   const containerColor = entry.was_cooked
     ? 'bg-sage-50 dark:bg-green-900/10 border-sage-200 dark:border-green-800'
     : 'bg-card-bg dark:bg-gray-800 border-card-border/60 dark:border-gray-700 hover:shadow-md'
+  const pulseStyle = isPulsing
+    ? { animation: `${document.documentElement.classList.contains('dark') ? 'meal-card-cooked-pulse-dark' : 'meal-card-cooked-pulse'} 300ms ease` }
+    : undefined
 
   // Food-item variant: horizontal pill, compact, icon-left + name-right.
   // Height target ≤60% of the recipe baseline (≤60px) per plan §2030.
@@ -102,6 +112,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
       <div
         className={`${containerBase} ${containerColor} flex items-center gap-2 px-2.5 py-1.5 min-h-[48px]`}
         onClick={handleCardClick}
+        style={pulseStyle}
       >
         <ItemIcon item={item} size={24} />
         <span
@@ -175,6 +186,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     <div
       className={`${containerBase} ${containerColor} flex flex-col items-center justify-center text-center px-2 py-3 min-h-[100px]`}
       onClick={handleCardClick}
+      style={pulseStyle}
     >
       {/* Participant avatars — only when non-default */}
       {showAvatars && (

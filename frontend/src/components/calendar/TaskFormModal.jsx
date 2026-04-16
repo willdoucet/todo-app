@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import axios from 'axios'
 import TodoForm from '../lists/TodoForm'
 import { formatDateKey } from './calendarUtils'
+import useFormShortcut from '../../hooks/useFormShortcut'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -22,6 +23,8 @@ export default function TaskFormModal({
   const [selectedListId, setSelectedListId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const taskFormRef = useRef(null)
+  useFormShortcut(taskFormRef)
 
   // Fetch available lists when modal opens
   useEffect(() => {
@@ -157,7 +160,12 @@ export default function TaskFormModal({
                   listId={selectedListId}
                   onSubmit={handleSubmit}
                   onCancel={onClose}
+                  formRef={taskFormRef}
                 />
+              </div>
+
+              <div className="px-6 text-xs text-text-muted dark:text-gray-500 text-center">
+                ⌘S to save · Esc to cancel
               </div>
 
               {/* Delete button (edit mode only) */}

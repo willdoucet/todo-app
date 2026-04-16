@@ -41,12 +41,16 @@ export function UndoToastProvider({ children }) {
   const [toast, setToast] = useState(null)
   const [restoring, setRestoring] = useState(false)
   const expireTimerRef = useRef(null)
+  const expiresAtRef = useRef(null)
+  const onExpireRef = useRef(null)
 
   const clearTimers = () => {
     if (expireTimerRef.current) {
       clearTimeout(expireTimerRef.current)
       expireTimerRef.current = null
     }
+    expiresAtRef.current = null
+    onExpireRef.current = null
   }
 
   const hide = useCallback(() => {
@@ -59,16 +63,35 @@ export function UndoToastProvider({ children }) {
     clearTimers()
     setToast({ item, undoToken, onUndo, onExpire })
     setRestoring(false)
+    onExpireRef.current = onExpire || null
+    expiresAtRef.current = Date.now() + UNDO_WINDOW_MS
 
-    // The countdown ring animation lives entirely in CSS (see CountdownRing
-    // below). React only fires once at the start and once at expiry — no
-    // per-frame re-renders.
     expireTimerRef.current = setTimeout(() => {
-      if (onExpire) {
-        try { onExpire() } catch { /* swallow */ }
+      if (onExpireRef.current) {
+        try { onExpireRef.current() } catch { /* swallow */ }
       }
       hide()
     }, UNDO_WINDOW_MS)
+  }, [hide])
+
+  // Background-tab catch-up: browsers throttle setTimeout in backgrounded tabs.
+  // If the user switches away and comes back after the window expired, dismiss
+  // immediately instead of waiting for the delayed timer to fire.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === 'visible' &&
+        expiresAtRef.current !== null &&
+        Date.now() >= expiresAtRef.current
+      ) {
+        if (onExpireRef.current) {
+          try { onExpireRef.current() } catch { /* swallow */ }
+        }
+        hide()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [hide])
 
   const handleUndoClick = useCallback(async () => {
@@ -78,9 +101,6 @@ export function UndoToastProvider({ children }) {
       await toast.onUndo(toast.undoToken)
       hide()
     } catch (err) {
-      // Undo failed — leave the toast visible briefly so the user sees the state,
-      // then hide. A fuller Expansion B flow would show an error state in slot 4;
-      // for this refactor we fall back to hiding.
       console.warn('Undo failed:', err)
       hide()
     }

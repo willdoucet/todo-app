@@ -2,7 +2,7 @@ import { getRecipeGradient } from '../../constants/recipeGradients'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-// Category color map for food_item pills (same keys as the legacy FoodItemCard)
+// Category color map for food-item card stripe
 const CATEGORY_COLORS = {
   fruit: 'bg-amber-300',
   vegetable: 'bg-green-300',
@@ -23,13 +23,13 @@ const POT_ICON = (
 
 /**
  * Unified card for the Item model. Branches on `item.item_type`:
- *   - recipe: 16:9 image/gradient tile with floating heart + hover edit/delete (was RecipeCard)
- *   - food_item: horizontal pill with emoji + name + heart + category dot (was FoodItemCard;
- *     now implements mockup `food-items-pill-option-a.html`). Click = edit (pill is a button).
+ *   - recipe: 16:9 image/gradient tile with floating heart + hover edit/delete
+ *   - food_item: horizontal card with emoji + name + heart + right-side category stripe
+ *     (redesigned per plan 20260415-164719 Chunk 3; replaces the pill layout)
  */
 export default function ItemCard({ item, index = 0, onClick, onEdit, onDelete, onToggleFavorite }) {
   if (item.item_type === 'food_item') {
-    return <FoodItemPill item={item} onClick={onClick || onEdit} onToggleFavorite={onToggleFavorite} />
+    return <FoodItemCard item={item} onClick={onClick || onEdit} onToggleFavorite={onToggleFavorite} />
   }
   return <RecipeTile item={item} index={index} onClick={onClick} onEdit={onEdit} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 }
@@ -141,18 +141,15 @@ function RecipeTile({ item, index, onClick, onEdit, onDelete, onToggleFavorite }
 }
 
 // ---------------------------------------------------------------------------
-// Food item variant — horizontal pill (mockup `food-items-pill-option-a.html`)
+// Food item variant — card with right-side category stripe
+// (redesigned per plan 20260415-164719 Chunk 3)
 // ---------------------------------------------------------------------------
 
-function FoodItemPill({ item, onClick, onToggleFavorite }) {
+function FoodItemCard({ item, onClick, onToggleFavorite }) {
   const fid = item.food_item_detail || {}
   const categoryKey = fid.category || 'Other'
-  const dotClass = CATEGORY_COLORS[categoryKey] || 'bg-warm-sand'
+  const stripeClass = CATEGORY_COLORS[categoryKey] || 'bg-warm-sand'
 
-  // The pill is a div+role=button rather than a real <button> because it
-  // contains a sibling interactive control (the favorite heart). Nesting
-  // a button inside a button is invalid HTML and breaks screen reader
-  // semantics + Safari click handling.
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
@@ -167,23 +164,23 @@ function FoodItemPill({ item, onClick, onToggleFavorite }) {
       onClick={onClick}
       onKeyDown={handleKeyDown}
       className="
-        flex items-center gap-3 px-3 py-2.5
+        relative flex items-center gap-3 px-4 py-4
         rounded-xl border border-card-border dark:border-gray-700
         bg-card-bg dark:bg-gray-800
         hover:bg-warm-beige dark:hover:bg-gray-700
         hover:border-terracotta-200 dark:hover:border-blue-700
-        hover:shadow-sm transition-all text-left cursor-pointer
+        hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden
         focus:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 focus-visible:ring-offset-2
       "
       aria-label={`Edit ${item.name}`}
     >
-      <span className="text-2xl flex-shrink-0 leading-none" aria-hidden="true">
+      <span className="text-3xl flex-shrink-0 leading-none" aria-hidden="true">
         {item.icon_emoji || '🍽'}
       </span>
       <span className="flex-1 text-sm font-medium text-text-primary dark:text-gray-100 truncate">
         {item.name}
       </span>
-      {/* Favorite heart — real button, sibling not child */}
+      {/* Favorite heart */}
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onToggleFavorite?.() }}
@@ -202,8 +199,9 @@ function FoodItemPill({ item, onClick, onToggleFavorite }) {
           <path strokeLinecap="round" strokeLinejoin="round" d={HEART_PATH} />
         </svg>
       </button>
-      <span
-        className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`}
+      {/* Category stripe — right edge, full card height */}
+      <div
+        className={`absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl ${stripeClass}`}
         title={categoryKey}
         aria-hidden="true"
       />

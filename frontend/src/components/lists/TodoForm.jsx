@@ -3,7 +3,7 @@ import axios from 'axios'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
-export default function TodoForm({ initial = null, listId = null, sectionId = null, onSubmit, onCancel }) {
+export default function TodoForm({ initial = null, listId = null, sectionId = null, onSubmit, onCancel, formRef }) {
   const [title, setTitle] = useState(initial?.title || '')
   const [description, setDescription] = useState(initial?.description || '')
   const [dueDate, setDueDate] = useState(initial?.due_date?.split('T')[0] || '')
@@ -55,7 +55,7 @@ export default function TodoForm({ initial = null, listId = null, sectionId = nu
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
       {/* Title */}
       <div>
         <label className="block text-sm sm:text-base font-medium text-text-secondary dark:text-gray-300 mb-2">

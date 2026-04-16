@@ -175,6 +175,20 @@ body {
   to { stroke-dashoffset: 37.7; }
 }
 
+/* Cooked-state pulse — 1x scale pulse + cooked tint flash, motion-safe only */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes meal-card-cooked-pulse {
+    0% { transform: scale(1); background-color: inherit; }
+    50% { transform: scale(1.05); background-color: #E5EDE6; }
+    100% { transform: scale(1); background-color: inherit; }
+  }
+  @keyframes meal-card-cooked-pulse-dark {
+    0% { transform: scale(1); background-color: inherit; }
+    50% { transform: scale(1.05); background-color: rgba(20, 83, 45, 0.3); }
+    100% { transform: scale(1); background-color: inherit; }
+  }
+}
+
 /* Tag pill entrance — subtle fade + slide up, motion-safe only */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes tag-pill-enter {
