@@ -1,10 +1,8 @@
 /**
- * Food emoji auto-suggestion and curated picker.
+ * Food emoji auto-suggestion.
  *
  * FOOD_EMOJI_LOOKUP maps ~100 common food names to emojis for auto-suggestion.
  * When a user types a food item name, the emoji field auto-fills from this lookup.
- *
- * CURATED_FOOD_EMOJIS groups ~50 food-relevant emojis for the override picker.
  */
 
 // Food name → emoji lookup (lowercased keys)
@@ -84,38 +82,3 @@ export function suggestEmoji(foodName) {
   return null
 }
 
-// Curated food emoji picker grid (for manual override)
-export const CURATED_FOOD_EMOJIS = [
-  {
-    label: 'Fruits',
-    emojis: ['🍎', '🍌', '🍊', '🍓', '🍇', '🍑', '🫐', '🍉', '🍍', '🥭', '🍐', '🍋', '🍒', '🥝', '🥥', '🍈'],
-  },
-  {
-    label: 'Vegetables',
-    emojis: ['🥕', '🍅', '🥦', '🥬', '🌽', '🥔', '🧅', '🧄', '🥒', '🫑', '🍆', '🍄', '🍠', '🥗'],
-  },
-  {
-    label: 'Protein',
-    emojis: ['🍗', '🥩', '🥓', '🌭', '🐟', '🦐', '🥚', '🦃', '🍔', '🥡'],
-  },
-  {
-    label: 'Dairy',
-    emojis: ['🥛', '🧀', '🧈', '🍦'],
-  },
-  {
-    label: 'Grains',
-    emojis: ['🍞', '🍚', '🍝', '🍜', '🥯', '🥐', '🥞', '🧇', '🥣', '🌾', '🫓'],
-  },
-  {
-    label: 'Drinks',
-    emojis: ['☕', '🍵', '🧃', '💧', '🍺', '🍷', '🥤', '🧋'],
-  },
-  {
-    label: 'Sweets & Snacks',
-    emojis: ['🍪', '🍰', '🍩', '🍫', '🍬', '🍿', '🥨', '🥧', '🧁'],
-  },
-  {
-    label: 'Pantry',
-    emojis: ['🫒', '🧂', '🌶️', '🍯', '🥜', '🌻'],
-  },
-]

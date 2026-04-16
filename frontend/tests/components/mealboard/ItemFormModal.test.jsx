@@ -3,6 +3,11 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ItemFormModal from '../../../src/components/mealboard/ItemFormModal'
 
+// EmojiPicker uses useDarkMode — mock the context for test isolation
+vi.mock('../../../src/contexts/DarkModeContext', () => ({
+  useDarkMode: () => ({ isDark: false }),
+}))
+
 describe('ItemFormModal', () => {
   let onSubmit
   let onClose

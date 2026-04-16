@@ -3,8 +3,9 @@ import { Dialog, Transition } from '@headlessui/react'
 import axios from 'axios'
 import UnitCombobox from './UnitCombobox'
 import RecipeImageUpload from './RecipeImageUpload'
-import FoodEmojiPicker from '../shared/FoodEmojiPicker'
+import EmojiPicker from '../shared/EmojiPicker'
 import { suggestEmoji } from '../../constants/foodEmojis'
+import useFormShortcut from '../../hooks/useFormShortcut'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -106,6 +107,8 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
   const [formData, setFormData] = useState(initialRecipeState())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const formRef = useRef(null)
+  useFormShortcut(formRef)
 
   useEffect(() => {
     if (!isOpen) return
@@ -201,7 +204,7 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
 
   return (
     <ModalShell isOpen={isOpen} onClose={onClose} maxWidth="max-w-2xl" startAligned>
-      <form onSubmit={handleSubmit}>
+      <form ref={formRef} onSubmit={handleSubmit}>
         <div className="px-6 py-4 border-b border-card-border dark:border-gray-700">
           {isEditing && (
             <p className="text-xs font-medium uppercase tracking-wide text-text-muted dark:text-gray-400 mb-0.5">
@@ -356,6 +359,7 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
           />
         </div>
 
+        <ShortcutFooter />
         <ModalFooter onClose={onClose} loading={loading} isEditing={isEditing} createLabel="Add Recipe" updateLabel="Update Recipe" />
       </form>
     </ModalShell>
@@ -394,6 +398,9 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
   const [emojiManuallySet, setEmojiManuallySet] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const foodFormRef = useRef(null)
+  useFormShortcut(foodFormRef)
   // Upload state for the Custom-image tab's file picker (Chunk 5)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
@@ -409,6 +416,7 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
     setIsFavorite(initialItem?.is_favorite || false)
     setEmojiManuallySet(!!initialItem?.icon_emoji)
     setError(null)
+    setFieldErrors({})
     setIsUploading(false)
     setUploadError(null)
   }, [isOpen, initialItem])
@@ -474,6 +482,7 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
     if (!name.trim()) return
     setIsSubmitting(true)
     setError(null)
+    setFieldErrors({})
     try {
       const payload = {
         name: name.trim(),
@@ -491,7 +500,31 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
       await onSubmit(payload)
     } catch (err) {
       const detail = err.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : 'Failed to save food item')
+      if (Array.isArray(detail)) {
+        // FastAPI/Pydantic 422: normalize to { fieldName: message } and focus first
+        const FIELD_MAP = {
+          name: 'fooditem-name',
+          'food_item_detail.category': 'fooditem-category',
+        }
+        const errors = {}
+        for (const d of detail) {
+          const loc = d.loc?.slice(1).join('.') || ''
+          const fieldName = FIELD_MAP[loc] || loc
+          if (fieldName && !errors[fieldName]) {
+            errors[fieldName] = d.msg || 'Invalid'
+          }
+        }
+        setFieldErrors(errors)
+        setError('Please fix the errors below')
+        // Focus the first invalid field in DOM order
+        const firstKey = Object.keys(errors)[0]
+        if (firstKey && foodFormRef.current) {
+          const el = foodFormRef.current.querySelector(`[name="${firstKey}"]`)
+          el?.focus()
+        }
+      } else {
+        setError(typeof detail === 'string' ? detail : 'Failed to save food item')
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -528,19 +561,23 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form ref={foodFormRef} onSubmit={handleSubmit} className="space-y-4">
           {/* Name */}
           <div>
             <label className="block text-xs font-medium text-text-secondary dark:text-gray-300 mb-1">Name</label>
             <input
               type="text"
+              name="fooditem-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setFieldErrors((prev) => { const { 'fooditem-name': _, ...rest } = prev; return rest }) }}
               placeholder="e.g. Banana, Yogurt, Crackers"
               autoFocus
               required
-              className="w-full px-3 py-2 text-sm rounded-lg border border-card-border dark:border-gray-600 bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 placeholder-text-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
+              className={`w-full px-3 py-2 text-sm rounded-lg border bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 placeholder-text-muted dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500 ${fieldErrors['fooditem-name'] ? 'border-red-400 dark:border-red-600' : 'border-card-border dark:border-gray-600'}`}
             />
+            {fieldErrors['fooditem-name'] && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">{fieldErrors['fooditem-name']}</p>
+            )}
           </div>
 
           {/* Icon XOR — implements mockup emoji-icon-xor-option-d.html */}
@@ -618,6 +655,7 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
           <div>
             <label className="block text-xs font-medium text-text-secondary dark:text-gray-300 mb-1">Category</label>
             <select
+              name="fooditem-category"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="w-full h-[42px] px-3 text-sm rounded-lg border border-card-border dark:border-gray-600 bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
@@ -630,6 +668,8 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
 
           {/* Favorite */}
           <FavoriteToggle value={isFavorite} onChange={setIsFavorite} compact />
+
+          <ShortcutFooter />
 
           {/* Actions — plan §2039 Chunk 4: "The edit modal contains a destructive-
               styled Delete button." In edit mode, Delete sits in the left slot
@@ -685,7 +725,7 @@ function IconSquare({ mode, iconEmoji, iconUrl, onPickEmoji, onPickFile, uploadi
 
   if (mode === ICON_MODE_EMOJI) {
     return (
-      <FoodEmojiPicker selected={iconEmoji} onSelect={onPickEmoji}>
+      <EmojiPicker onSelect={onPickEmoji}>
         <button
           type="button"
           className={`${dimensions} ${commonCls} bg-white dark:bg-gray-700 border border-card-border dark:border-gray-600 hover:border-terracotta-500 dark:hover:border-blue-500`}
@@ -697,7 +737,7 @@ function IconSquare({ mode, iconEmoji, iconUrl, onPickEmoji, onPickFile, uploadi
             <span className="text-[0.6875rem] text-text-muted">Pick</span>
           )}
         </button>
-      </FoodEmojiPicker>
+      </EmojiPicker>
     )
   }
 
@@ -809,6 +849,14 @@ function FavoriteToggle({ value, onChange, compact = false }) {
         />
       </button>
       <span className="text-sm text-text-primary dark:text-gray-200">Mark as favorite</span>
+    </div>
+  )
+}
+
+function ShortcutFooter() {
+  return (
+    <div className="text-xs text-text-muted dark:text-gray-500 text-center pt-1">
+      ⌘S to save · Esc to cancel
     </div>
   )
 }

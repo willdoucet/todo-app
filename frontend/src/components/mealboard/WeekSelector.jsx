@@ -1,10 +1,7 @@
 /**
- * Week selector — prev / range label / next. The Today / "Jump to Today" button
- * used to live inside this pill; Chunk 2 item 7 extracted it so the caller
- * renders a standalone "Jump to Today" button next to the selector with
- * responsive layout (mobile stacks above, tablet+ sits left). The `onToday`
- * prop is accepted but intentionally unused here — it's kept for API
- * backwards-compat until all callers pass it directly into the external button.
+ * Week selector — prev / range label / next. The "Jump to Current Week" button
+ * is a separate component in MealPlannerView.jsx, conditionally rendered when
+ * the displayed week does not contain today.
  */
 export default function WeekSelector({ weekDates, onPrevWeek, onNextWeek, compact = false }) {
   const formatWeekRange = () => {

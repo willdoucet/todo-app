@@ -223,7 +223,7 @@ export default function MealPlannerView() {
     setFilterFamilyMemberId((prev) => (prev === memberId ? null : memberId))
   }
 
-  // Jump to Today disabled state: the displayed week already contains today
+  // Jump to Current Week: hidden when the displayed week already contains today
   const isOnCurrentWeek = (() => {
     if (weekDates.length !== 7) return false
     const t = new Date()
@@ -245,7 +245,7 @@ export default function MealPlannerView() {
             What's Cooking?
           </h1>
           <div className="flex-1" />
-          <JumpToTodayButton disabled={isOnCurrentWeek} onClick={handleGoToToday} />
+          {!isOnCurrentWeek && <JumpToCurrentWeekButton onClick={handleGoToToday} />}
           <WeekSelector
             weekDates={weekDates}
             onPrevWeek={handlePrevWeek}
@@ -263,9 +263,11 @@ export default function MealPlannerView() {
             <MealboardNav variant="dropdown" compact={isCompactMode} />
           </div>
           <div className="flex items-center justify-center gap-2">
-            <div className="hidden md:block">
-              <JumpToTodayButton disabled={isOnCurrentWeek} onClick={handleGoToToday} />
-            </div>
+            {!isOnCurrentWeek && (
+              <div className="hidden md:block">
+                <JumpToCurrentWeekButton onClick={handleGoToToday} />
+              </div>
+            )}
             <WeekSelector
               weekDates={weekDates}
               onPrevWeek={handlePrevWeek}
@@ -273,14 +275,15 @@ export default function MealPlannerView() {
               compact={isCompactMode}
             />
           </div>
-          {/* mobile-only: full-width Jump to Today, stacked below the row */}
-          <div className="md:hidden">
-            <JumpToTodayButton
-              disabled={isOnCurrentWeek}
-              onClick={handleGoToToday}
-              className="w-full justify-center min-h-[44px]"
-            />
-          </div>
+          {/* mobile-only: full-width Jump to Current Week, stacked below the row */}
+          {!isOnCurrentWeek && (
+            <div className="md:hidden">
+              <JumpToCurrentWeekButton
+                onClick={handleGoToToday}
+                className="w-full justify-center min-h-[44px]"
+              />
+            </div>
+          )}
           <div className="hidden md:block" />
         </div>
       </div>
@@ -390,37 +393,31 @@ export default function MealPlannerView() {
 }
 
 /**
- * "Jump to Today" button — extracted from WeekSelector in Chunk 2 item 7.
+ * "Jump to Current Week" button — primary-styled navigation affordance.
  *
- * Secondary-styled (bg-warm-sand, not primary terracotta) because Jump to Today
- * is a navigation utility, not the primary action on the planner (primary is
- * "Add meal"). Shows a disabled visual when the displayed week already contains
- * today, per plan §1145. Label is always "Jump to Today" at every viewport
- * (no "Today" abbreviation — too thin a target per the Design Review IA call).
+ * Restyled from secondary (bg-warm-sand) to primary terracotta per
+ * mealboard-main-page-updates-plan-20260415-164719.md premise 1: navigation
+ * discoverability trumps visual primacy protection for "Add meal" (which lives
+ * inside swimlanes, not the header). Hidden (not disabled) when the displayed
+ * week already contains today (premise 3).
  */
-function JumpToTodayButton({ onClick, disabled, className = '' }) {
+function JumpToCurrentWeekButton({ onClick, className = '' }) {
   return (
     <button
       type="button"
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      aria-label="Jump to current week"
-      aria-disabled={disabled}
+      onClick={onClick}
       className={`
-        inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
-        text-xs font-medium whitespace-nowrap transition-colors
-        ${disabled
-          ? 'bg-warm-beige dark:bg-gray-700 text-text-muted dark:text-gray-500 cursor-default'
-          : 'bg-warm-sand dark:bg-gray-700 text-text-secondary dark:text-gray-300 hover:bg-warm-beige dark:hover:bg-gray-600 cursor-pointer'
-        }
+        inline-flex items-center gap-2 px-4 py-2
+        bg-terracotta-500 hover:bg-terracotta-600 dark:bg-blue-600 dark:hover:bg-blue-700
+        text-white rounded-lg font-medium text-sm transition-colors
         ${className}
       `}
     >
-      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" />
         <polyline points="12 6 12 12 16 14" />
       </svg>
-      Jump to Today
+      Jump to Current Week
     </button>
   )
 }
