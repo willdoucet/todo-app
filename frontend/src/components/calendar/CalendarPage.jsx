@@ -47,9 +47,12 @@ export default function CalendarPage() {
     activeMembers
   )
 
-  // Initialize activeMembers once familyMembers load
+  // Initialize activeMembers once familyMembers load. One-shot sync: derive
+  // the initial Set from a freshly-loaded async source. activeMembers is then
+  // user-controlled via handleToggleMember.
   useEffect(() => {
     if (activeMembers === null && familyMembers.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveMembers(new Set(familyMembers.map((m) => m.id)))
     }
   }, [familyMembers, activeMembers])

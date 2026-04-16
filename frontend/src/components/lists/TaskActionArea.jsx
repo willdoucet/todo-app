@@ -46,7 +46,9 @@ function DueDateChip({ dueDate, isOverdue }) {
   return (
     <span className={`
       inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium border
-      text-text-secondary bg-white border-card-border dark:text-gray-400 dark:bg-gray-700 dark:border-gray-600
+      ${isOverdue
+        ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+        : 'text-text-secondary bg-white border-card-border dark:text-gray-400 dark:bg-gray-700 dark:border-gray-600'}
     `}>
       {isOverdue ? (
         <svg className="w-[11px] h-[11px] text-red-500 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">

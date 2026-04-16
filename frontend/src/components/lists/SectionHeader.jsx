@@ -8,7 +8,6 @@ export default function SectionHeader({
   onToggleCollapse,
   onEdit,
   onDelete,
-  onAddTask,
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(section.name)

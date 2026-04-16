@@ -12,9 +12,13 @@ export default function InlineTaskFields({ task, familyMembers = [], onUpdateTas
   const [description, setDescription] = useState(task.description || '')
   const [dueDate, setDueDate] = useState(task.due_date?.split('T')[0] || '')
 
-  // Sync local state when task changes externally (reconcile)
+  // Sync local state when task changes externally (e.g. server reconcile
+  // after another tab edits the task). Local edits flow through
+  // handleDescriptionChange below and stay in sync via debounced save.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDescription(task.description || '')
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDueDate(task.due_date?.split('T')[0] || '')
   }, [task.description, task.due_date])
 

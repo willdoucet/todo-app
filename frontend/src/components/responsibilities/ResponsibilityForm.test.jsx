@@ -98,7 +98,7 @@ describe('ResponsibilityForm', () => {
 
   describe('day selection', () => {
     it('has weekdays selected by default', () => {
-      const { container } = render(<ResponsibilityForm {...defaultProps} />)
+      render(<ResponsibilityForm {...defaultProps} />)
 
       // Mon-Fri should have selected styling (bg-terracotta-500)
       const monButton = screen.getByRole('button', { name: 'Mon' })

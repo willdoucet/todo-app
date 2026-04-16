@@ -91,100 +91,136 @@ body {
   }
 }
 
-/* Meal Calendar - Responsive layout */
-.meal-calendar {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow-y: auto;
-}
-
-@media (min-width: 768px) {
-  .meal-calendar {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    overflow-y: auto;
-    overflow-x: hidden;
+/* Swimlane entrance — staggered fade + slide up */
+@keyframes swimlane-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Day column responsive borders */
-.meal-day-column {
-  border-bottom: 1px solid var(--color-card-border);
+.swimlane-enter {
+  animation: swimlane-enter 0.4s ease-out both;
 }
 
-.meal-day-column:last-child {
-  border-bottom: none;
-}
-
-@media (min-width: 768px) {
-  .meal-day-column {
-    border-bottom: none;
-    border-right: 1px solid var(--color-card-border);
+/* Meal card enter — fade + scale up */
+@keyframes meal-card-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
   }
-
-  .meal-day-column:last-child {
-    border-right: none;
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
-.dark .meal-day-column {
-  border-color: #374151;
+.meal-card-enter {
+  animation: meal-card-enter 0.25s ease-out both;
 }
 
-/* Right panel breakpoint - show at 1525px+ */
-.right-panel-desktop {
+/* Cooked checkmark badge — bounce in */
+@keyframes bounce-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.bounce-in {
+  animation: bounce-in 0.3s ease-out both;
+}
+
+/* Recipe card entrance — staggered fade + slide up */
+@keyframes recipe-card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Recipe row entrance — staggered fade + slide right */
+@keyframes recipe-row-enter {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* View crossfade — fade in incoming view */
+@keyframes view-crossfade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Popover/menu scale pop — 150ms fade + scale from 95% to 100% */
+@keyframes scale-pop {
+  from { transform: scale(0.95); }
+  to { transform: scale(1); }
+}
+
+/* Undo toast countdown ring — animates the stroke-dashoffset of the ring's
+   foreground circle from 0 (full) to its full circumference (empty). The
+   compositor handles the animation so React doesn't re-render every frame. */
+@keyframes undo-countdown {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 37.7; }
+}
+
+/* Cooked-state pulse — 1x scale pulse + cooked tint flash, motion-safe only */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes meal-card-cooked-pulse {
+    0% { transform: scale(1); background-color: inherit; }
+    50% { transform: scale(1.05); background-color: #E5EDE6; }
+    100% { transform: scale(1); background-color: inherit; }
+  }
+  @keyframes meal-card-cooked-pulse-dark {
+    0% { transform: scale(1); background-color: inherit; }
+    50% { transform: scale(1.05); background-color: rgba(20, 83, 45, 0.3); }
+    100% { transform: scale(1); background-color: inherit; }
+  }
+}
+
+/* Tag pill entrance — subtle fade + slide up, motion-safe only */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes tag-pill-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tag-pill-enter {
+    animation: tag-pill-enter 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+/* Recipe grid responsive — fixed column counts at breakpoints */
+@media (max-width: 1099px) {
+  .recipe-grid-responsive { grid-template-columns: repeat(4, 1fr) !important; }
+}
+@media (max-width: 799px) {
+  .recipe-grid-responsive { grid-template-columns: repeat(3, 1fr) !important; }
+}
+@media (max-width: 499px) {
+  .recipe-grid-responsive { grid-template-columns: repeat(2, 1fr) !important; }
+}
+@media (max-width: 399px) {
+  .recipe-grid-responsive { grid-template-columns: 1fr !important; }
+}
+
+/* Hide scrollbar for horizontal tag chip scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
 
-@media (min-width: 1525px) {
-  .right-panel-desktop {
-    display: block;
-  }
-}
 
-/* Right panel toggle button - hide at 1525px+ */
-.right-panel-toggle {
-  display: block;
-}
-
-@media (min-width: 1525px) {
-  .right-panel-toggle {
-    display: none;
-  }
-}
-
-/* Mobile right panel overlay - hide at 1525px+ */
-.right-panel-mobile-overlay {
-  display: block;
-}
-
-@media (min-width: 1525px) {
-  .right-panel-mobile-overlay {
-    display: none;
-  }
-}
-
-/* MealCard - row calendar view (>=768px) fixed height */
-@media (min-width: 768px) {
-  .meal-card-row-view {
-    height: 150px;
-  }
-}
-
-/* MealCard actions - hover visibility */
-.meal-card-actions {
-  opacity: 0;
-  transition: opacity 150ms ease-in-out;
-}
-
-.meal-card:hover .meal-card-actions,
-.meal-card:focus-within .meal-card-actions,
-.meal-card-actions:focus-within {
-  opacity: 1;
-}
-
-/* Keep actions visible if meal is already cooked */
-.meal-card-cooked .meal-card-actions {
-  opacity: 1;
-}

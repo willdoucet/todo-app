@@ -1,114 +1,189 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import axios from 'axios'
 import MealCard from '../../../src/components/mealboard/MealCard'
 
+vi.mock('axios')
+
 describe('MealCard', () => {
-  const mockRecipe = {
-    id: 1,
-    name: 'Honey Garlic Chicken',
-    cook_time_minutes: 30,
-    is_favorite: true,
+  const mockSlotType = {
+    id: 3,
+    name: 'Dinner',
+    color: '#E8927C',
+    icon: '🍽',
+    default_participants: [],
   }
 
-  const mockMeal = {
+  const mockFamilyMembers = [
+    { id: 1, name: 'Dad', color: '#5B8DEF' },
+    { id: 2, name: 'Mom', color: '#E06B9F' },
+    { id: 3, name: 'Kid', color: '#F5A623' },
+  ]
+
+  // Post-refactor: meal_entries reference an Item via item_id, and the response
+  // embeds the full Item object (with detail eager-loaded) under entry.item.
+  const mockRecipeItem = {
     id: 1,
-    category: 'DINNER',
-    recipe_id: 1,
+    name: 'Honey Garlic Chicken',
+    item_type: 'recipe',
+    icon_emoji: null,
+    icon_url: null,
+    tags: [],
+    is_favorite: true,
+    recipe_detail: {
+      description: null,
+      ingredients: [],
+      instructions: null,
+      prep_time_minutes: 10,
+      cook_time_minutes: 30,
+      servings: 4,
+      image_url: null,
+    },
+    food_item_detail: null,
+  }
+
+  const mockFoodItem = {
+    id: 5,
+    name: 'Banana',
+    item_type: 'food_item',
+    icon_emoji: '🍌',
+    icon_url: null,
+    tags: [],
+    is_favorite: false,
+    recipe_detail: null,
+    food_item_detail: {
+      category: 'fruit',
+      shopping_quantity: 1,
+      shopping_unit: 'each',
+    },
+  }
+
+  const mockRecipeEntry = {
+    id: 10,
+    date: '2026-04-04',
+    meal_slot_type_id: 3,
+    item_id: 1,
+    item: mockRecipeItem,
     custom_meal_name: null,
     was_cooked: false,
     notes: null,
+    participants: mockFamilyMembers, // all members = "everyone"
   }
 
   const defaultProps = {
-    meal: mockMeal,
-    recipe: mockRecipe,
-    onToggleCooked: vi.fn(),
-    onDelete: vi.fn(),
+    entry: mockRecipeEntry,
+    slotType: mockSlotType,
+    familyMembers: mockFamilyMembers,
+    onUpdated: vi.fn(),
+    onDeleted: vi.fn(),
+    onViewRecipe: vi.fn(),
   }
 
   beforeEach(() => {
     vi.clearAllMocks()
+    axios.patch = vi.fn().mockResolvedValue({ data: { ...mockRecipeEntry, was_cooked: true } })
+    axios.delete = vi.fn().mockResolvedValue({ data: {} })
   })
 
-  it('renders recipe name when from recipe', () => {
+  it('renders recipe name when item_type is recipe', () => {
     render(<MealCard {...defaultProps} />)
-
     expect(screen.getByText('Honey Garlic Chicken')).toBeInTheDocument()
   })
 
-  it('renders custom meal name when no recipe', () => {
-    const props = {
-      ...defaultProps,
-      meal: { ...mockMeal, recipe_id: null, custom_meal_name: 'Takeout Pizza' },
-      recipe: null,
+  it('renders custom meal name for an entry with no item', () => {
+    const entry = {
+      ...mockRecipeEntry,
+      item_id: null,
+      item: null,
+      custom_meal_name: 'Leftover pizza',
     }
-    render(<MealCard {...props} />)
-
-    expect(screen.getByText('Takeout Pizza')).toBeInTheDocument()
+    render(<MealCard {...defaultProps} entry={entry} />)
+    expect(screen.getByText('Leftover pizza')).toBeInTheDocument()
   })
 
-  it('displays category badge', () => {
-    render(<MealCard {...defaultProps} />)
-
-    expect(screen.getByText('DINNER')).toBeInTheDocument()
-  })
-
-  it('shows cook time when available', () => {
-    render(<MealCard {...defaultProps} />)
-
-    expect(screen.getByText('30 min')).toBeInTheDocument()
-  })
-
-  it('shows favorite badge for favorite recipes', () => {
-    render(<MealCard {...defaultProps} />)
-
-    expect(screen.getByText('Favorite')).toBeInTheDocument()
-  })
-
-  it('does not show favorite badge for non-favorite recipes', () => {
-    const props = {
-      ...defaultProps,
-      recipe: { ...mockRecipe, is_favorite: false },
+  it('renders food item name for food_item type', () => {
+    const entry = {
+      ...mockRecipeEntry,
+      item_id: 5,
+      item: mockFoodItem,
     }
-    render(<MealCard {...props} />)
-
-    expect(screen.queryByText('Favorite')).not.toBeInTheDocument()
+    render(<MealCard {...defaultProps} entry={entry} />)
+    expect(screen.getByText('Banana')).toBeInTheDocument()
   })
 
-  it('displays notes when present', () => {
-    const props = {
-      ...defaultProps,
-      meal: { ...mockMeal, notes: 'Double the garlic' },
+  it('shows combined cook time and servings for recipe meals', () => {
+    render(<MealCard {...defaultProps} />)
+    // prep (10) + cook (30) = 40m
+    expect(screen.getByText(/40m/)).toBeInTheDocument()
+    expect(screen.getByText(/4 servings/)).toBeInTheDocument()
+  })
+
+  it('hides participant avatars when all family members are participants (everyone)', () => {
+    render(<MealCard {...defaultProps} />)
+    const avatarContainer = document.querySelector('.-space-x-1')
+    expect(avatarContainer).not.toBeInTheDocument()
+  })
+
+  it('shows individual avatars when only some members are participants', () => {
+    const entry = {
+      ...mockRecipeEntry,
+      participants: [mockFamilyMembers[0]], // Only Dad
     }
-    render(<MealCard {...props} />)
-
-    expect(screen.getByText('Double the garlic')).toBeInTheDocument()
+    render(<MealCard {...defaultProps} entry={entry} />)
+    const avatarContainer = document.querySelector('.-space-x-1')
+    expect(avatarContainer).toBeInTheDocument()
   })
 
-  it('calls onToggleCooked when clicking cooked button', async () => {
+  it('calls onUpdated via axios when toggling cooked', async () => {
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} />)
-
-    await user.click(screen.getByTitle('Mark as cooked'))
-    expect(defaultProps.onToggleCooked).toHaveBeenCalledTimes(1)
+    const toggleButton = screen.getByLabelText(/Mark as cooked/i)
+    await user.click(toggleButton)
+    expect(axios.patch).toHaveBeenCalledWith(
+      expect.stringContaining('/meal-entries/10'),
+      { was_cooked: true }
+    )
+    expect(defaultProps.onUpdated).toHaveBeenCalled()
   })
 
-  it('calls onDelete when clicking delete button', async () => {
+  it('calls onDeleted via axios when clicking delete', async () => {
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} />)
-
-    await user.click(screen.getByTitle('Remove meal'))
-    expect(defaultProps.onDelete).toHaveBeenCalledTimes(1)
+    const deleteButton = screen.getByLabelText(/Delete meal/i)
+    await user.click(deleteButton)
+    expect(axios.delete).toHaveBeenCalledWith(expect.stringContaining('/meal-entries/10'))
+    expect(defaultProps.onDeleted).toHaveBeenCalledWith(10)
   })
 
-  it('shows different style when meal is cooked', () => {
-    const props = {
-      ...defaultProps,
-      meal: { ...mockMeal, was_cooked: true },
-    }
-    render(<MealCard {...props} />)
+  it('shows cooked state with strikethrough and cooked badge', () => {
+    const entry = { ...mockRecipeEntry, was_cooked: true }
+    render(<MealCard {...defaultProps} entry={entry} />)
+    const name = screen.getByText('Honey Garlic Chicken')
+    expect(name.className).toContain('line-through')
+    expect(screen.getByText('✓ Cooked')).toBeInTheDocument()
+  })
 
-    expect(screen.getByTitle('Mark as not cooked')).toBeInTheDocument()
+  it('shows view recipe button for recipe entries', () => {
+    render(<MealCard {...defaultProps} />)
+    expect(screen.getByLabelText('View recipe')).toBeInTheDocument()
+  })
+
+  it('calls onViewRecipe when view recipe button is clicked', async () => {
+    const user = userEvent.setup()
+    render(<MealCard {...defaultProps} />)
+    await user.click(screen.getByLabelText('View recipe'))
+    // onViewRecipe is called with the item.id (was recipe.id pre-refactor)
+    expect(defaultProps.onViewRecipe).toHaveBeenCalledWith(1)
+  })
+
+  it('hides view recipe button for non-recipe entries', () => {
+    const entry = {
+      ...mockRecipeEntry,
+      item_id: 5,
+      item: mockFoodItem,
+    }
+    render(<MealCard {...defaultProps} entry={entry} />)
+    expect(screen.queryByLabelText('View recipe')).not.toBeInTheDocument()
   })
 })

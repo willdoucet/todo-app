@@ -20,9 +20,14 @@ export default function FamilyMemberManager() {
   const [newMemberColor, setNewMemberColor] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Auto-select first unused color when family members change
+  // Auto-select first unused color when family members change.
+  // System members (Everyone) are excluded so their reserved color doesn't
+  // shadow a real picker slot — a real human can still pick it.
   useEffect(() => {
-    const existingColors = familyMembers.map(m => m.color).filter(Boolean)
+    const existingColors = familyMembers
+      .filter(m => !m.is_system)
+      .map(m => m.color)
+      .filter(Boolean)
     setNewMemberColor(getFirstUnusedColor(existingColors))
   }, [familyMembers])
 

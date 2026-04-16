@@ -4,7 +4,6 @@ import Header from '../components/layout/Header'
 import MealboardNav from '../components/mealboard/MealboardNav'
 import MealPlannerView from '../components/mealboard/MealPlannerView'
 import RecipesView from '../components/mealboard/RecipesView'
-import ShoppingListView from '../components/mealboard/ShoppingListView'
 import RecipeFinderView from '../components/mealboard/RecipeFinderView'
 import usePageTitle from '../hooks/usePageTitle'
 
@@ -33,7 +32,9 @@ export default function MealboardPage() {
             <Route index element={<Navigate to="planner" replace />} />
             <Route path="planner" element={<MealPlannerView />} />
             <Route path="recipes" element={<RecipesView />} />
-            <Route path="shopping" element={<ShoppingListView />} />
+            {/* /mealboard/shopping was removed during the item-model refactor;
+                direct hits redirect to the canonical task list UI. */}
+            <Route path="shopping" element={<Navigate to="/lists" replace />} />
             <Route path="finder" element={<RecipeFinderView />} />
           </Routes>
         </div>

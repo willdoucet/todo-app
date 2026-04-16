@@ -223,7 +223,7 @@ describe('ResponsibilityCard', () => {
     })
 
     it('does not show action buttons container when both handlers are missing', () => {
-      const { container } = render(
+      render(
         <ResponsibilityCard
           {...defaultProps}
           onEdit={undefined}

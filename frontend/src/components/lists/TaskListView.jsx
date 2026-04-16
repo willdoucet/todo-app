@@ -223,7 +223,6 @@ export default function TaskListView({
               onToggleCollapse={() => toggleSection(section.id)}
               onEdit={onEditSection}
               onDelete={onDeleteSection}
-              onAddTask={() => handleAddTaskClick(section.id)}
             />
             {!isCollapsed && (
               <div className="transition-all duration-150 ease-out">

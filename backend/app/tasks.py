@@ -477,3 +477,146 @@ def delete_events_for_integration(integration_id: int):
     result = run_async(_delete())
     logger.info("Deleted events for integration %d: %s", integration_id, result)
     return result
+
+
+# =============================================================================
+# Shopping List Sync Tasks
+# =============================================================================
+
+
+@celery_app.task(
+    name="app.tasks.sync_shopping_list_add",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+)
+def sync_shopping_list_add(self, meal_entry_id: int):
+    """Sync a meal entry's ingredients to the linked shopping list.
+
+    Called after a meal entry is created. Aggregates ingredients with
+    existing shopping items using the aggregation key + unique constraint.
+    """
+    from .services.shopping_sync import sync_meal_to_shopping_list
+    from sqlalchemy import update
+    from . import models
+
+    async def _sync():
+        async with AsyncSessionLocal() as db:
+            await sync_meal_to_shopping_list(db, meal_entry_id)
+
+    try:
+        run_async(_sync())
+        logger.info("Shopping sync (add) complete for meal entry %d", meal_entry_id)
+    except Exception as e:
+        logger.error(
+            "Shopping sync (add) failed for meal entry %d: %s",
+            meal_entry_id, str(e), exc_info=True,
+        )
+        # On final retry failure, mark the meal entry as "failed"
+        if self.request.retries >= self.max_retries:
+            async def _mark_failed():
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        update(models.MealEntry)
+                        .where(models.MealEntry.id == meal_entry_id)
+                        .values(shopping_sync_status="failed")
+                    )
+                    await db.commit()
+            try:
+                run_async(_mark_failed())
+            except Exception:
+                logger.error("Failed to mark meal entry %d as sync failed", meal_entry_id)
+        raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
+
+
+@celery_app.task(
+    name="app.tasks.sync_shopping_list_remove",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+)
+def sync_shopping_list_remove(self, meal_entry_id: int, synced_to_list_id: int | None = None):
+    """Remove a meal entry's contributions from the shopping list.
+
+    Uses synced_to_list_id (provenance) to target the correct list.
+    If None, no-op (meal was never synced or already cleaned up).
+    """
+    from .services.shopping_sync import remove_meal_from_shopping_list
+
+    if synced_to_list_id is None:
+        logger.info(
+            "Shopping sync (remove) for meal entry %d — no synced_to_list_id, no-op",
+            meal_entry_id,
+        )
+        return
+
+    async def _remove():
+        async with AsyncSessionLocal() as db:
+            await remove_meal_from_shopping_list(db, meal_entry_id, target_list_id=synced_to_list_id)
+
+    try:
+        run_async(_remove())
+        logger.info("Shopping sync (remove) complete for meal entry %d from list %d", meal_entry_id, synced_to_list_id)
+    except Exception as e:
+        logger.error(
+            "Shopping sync (remove) failed for meal entry %d: %s",
+            meal_entry_id, str(e), exc_info=True,
+        )
+        raise self.retry(exc=e, countdown=self.default_retry_delay * (2 ** self.request.retries))
+
+
+# =============================================================================
+# Chunk 6 — Soft-delete hard-delete sweeper (Expansion B)
+# =============================================================================
+
+@celery_app.task(
+    name="app.tasks.hard_delete_expired_soft_deletes",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=600,  # cap exponential backoff at 10 minutes
+    retry_jitter=True,
+    max_retries=3,
+)
+def hard_delete_expired_soft_deletes(self):
+    """Hourly sweeper that permanently removes items whose soft-delete window
+    has expired (items.deleted_at older than 24 hours).
+
+    Thin wrapper around `crud_items.hard_delete_expired_soft_deletes_async()`.
+    The real cascade-in-code + assertion-gate logic lives there so tests can
+    await it directly with their own db_session fixture.
+
+    Failure handling: Celery autoretry kicks in for any exception (3 retries
+    with exponential backoff). After exhaustion the task fails and Celery's
+    next beat tick re-dispatches a fresh attempt at the next hour. A persistent
+    failure logs `HARD_DELETE_SWEEP_DEAD_LETTER` so an operator can grep logs
+    for the zombie-state condition (the assertion-gate from
+    crud_items.hard_delete_expired_soft_deletes_async).
+    """
+    from .crud_items import hard_delete_expired_soft_deletes_async
+
+    async def _sweep():
+        async with AsyncSessionLocal() as db:
+            return await hard_delete_expired_soft_deletes_async(db)
+
+    try:
+        deleted_count = run_async(_sweep())
+        if deleted_count:
+            logger.info(
+                "Hard-delete sweep: removed %d expired soft-deleted items",
+                deleted_count,
+            )
+        return {"deleted_count": deleted_count}
+    except Exception as e:
+        attempt = self.request.retries + 1
+        if attempt > self.max_retries:
+            logger.error(
+                "HARD_DELETE_SWEEP_DEAD_LETTER attempts=%d error=%s",
+                attempt, str(e), exc_info=True,
+            )
+        else:
+            logger.warning(
+                "Hard-delete sweep attempt %d/%d failed: %s",
+                attempt, self.max_retries + 1, str(e),
+            )
+        raise

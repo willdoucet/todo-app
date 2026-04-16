@@ -16,10 +16,12 @@ prompts/
 screenshots/
 
 .claude/
-
+.cursor/
 .knowledge-quiz
 
 
 todo-app-notes/
 
 .DS_Store
+.playwright-mcp/
+*.png

@@ -240,7 +240,7 @@ export default function ListPanel({
       </div>
 
       {/* Mobile: Slide-in drawer */}
-      <Transition show={isOpen} as="div">
+      <Transition show={isOpen} as="div" appear>
         <Dialog onClose={() => setIsOpen(false)} className="relative z-50 sm:hidden">
           <Transition.Child
             enter="ease-out duration-200"
@@ -345,7 +345,7 @@ export default function ListPanel({
       </aside>
 
       {/* Create/Edit List Modal */}
-      <Transition show={isFormOpen} as="div">
+      <Transition show={isFormOpen} as="div" appear>
         <Dialog onClose={() => setIsFormOpen(false)} className="relative z-50">
           <Transition.Child
             enter="ease-out duration-200"

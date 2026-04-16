@@ -29,7 +29,7 @@ export default function ListsPage() {
   const [error, setError] = useState(null)
   const [isOpen, setIsOpen] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [_isSubmitting, setIsSubmitting] = useState(false)
   const [addToSectionId, setAddToSectionId] = useState(null)
 
   // Inline editing state
@@ -554,7 +554,7 @@ export default function ListsPage() {
       )}
 
       {/* Create / Edit Modal — mobile only on desktop, always available on mobile */}
-      <Transition show={isOpen} as="div">
+      <Transition show={isOpen} as="div" appear>
         <Dialog onClose={() => setIsOpen(false)} className="relative z-50">
           {/* Backdrop */}
           <Transition.Child

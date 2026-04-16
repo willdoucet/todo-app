@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 
 const ToastContext = createContext(null)
 
@@ -20,14 +20,11 @@ export function ToastProvider({ children }) {
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
-  const toast = useCallback({
+  const api = useMemo(() => ({
     error: (msg) => addToast(msg, { type: 'error' }),
     success: (msg) => addToast(msg, { type: 'success', duration: 2000 }),
     info: (msg) => addToast(msg, { type: 'info' }),
-  }, [addToast])
-
-  // Workaround: useCallback doesn't work with object literal
-  const api = { error: (msg) => addToast(msg, { type: 'error' }), success: (msg) => addToast(msg, { type: 'success', duration: 2000 }), info: (msg) => addToast(msg, { type: 'info' }) }
+  }), [addToast])
 
   return (
     <ToastContext.Provider value={api}>
@@ -68,6 +65,7 @@ export function ToastProvider({ children }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const ctx = useContext(ToastContext)
   if (!ctx) throw new Error('useToast must be used within ToastProvider')
