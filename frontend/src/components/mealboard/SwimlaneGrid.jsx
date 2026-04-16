@@ -178,7 +178,6 @@ export default function SwimlaneGrid({
                 grid grid-cols-[80px_repeat(7,1fr)]
                 sm:grid-cols-[100px_repeat(7,1fr)]
                 rounded-2xl overflow-hidden border
-                transition-all
               "
               style={{
                 background: gradient,

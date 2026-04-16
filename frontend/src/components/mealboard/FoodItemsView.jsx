@@ -219,10 +219,11 @@ export default function FoodItemsView() {
           // Grid = food-item cards with auto-fit columns (plan 20260415 Chunk 3).
           // Column count adjusts to viewport: ~3 at 1300px, ~4 at 1600px, 2 at 800px, 1 at mobile.
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-            {filteredItems.map((item) => (
+            {filteredItems.map((item, i) => (
               <ItemCard
                 key={item.id}
                 item={item}
+                index={i}
                 onClick={() => handleEdit(item)}
                 onEdit={() => handleEdit(item)}
                 onToggleFavorite={() => toggleFavorite(item)}
