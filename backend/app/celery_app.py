@@ -16,6 +16,16 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    # Per-task time limits. extract_recipe_from_url is I/O-heavy (HTTP fetch +
+    # LLM call), so we cap it at 120s hard / 110s soft. The soft limit gives
+    # the task a chance to raise SoftTimeLimitExceeded and mark itself failed
+    # with a clean error before the hard kill.
+    task_annotations={
+        "app.tasks.extract_recipe_from_url": {
+            "time_limit": 120,
+            "soft_time_limit": 110,
+        },
+    },
     beat_schedule={
         "sync-icloud-calendars": {
             "task": "app.tasks.sync_all_icloud_integrations",

@@ -6,6 +6,12 @@ FROM python:3.12-slim AS builder
 # Install uv (pin a specific version for reproducibility - update when you want)
 COPY --from=ghcr.io/astral-sh/uv:0.5.24 /uv /uvx /bin/
 
+# Build deps needed by lxml (transitive dep of recipe-scrapers). python:3.12-slim
+# does not ship libxml2/libxslt headers, so lxml fails to build without them.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libxml2-dev libxslt-dev gcc \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Optimizations for faster & smaller image

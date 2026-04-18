@@ -278,6 +278,7 @@ class RecipeDetail(Base):
     cook_time_minutes = Column(Integer, nullable=True)
     servings = Column(Integer, nullable=True)
     image_url = Column(Text, nullable=True)
+    source_url = Column(Text, nullable=True)
 
     item = relationship("Item", back_populates="recipe_detail", lazy="selectin")
 

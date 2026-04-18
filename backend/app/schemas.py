@@ -291,6 +291,21 @@ class RecipeDetailBase(BaseModel):
     cook_time_minutes: Optional[int] = Field(None, ge=0)
     servings: Optional[int] = Field(None, ge=1)
     image_url: Optional[str] = None
+    source_url: Optional[str] = Field(None, max_length=2048)
+
+    @field_validator("source_url")
+    @classmethod
+    def validate_source_url_scheme(cls, v):
+        """Reject non-http(s) schemes to block `javascript:` / `data:` URLs
+        that would execute when rendered as an anchor href in the UI."""
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            return None
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("source_url must start with http:// or https://")
+        return v
 
 
 class RecipeDetailCreate(RecipeDetailBase):

@@ -620,3 +620,90 @@ def hard_delete_expired_soft_deletes(self):
                 attempt, self.max_retries + 1, str(e),
             )
         raise
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Recipe URL import (AI-backed)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@celery_app.task(bind=True, name="app.tasks.extract_recipe_from_url")
+def extract_recipe_from_url(self, url: str) -> dict:
+    """Extract a recipe from a URL. Thin Celery wrapper around
+    ``services.recipe_extractor.extract_recipe``.
+
+    Progress is reported via ``self.update_state`` so the status endpoint
+    can surface the current step to the frontend poll.
+
+    On success, the return value is a JSON-serializable dict matching the
+    shape the frontend needs (name, tags, recipe_detail payload, source_url).
+
+    On failure, we store a structured result dict with ``status=failed`` and
+    a stable ``error_code`` — intentionally NOT re-raising, so the status
+    endpoint sees a terminal SUCCESS state with a failure payload. This keeps
+    the frontend logic uniform (always read ``status`` from the result dict
+    rather than inspecting Celery's SUCCESS/FAILURE distinction).
+    """
+    from urllib.parse import urlparse
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    from .constants import import_errors as codes
+    from .services.recipe_extractor import (
+        ExtractorError,
+        extract_recipe,
+    )
+
+    url_host = urlparse(url).hostname or "unknown"
+    task_id = self.request.id
+    logger.info(
+        "recipe_import.task_start",
+        extra={"task_id": task_id, "url_host": url_host},
+    )
+
+    def _on_progress(step: str) -> None:
+        self.update_state(state="PROGRESS", meta={"step": step})
+
+    try:
+        result = extract_recipe(url, on_progress=_on_progress)
+    except ExtractorError as exc:
+        logger.warning(
+            "recipe_import.task_failed",
+            extra={
+                "task_id": task_id,
+                "url_host": url_host,
+                "error_code": exc.error_code,
+                "detail": str(exc)[:200],
+            },
+        )
+        return {"status": "failed", "error_code": exc.error_code}
+    except SoftTimeLimitExceeded:
+        logger.warning(
+            "recipe_import.soft_timeout",
+            extra={"task_id": task_id, "url_host": url_host},
+        )
+        return {"status": "failed", "error_code": codes.TASK_TIMEOUT}
+    except Exception as exc:
+        logger.error(
+            "recipe_import.task_internal_error",
+            extra={"task_id": task_id, "url_host": url_host, "detail": str(exc)[:200]},
+            exc_info=True,
+        )
+        return {"status": "failed", "error_code": codes.INTERNAL_ERROR}
+
+    logger.info(
+        "recipe_import.task_success",
+        extra={
+            "task_id": task_id,
+            "url_host": url_host,
+            "ingredient_count": len(result.recipe_detail.ingredients),
+        },
+    )
+    return {
+        "status": "complete",
+        "recipe": {
+            "name": result.name,
+            "tags": result.tags,
+            "source_url": result.source_url,
+            "recipe_detail": result.recipe_detail.model_dump(),
+        },
+    }
