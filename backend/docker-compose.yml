@@ -52,6 +52,8 @@ services:
       - UPLOAD_DIR=/app/uploads
       - REDIS_URL=redis://redis:6379/0
       - FERNET_KEY=${FERNET_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AI_MODEL_NAME=${AI_MODEL_NAME:-claude-haiku-4-5-20251001}
     depends_on:
       db:
         condition: service_healthy
@@ -99,6 +101,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - FERNET_KEY=${FERNET_KEY}
       - PYTHONUNBUFFERED=1
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AI_MODEL_NAME=${AI_MODEL_NAME:-claude-haiku-4-5-20251001}
     depends_on:
       db:
         condition: service_healthy

@@ -216,6 +216,7 @@ async def create_item(db: AsyncSession, payload: schemas.ItemCreate) -> models.I
             cook_time_minutes=payload.recipe_detail.cook_time_minutes,
             servings=payload.recipe_detail.servings,
             image_url=payload.recipe_detail.image_url,
+            source_url=payload.recipe_detail.source_url,
         )
         db.add(detail)
     else:

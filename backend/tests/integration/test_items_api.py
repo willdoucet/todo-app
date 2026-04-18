@@ -364,11 +364,26 @@ class TestSoftDeleteFlow:
 
 
 # =============================================================================
-# Stub endpoint — suggest-icon (Expansion C, 501 for now)
+# /items/suggest-icon — AI-backed emoji suggestion (upgraded from 501 stub)
 # =============================================================================
 
 
-class TestSuggestIconStub:
-    async def test_returns_501_not_implemented(self, client):
-        response = await client.post("/items/suggest-icon")
-        assert response.status_code == 501
+class TestSuggestIconEndpoint:
+    """Unit-level mocking of the AI call lives in tests/unit/test_ai_client.py.
+    Here we only verify the endpoint contract and graceful fallback."""
+
+    async def test_empty_body_returns_422(self, client):
+        response = await client.post("/items/suggest-icon", json={})
+        assert response.status_code == 422
+
+    async def test_fallback_used_when_api_key_missing(self, client, monkeypatch):
+        """Without ANTHROPIC_API_KEY the endpoint returns a fallback response
+        rather than 500-ing, so the client's local suggestEmoji() can run."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        response = await client.post(
+            "/items/suggest-icon", json={"name": "banana"}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["fallback_used"] is True
+        assert body["emoji"] is None

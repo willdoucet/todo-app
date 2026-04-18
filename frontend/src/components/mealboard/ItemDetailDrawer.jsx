@@ -270,6 +270,24 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem, 
                       </div>
                     )}
 
+                    {/* View Original — only for recipes imported from a URL.
+                        Defense in depth: only render the anchor if source_url
+                        is an http(s) URL, otherwise `javascript:` stored in a
+                        legacy row would execute on click. Backend schema also
+                        enforces this, but the frontend defends itself. */}
+                    {rd.source_url && /^https?:\/\//i.test(rd.source_url) && (
+                      <div>
+                        <a
+                          href={rd.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-terracotta-600 dark:text-terracotta-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          View original recipe ↗
+                        </a>
+                      </div>
+                    )}
+
                     {/* Ingredients */}
                     {rd.ingredients && rd.ingredients.length > 0 && (
                       <div>

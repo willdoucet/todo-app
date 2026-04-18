@@ -4,8 +4,10 @@ import axios from 'axios'
 import UnitCombobox from './UnitCombobox'
 import RecipeImageUpload from './RecipeImageUpload'
 import EmojiPicker from '../shared/EmojiPicker'
+import RecipeUrlImport from './RecipeUrlImport'
 import { suggestEmoji } from '../../constants/foodEmojis'
 import useFormShortcut from '../../hooks/useFormShortcut'
+import { useToast } from '../shared/ToastProvider'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
@@ -103,12 +105,22 @@ function ModalShell({ isOpen, onClose, maxWidth = 'max-w-md', startAligned = fal
 // Recipe form body
 // ---------------------------------------------------------------------------
 
+const RECIPE_TAB_MANUAL = 'manual'
+const RECIPE_TAB_IMPORT = 'import'
+
 function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
   const [formData, setFormData] = useState(initialRecipeState())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const formRef = useRef(null)
   useFormShortcut(formRef)
+
+  // URL-import tab is only available when creating a new recipe, not editing
+  // an existing one. The tab switcher is hidden entirely when editing.
+  const [activeTab, setActiveTab] = useState(RECIPE_TAB_MANUAL)
+  const [importInitialUrl, setImportInitialUrl] = useState('')
+  const nameInputRef = useRef(null)
+  const toast = useToast()
 
   useEffect(() => {
     if (!isOpen) return
@@ -137,11 +149,15 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
         image_url: rd.image_url || '',
         is_favorite: initialItem.is_favorite || false,
         tags: (initialItem.tags || []).join(', '),
+        source_url: rd.source_url || null,
       })
     } else {
       setFormData(initialRecipeState())
     }
     setError(null)
+    // Reset URL-import tab state whenever the modal re-opens.
+    setActiveTab(RECIPE_TAB_MANUAL)
+    setImportInitialUrl('')
   }, [initialItem, isOpen])
 
   const handleChange = (e) => {
@@ -191,6 +207,7 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
           cook_time_minutes: formData.cook_time_minutes ? parseInt(formData.cook_time_minutes) : null,
           servings: parseInt(formData.servings) || 4,
           image_url: formData.image_url.trim() || null,
+          source_url: formData.source_url || null,
         },
       }
       await onSubmit(payload)
@@ -201,6 +218,66 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
       setLoading(false)
     }
   }
+
+  // onPaste handler on the name field: if the user pastes a URL, auto-switch
+  // to the import tab with the URL pre-filled. Fires only on the CREATE flow
+  // (edit flow hides the import tab entirely). No-op if already on import tab.
+  const handleNamePaste = (e) => {
+    if (isEditing) return
+    if (activeTab === RECIPE_TAB_IMPORT) return
+    const pasted = e.clipboardData?.getData('text') || ''
+    if (!/^https?:\/\//i.test(pasted.trim())) return
+    e.preventDefault()
+    setImportInitialUrl(pasted.trim())
+    setActiveTab(RECIPE_TAB_IMPORT)
+    // Neutral "info" toast — project's ToastProvider exposes .info()
+    toast.info("Detected a URL — let's import it")
+  }
+
+  // Called when the user clicks "Use This Recipe" in the preview card.
+  // Flatten the extracted recipe into formData shape, then switch tabs.
+  const handleUseImportedRecipe = (recipe) => {
+    const rd = recipe?.recipe_detail || {}
+    const normalizedIngredients = rd.ingredients?.length > 0
+      ? rd.ingredients.map((ing) => ({
+          name: ing.name ?? '',
+          quantity: ing.quantity ?? '',
+          unit: ing.unit ?? '',
+          category: ing.category ?? 'Pantry',
+        }))
+      : [{ ...emptyIngredient }]
+    setFormData({
+      name: recipe.name || '',
+      description: rd.description || '',
+      ingredients: normalizedIngredients,
+      instructions: rd.instructions || '',
+      prep_time_minutes: rd.prep_time_minutes ?? '',
+      cook_time_minutes: rd.cook_time_minutes ?? '',
+      servings: rd.servings ?? 4,
+      image_url: rd.image_url || '',
+      is_favorite: false,
+      tags: (recipe.tags || []).join(', '),
+      source_url: recipe.source_url || rd.source_url || null,
+    })
+    setActiveTab(RECIPE_TAB_MANUAL)
+    // Focus moves to the name field after the tab switch, cursor at end.
+    setTimeout(() => {
+      const el = nameInputRef.current
+      if (el) {
+        el.focus()
+        const v = el.value
+        el.setSelectionRange(v.length, v.length)
+      }
+    }, 0)
+  }
+
+  const handleEnterManually = () => {
+    setActiveTab(RECIPE_TAB_MANUAL)
+    setTimeout(() => nameInputRef.current?.focus(), 0)
+  }
+
+  const showTabBar = !isEditing
+  const showManualForm = activeTab === RECIPE_TAB_MANUAL || isEditing
 
   return (
     <ModalShell isOpen={isOpen} onClose={onClose} maxWidth="max-w-2xl" startAligned>
@@ -214,9 +291,49 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
           <Dialog.Title className="text-xl font-semibold text-text-primary dark:text-gray-100">
             {isEditing ? 'Edit Recipe' : 'New Recipe'}
           </Dialog.Title>
+
+          {showTabBar && (
+            <div
+              className="mt-3 p-1 bg-warm-sand dark:bg-gray-700 rounded-lg flex gap-1"
+              role="tablist"
+              aria-label="Recipe creation mode"
+            >
+              <TabButton
+                active={activeTab === RECIPE_TAB_MANUAL}
+                onClick={() => setActiveTab(RECIPE_TAB_MANUAL)}
+              >
+                Manual
+              </TabButton>
+              <TabButton
+                active={activeTab === RECIPE_TAB_IMPORT}
+                onClick={() => setActiveTab(RECIPE_TAB_IMPORT)}
+              >
+                From URL
+              </TabButton>
+            </div>
+          )}
         </div>
 
-        <div className="px-6 py-4 space-y-6 max-h-[60vh] overflow-y-auto">
+        {!showManualForm && (
+          <div
+            className="px-6 py-4 max-h-[60vh] overflow-y-auto"
+            role="tabpanel"
+            aria-label="Import recipe from URL"
+          >
+            <RecipeUrlImport
+              initialUrl={importInitialUrl}
+              onUseRecipe={handleUseImportedRecipe}
+              onEnterManually={handleEnterManually}
+            />
+          </div>
+        )}
+
+        {showManualForm && (
+        <div
+          className="px-6 py-4 space-y-6 max-h-[60vh] overflow-y-auto"
+          role={showTabBar ? 'tabpanel' : undefined}
+          aria-label={showTabBar ? 'Manual recipe entry' : undefined}
+        >
           {error && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
               {error}
@@ -229,7 +346,9 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
               Recipe Name <span className="text-red-500">*</span>
             </label>
             <input
+              ref={nameInputRef}
               type="text" name="name" value={formData.name} onChange={handleChange} required
+              onPaste={handleNamePaste}
               className="w-full px-4 py-2.5 border border-card-border dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-text-primary dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-terracotta-500 dark:focus:ring-blue-500"
               placeholder="e.g., Honey Garlic Chicken"
               autoFocus
@@ -358,9 +477,14 @@ function RecipeFormBody({ isOpen, onClose, onSubmit, initialItem, isEditing }) {
             onChange={(v) => setFormData((prev) => ({ ...prev, is_favorite: v }))}
           />
         </div>
+        )}
 
-        <ShortcutFooter />
-        <ModalFooter onClose={onClose} loading={loading} isEditing={isEditing} createLabel="Add Recipe" updateLabel="Update Recipe" />
+        {showManualForm && (
+          <>
+            <ShortcutFooter />
+            <ModalFooter onClose={onClose} loading={loading} isEditing={isEditing} createLabel="Add Recipe" updateLabel="Update Recipe" />
+          </>
+        )}
       </form>
     </ModalShell>
   )
@@ -378,6 +502,7 @@ function initialRecipeState() {
     image_url: '',
     is_favorite: false,
     tags: '',
+    source_url: null,
   }
 }
 
