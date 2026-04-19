@@ -156,6 +156,14 @@ body {
     to { stroke-dashoffset: 37.7; }
   }
 
+  /* In-place undo card countdown bar — shrinks from full width to zero
+     during the 5-second undo window. Paired with a `motion-reduce:hidden`
+     fallback so reduced-motion users see a ticking seconds text instead. */
+  @keyframes undo-bar-shrink {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+
   /* Motion-safe-only keyframes */
   @media (prefers-reduced-motion: no-preference) {
     @keyframes meal-card-cooked-pulse {

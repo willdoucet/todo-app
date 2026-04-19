@@ -61,10 +61,37 @@ async def update_meal_entry(
     return updated
 
 
-@router.delete("/{entry_id}", response_model=schemas.MealEntry)
+@router.delete("/{entry_id}", response_model=schemas.MealEntryDeleteResponse)
 async def delete_meal_entry(entry_id: int, db: AsyncSession = Depends(get_db)):
-    """Delete a meal entry."""
-    deleted = await crud_meal_entries.delete_meal_entry(db, entry_id)
-    if deleted is None:
+    """Soft-delete a meal entry and return its undo metadata.
+
+    The row is hidden from all read paths immediately; `undo_token` lets the
+    frontend flip it back via POST /meal-entries/{id}/undo within the 5-second
+    window. A concurrent DELETE on an already-soft-hidden row returns 404 —
+    that's the natural behavior of `get_meal_entry`'s `soft_hidden_at IS NULL`
+    filter and matches "someone else deleted it" semantics.
+    """
+    result = await crud_meal_entries.delete_meal_entry(db, entry_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Meal entry not found")
-    return deleted
+    return result
+
+
+@router.post("/{entry_id}/undo", response_model=schemas.MealEntry)
+async def undo_delete_meal_entry(
+    entry_id: int,
+    body: schemas.MealEntryUndoRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Flip a soft-hidden user-undo meal entry back to live.
+
+    Returns the restored entry on success. Returns 404 if the entry never
+    existed or is not a user-undo row; returns 410 Gone for every other
+    failure (expired, token mismatch, parent item deleted, race loser).
+    """
+    try:
+        return await crud_meal_entries.undo_delete_meal_entry(db, entry_id, body.undo_token)
+    except crud_meal_entries.UndoFailedError as e:
+        if e.reason == "not_found":
+            raise HTTPException(status_code=404, detail={"reason": e.reason})
+        raise HTTPException(status_code=410, detail={"reason": e.reason})

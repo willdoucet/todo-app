@@ -533,6 +533,23 @@ class MealEntry(MealEntryBase):
     updated_at: Optional[datetime] = None
 
 
+class MealEntryDeleteResponse(BaseModel):
+    """Response shape for DELETE /meal-entries/{id}.
+
+    The row is soft-hidden, not physically deleted. `undo_token` + `expires_at`
+    let the frontend offer an in-place 5-second undo via POST /undo.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    entry: MealEntry
+    undo_token: str
+    expires_at: datetime
+
+
+class MealEntryUndoRequest(BaseModel):
+    undo_token: str = Field(..., min_length=1, max_length=64)
+
+
 # =============================================================================
 # CalendarEvent Schemas
 # =============================================================================

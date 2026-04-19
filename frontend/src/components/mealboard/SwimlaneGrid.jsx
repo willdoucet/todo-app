@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import useMediaQuery from '../../hooks/useMediaQuery'
 import MealCard from './MealCard'
+import UndoMealCard from './UndoMealCard'
+import { mergeEntriesWithPendingDeletes } from './lane-cell-merge'
 
 // Gradient backgrounds per slot type (light mode → dark mode)
 const SWIMLANE_GRADIENTS_LIGHT = {
@@ -35,9 +37,11 @@ export default function SwimlaneGrid({
   slotTypes,
   mealEntries,
   familyMembers,
+  pendingDeletes,
   onAddMeal,
   onMealUpdated,
   onMealDeleted,
+  onMealUndo,
   onViewRecipe,
   initialLoaded,
 }) {
@@ -123,7 +127,7 @@ export default function SwimlaneGrid({
           return (
             <div
               key={date.toISOString()}
-              className="text-center px-1 py-2"
+              className="text-center px-1 py-2 cursor-default"
               style={dayAnimStyle}
               role="columnheader"
               aria-label={date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
@@ -208,18 +212,31 @@ export default function SwimlaneGrid({
                 const isToday = isSameDay(date, today)
                 const isLast = idx === weekDates.length - 1
 
+                // Pending-deletes for this cell — match by the entry snapshot
+                // we captured at delete time.
+                const cellPending = pendingDeletes
+                  ? Array.from(pendingDeletes.values()).filter(
+                      (pd) =>
+                        pd.entry &&
+                        pd.entry.date === formatDateKey(date) &&
+                        pd.entry.meal_slot_type_id === slot.id
+                    )
+                  : []
+
                 return (
                   <LaneCell
                     key={`${slot.id}-${date.toISOString()}`}
                     date={date}
                     slotType={slot}
                     entries={entries}
+                    pendingDeletesForCell={cellPending}
                     familyMembers={familyMembers}
                     isToday={isToday}
                     isLast={isLast}
                     onAddMeal={onAddMeal}
                     onMealUpdated={onMealUpdated}
                     onMealDeleted={onMealDeleted}
+                    onMealUndo={onMealUndo}
                     onViewRecipe={onViewRecipe}
                   />
                 )
@@ -236,8 +253,14 @@ export default function SwimlaneGrid({
  * Single cell in the swimlane grid (one day × one slot type).
  * Shows either empty state (dashed + button) or stacked meal cards with hover-add button.
  */
-function LaneCell({ date, slotType, entries, familyMembers, isToday, isLast, onAddMeal, onMealUpdated, onMealDeleted, onViewRecipe }) {
-  const hasMeals = entries.length > 0
+function LaneCell({ date, slotType, entries, pendingDeletesForCell, familyMembers, isToday, isLast, onAddMeal, onMealUpdated, onMealDeleted, onMealUndo, onViewRecipe }) {
+  // Filter live entries: an entry in pendingDeletes should NOT render as a
+  // live MealCard anymore — the merge helper renders it as an UndoMealCard
+  // in the same slot position.
+  const pendingIds = new Set((pendingDeletesForCell || []).map((pd) => pd.entry?.id))
+  const liveEntries = entries.filter((e) => !pendingIds.has(e.id))
+  const mergedItems = mergeEntriesWithPendingDeletes(liveEntries, pendingDeletesForCell)
+  const hasContent = mergedItems.length > 0
 
   const handleAddClick = (e) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -253,21 +276,33 @@ function LaneCell({ date, slotType, entries, familyMembers, isToday, isLast, onA
         ${isToday ? 'bg-white/30 dark:bg-white/5' : ''}
       `}
       role="gridcell"
-      aria-label={`${cellLabel}${hasMeals ? `, ${entries.length} meal${entries.length === 1 ? '' : 's'}` : ', empty'}`}
+      aria-label={`${cellLabel}${hasContent ? `, ${mergedItems.length} meal${mergedItems.length === 1 ? '' : 's'}` : ', empty'}`}
     >
-      {hasMeals ? (
+      {hasContent ? (
         <>
-          {entries.map((entry) => (
-            <MealCard
-              key={entry.id}
-              entry={entry}
-              slotType={slotType}
-              familyMembers={familyMembers}
-              onUpdated={onMealUpdated}
-              onDeleted={onMealDeleted}
-              onViewRecipe={onViewRecipe}
-            />
-          ))}
+          {mergedItems.map((item) => {
+            if (item.kind === 'pending') {
+              return (
+                <UndoMealCard
+                  key={`pending-${item.entry.id}`}
+                  mealName={item.entry.item?.name || item.entry.custom_meal_name || 'Meal'}
+                  expiresAt={item.expiresAt}
+                  onUndo={() => onMealUndo(item.entry.id)}
+                />
+              )
+            }
+            return (
+              <MealCard
+                key={item.entry.id}
+                entry={item.entry}
+                slotType={slotType}
+                familyMembers={familyMembers}
+                onUpdated={onMealUpdated}
+                onDeleted={onMealDeleted}
+                onViewRecipe={onViewRecipe}
+              />
+            )
+          })}
           {/* Inline add button — always visible, subtle */}
           <button
             type="button"

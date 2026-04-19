@@ -23,62 +23,81 @@ from . import models, schemas
 
 
 HARD_DELETE_SOAK_HOURS = 24
+USER_UNDO_GRACE_SECONDS = 15
 
 
-async def hard_delete_expired_soft_deletes_async(db: AsyncSession) -> int:
-    """Sweep items whose soft-delete window has expired (>24h old).
+async def hard_delete_expired_soft_deletes_async(db: AsyncSession) -> dict:
+    """Sweep expired soft-deleted items AND user-undo meal_entries past grace.
 
-    Runs as a cascade-in-code transaction (Eng Review #3 Issue 3):
-      1. Find items with deleted_at older than HARD_DELETE_SOAK_HOURS
-      2. Delete their soft-hidden meal_entries first
-      3. Assertion gate: any active meal_entry still referencing an expired
-         item means soft-delete propagation broke. Abort with RuntimeError.
-      4. Delete the items (FK RESTRICT is now satisfied).
+    Two sweeps, one pass:
 
-    Extracted from the Celery task body so tests can await it directly
-    without colliding with pytest's already-running event loop.
-    Returns the count of hard-deleted items.
+    1. Items past HARD_DELETE_SOAK_HOURS (24h) — the cascade-in-code sweep:
+       delete soft-hidden meal_entries referencing them, assertion-gate on
+       stragglers, then delete the items. See Eng Review #3 Issue 3.
+    2. Meal_entries with `undo_token IS NOT NULL` and `soft_hidden_at` older
+       than USER_UNDO_GRACE_SECONDS (15s) — user-initiated soft-deletes whose
+       undo window is closed. Parent items are still alive; only the entry
+       rows need hard-deletion. 5s client window + 10s network/clock slack.
+
+    Returns dict(items_deleted, user_undo_entries_deleted).
     """
-    cutoff = datetime.utcnow() - timedelta(hours=HARD_DELETE_SOAK_HOURS)
+    items_cutoff = datetime.utcnow() - timedelta(hours=HARD_DELETE_SOAK_HOURS)
 
     expired_res = await db.execute(
         select(models.Item.id).where(
             models.Item.deleted_at.is_not(None),
-            models.Item.deleted_at < cutoff,
+            models.Item.deleted_at < items_cutoff,
         )
     )
     expired_ids = [row[0] for row in expired_res.all()]
-    if not expired_ids:
-        return 0
+    items_deleted = 0
 
-    # Step 2a: delete soft-hidden meal_entries that reference expired items
-    await db.execute(
+    if expired_ids:
+        # Step 2a: delete soft-hidden meal_entries that reference expired items
+        await db.execute(
+            delete(models.MealEntry).where(
+                models.MealEntry.item_id.in_(expired_ids),
+                models.MealEntry.soft_hidden_at.is_not(None),
+            )
+        )
+        await db.flush()
+
+        # Step 2b: assertion gate — any remaining meal_entries means a bug
+        remaining_res = await db.execute(
+            select(func.count(models.MealEntry.id)).where(
+                models.MealEntry.item_id.in_(expired_ids),
+            )
+        )
+        remaining = remaining_res.scalar() or 0
+        if remaining > 0:
+            await db.rollback()
+            raise RuntimeError(
+                f"Hard-delete aborted: {remaining} active meal_entries still "
+                f"reference {len(expired_ids)} expired items. Soft-delete "
+                f"propagation bug — investigate before the next sweep run."
+            )
+
+        # Step 3: now delete the items (FK RESTRICT is satisfied)
+        await db.execute(delete(models.Item).where(models.Item.id.in_(expired_ids)))
+        items_deleted = len(expired_ids)
+
+    # Second pass: hard-delete user-undo rows past the 15-second grace window.
+    # Parent items are still alive; only the orphan entries need purging.
+    undo_cutoff = datetime.utcnow() - timedelta(seconds=USER_UNDO_GRACE_SECONDS)
+    undo_del = await db.execute(
         delete(models.MealEntry).where(
-            models.MealEntry.item_id.in_(expired_ids),
+            models.MealEntry.undo_token.is_not(None),
             models.MealEntry.soft_hidden_at.is_not(None),
+            models.MealEntry.soft_hidden_at < undo_cutoff,
         )
     )
-    await db.flush()
+    user_undo_entries_deleted = undo_del.rowcount or 0
 
-    # Step 2b: assertion gate — any remaining meal_entries means a bug
-    remaining_res = await db.execute(
-        select(func.count(models.MealEntry.id)).where(
-            models.MealEntry.item_id.in_(expired_ids),
-        )
-    )
-    remaining = remaining_res.scalar() or 0
-    if remaining > 0:
-        await db.rollback()
-        raise RuntimeError(
-            f"Hard-delete aborted: {remaining} active meal_entries still "
-            f"reference {len(expired_ids)} expired items. Soft-delete "
-            f"propagation bug — investigate before the next sweep run."
-        )
-
-    # Step 3: now delete the items (FK RESTRICT is satisfied)
-    await db.execute(delete(models.Item).where(models.Item.id.in_(expired_ids)))
     await db.commit()
-    return len(expired_ids)
+    return {
+        "items_deleted": items_deleted,
+        "user_undo_entries_deleted": user_undo_entries_deleted,
+    }
 
 
 async def _attach_usage_counts(db: AsyncSession, items: list[models.Item]) -> None:
@@ -373,12 +392,18 @@ async def undo_soft_delete_item(
 
     item.deleted_at = None
 
-    # Cascade restore the item's soft-hidden meal_entries
+    # Cascade restore the item's soft-hidden meal_entries. Clear undo_token too:
+    # if an entry had a user-undo token when the parent was soft-deleted, restoring
+    # the parent brings the entry back to live — the state-machine invariant
+    # (crud_meal_entries.py module docstring) requires live rows to have
+    # undo_token=NULL. Without this, the CAS in undo_delete_meal_entry still
+    # refuses to flip a live row (soft_hidden_at IS NULL fails the WHERE), but
+    # the stale token is a latent hazard for future readers.
     await db.execute(
         update(models.MealEntry)
         .where(models.MealEntry.item_id == item_id)
         .where(models.MealEntry.soft_hidden_at.is_not(None))
-        .values(soft_hidden_at=None)
+        .values(soft_hidden_at=None, undo_token=None)
     )
 
     await db.commit()

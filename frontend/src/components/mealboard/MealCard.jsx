@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import MemberAvatar from '../shared/MemberAvatar'
 import ItemIcon from './ItemIcon'
@@ -8,19 +8,65 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 /**
  * Meal card for the swimlane grid. Branches on `entry.item?.item_type`:
  *
- * - Recipe variant — vertical text-only card (approved mockup D v3): participant
- *   avatars top, name centered, cook time + servings metadata, cooked badge,
- *   hover action icons.
- * - Food-item variant — horizontal pill (Chunk 2 item 5): ItemIcon 24px left +
- *   name right, single row, ≤60px tall, no cook-time metadata. Plan success
- *   criterion (§2030): "emoji to the left of the title, both on a single row,
- *   card height ≤60% of baseline".
+ * - Recipe variant — vertical card: body (name, cook-time pill, cooked badge)
+ *   plus a hover-expand action zone that reveals Mark-cooked + Delete on
+ *   desktop hover/focus. Mobile keeps the zone permanently visible.
+ * - Food-item variant — same outer chrome and hover-expand structure; body is
+ *   a vertical stack (ItemIcon 24px centered on top, name below, optional
+ *   avatars + cooked-✓ mini-row). Button chip scales with the smaller body
+ *   (24×24 visible) vs. recipe (32×32); outer <button> is 44×44 in both
+ *   variants to hit WCAG 2.5.5 AAA.
  *
- * Outer chrome (background, border, hover states) is shared across both variants.
+ * Both variants render a role="status" aria-live="polite" inline error
+ * element (auto-clears after 3s) below the action zone — kept OUTSIDE the
+ * collapsible action-zone container so desktop mouse-leave after a failed
+ * click cannot clip the error before the user reads it.
  */
+
+// 44×44 WCAG 2.5.5 AAA tap target wrapping a variant-sized visible chip.
+// Local to MealCard: used by both recipe and food-item action zones.
+function CardActionButton({ onClick, disabled, label, variant, size, children }) {
+  const chipSize = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8'
+  const chipColor = variant === 'cooked'
+    ? 'bg-sage-50 dark:bg-green-900/20 text-sage-600 dark:text-green-400 group-hover/btn:bg-sage-100 dark:group-hover/btn:bg-green-900/30'
+    : 'bg-terracotta-50 dark:bg-red-900/20 text-terracotta-600 dark:text-red-400 group-hover/btn:bg-terracotta-100 dark:group-hover/btn:bg-red-900/30'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="group/btn w-11 h-11 flex items-center justify-center rounded-full disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-terracotta-500 dark:focus-visible:outline-terracotta-400"
+    >
+      <span className={`${chipSize} flex items-center justify-center rounded-full transition-colors ${chipColor}`}>
+        {children}
+      </span>
+    </button>
+  )
+}
+
+// Inline status message for failed PATCH/DELETE. Rendered as a sibling of the
+// action-zone div (not inside it) so desktop mouse-leave after a failed click
+// doesn't clip the message before the 3-second window ends.
+function CardErrorFlash({ kind }) {
+  if (!kind) return null
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="px-2 pb-1.5 text-[11px] text-terracotta-600 dark:text-red-400 text-center"
+    >
+      {kind === 'gone' ? 'This meal was already deleted.' : "Couldn't save — try again."}
+    </div>
+  )
+}
+
 export default function MealCard({ entry, slotType, familyMembers, onUpdated, onDeleted, onViewRecipe }) {
   const [isWorking, setIsWorking] = useState(false)
   const [isPulsing, setIsPulsing] = useState(false)
+  const [lastError, setLastError] = useState(null)
+  const errorTimerRef = useRef(null)
 
   // Unified item model: entry.item replaces entry.recipe + entry.food_item
   const item = entry.item || null
@@ -30,7 +76,6 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
 
   const rd = item?.recipe_detail || {}
   const cookTime = isRecipe ? (rd.prep_time_minutes || 0) + (rd.cook_time_minutes || 0) : null
-  const servings = isRecipe ? rd.servings : null
 
   // Participant display: hide when participants match slot defaults or all members
   const participants = entry.participants || []
@@ -48,6 +93,19 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
       new Set(participants.map((p) => p.id)).size === new Set([...participants.map((p) => p.id), ...slotDefaults]).size)
   const showAvatars = !isEveryone && !hasDefaultParticipants
 
+  const flashError = (kind) => {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    setLastError(kind)
+    errorTimerRef.current = setTimeout(() => {
+      setLastError(null)
+      errorTimerRef.current = null
+    }, 3000)
+  }
+
+  useEffect(() => () => {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+  }, [])
+
   const handleToggleCooked = async (e) => {
     e.stopPropagation()
     if (isWorking) return
@@ -62,9 +120,15 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
         setIsPulsing(true)
         setTimeout(() => setIsPulsing(false), 300)
       }
+      if (lastError) setLastError(null)
       onUpdated(res.data)
     } catch (err) {
-      console.error('Failed to toggle cooked:', err)
+      console.error('meal_card_toggle_cooked_failed', {
+        entryId: entry.id,
+        status: err?.response?.status ?? null,
+        err,
+      })
+      flashError(err?.response?.status === 404 ? 'gone' : 'retry')
     } finally {
       setIsWorking(false)
     }
@@ -75,18 +139,27 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     if (isWorking) return
     setIsWorking(true)
     try {
-      await axios.delete(`${API_BASE}/meal-entries/${entry.id}`)
-      onDeleted(entry.id)
+      const res = await axios.delete(`${API_BASE}/meal-entries/${entry.id}`)
+      // New backend: `{ entry, undo_token, expires_at }`.
+      // Mixed-version guard: if `undo_token` is missing (briefly-old backend),
+      // degrade to the old hard-delete UX rather than blocking the user.
+      const undoToken = res?.data?.undo_token
+      const expiresAt = res?.data?.expires_at
+      if (lastError) setLastError(null)
+      if (undoToken && expiresAt) {
+        onDeleted(entry.id, { undoToken, expiresAt, entry })
+      } else {
+        console.error('delete_missing_undo_token', entry.id)
+        onDeleted(entry.id)
+      }
     } catch (err) {
-      console.error('Failed to delete meal:', err)
+      console.error('meal_card_delete_failed', {
+        entryId: entry.id,
+        status: err?.response?.status ?? null,
+        err,
+      })
+      flashError(err?.response?.status === 404 ? 'gone' : 'retry')
       setIsWorking(false)
-    }
-  }
-
-  const handleViewRecipe = (e) => {
-    e.stopPropagation()
-    if (isRecipe && onViewRecipe && item) {
-      onViewRecipe(item.id)
     }
   }
 
@@ -105,216 +178,176 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     ? { animation: `${document.documentElement.classList.contains('dark') ? 'meal-card-cooked-pulse-dark' : 'meal-card-cooked-pulse'} 300ms ease` }
     : undefined
 
-  // Food-item variant: horizontal pill, compact, icon-left + name-right.
-  // Height target ≤60% of the recipe baseline (≤60px) per plan §2030.
+  // Shared action-zone className string (verbatim between variants).
+  const actionZoneClass = `
+    flex justify-center gap-1.5 pb-2 pt-0
+    max-md:max-h-[48px] max-md:opacity-100
+    md:max-h-0 md:opacity-0 md:pb-0
+    md:group-hover:max-h-[48px] md:group-hover:opacity-100 md:group-hover:pb-2
+    md:group-focus-within:max-h-[48px] md:group-focus-within:opacity-100 md:group-focus-within:pb-2
+    motion-safe:transition-[max-height,opacity,padding-bottom]
+    motion-safe:duration-180 motion-safe:ease-out
+  `
+
+  // Food-item variant: vertical layout — ItemIcon (24px) on top, name centered
+  // below, optional avatars + cooked-✓ inline mini-row, then a hover-expand
+  // action zone identical in structure to the recipe variant. Body min-h-[52px]
+  // (taller than the 48px pill it replaces); buttons stay 24×24 (smaller than
+  // recipe's 32×32) so they scale with the smaller body. The "≤60% recipe
+  // baseline" goal from the original Chunk 2 was retired in plan §20260418-183015.
   if (isFoodItem) {
     return (
       <div
-        className={`${containerBase} ${containerColor} flex items-center justify-center px-2.5 py-1.5 min-h-[48px]`}
+        className={`${containerBase} ${containerColor} flex flex-col overflow-hidden`}
         onClick={handleCardClick}
         style={pulseStyle}
       >
-        <span className="absolute left-2.5">
+        <div className="flex flex-col items-center justify-center text-center px-2 py-2 min-h-[52px]">
           <ItemIcon item={item} size={24} />
-        </span>
-        <span
-          className={`text-sm font-medium leading-tight truncate min-w-0 text-center ${
-            entry.was_cooked
-              ? 'line-through text-sage-600 dark:text-green-500'
-              : 'text-text-primary dark:text-gray-100'
-          }`}
-        >
-          {displayName}
-        </span>
+          <div
+            className={`mt-1 text-sm font-medium leading-tight text-center line-clamp-2 ${
+              entry.was_cooked
+                ? 'line-through text-sage-600 dark:text-green-500'
+                : 'text-text-primary dark:text-gray-100'
+            }`}
+          >
+            {displayName}
+          </div>
+          {(showAvatars || entry.was_cooked) && (
+            <div className="flex items-center justify-center gap-1 mt-0.5">
+              {showAvatars && participants.slice(0, 3).map((p) => (
+                <MemberAvatar
+                  key={p.id}
+                  name={p.name}
+                  photoUrl={p.photo_url}
+                  color={p.color}
+                  size="xs"
+                  className="w-4 h-4 ring-2 ring-card-bg dark:ring-gray-800"
+                />
+              ))}
+              {entry.was_cooked && (
+                <span className="bounce-in text-[10px] font-semibold text-sage-600 dark:text-green-400">✓</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className={actionZoneClass}>
+          <CardActionButton
+            onClick={handleToggleCooked}
+            disabled={isWorking}
+            label={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
+            variant="cooked"
+            size="sm"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </CardActionButton>
+          <CardActionButton
+            onClick={handleDelete}
+            disabled={isWorking}
+            label="Delete meal"
+            variant="delete"
+            size="sm"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </CardActionButton>
+        </div>
+
+        <CardErrorFlash kind={lastError} />
+      </div>
+    )
+  }
+
+  // Recipe variant (and custom meals): body holds content at min-h-[100px], action
+  // zone below expands on hover/focus (desktop) or is permanently visible (mobile).
+  // Expansion uses max-height + opacity transitions; motion-safe: gates the
+  // motion on prefers-reduced-motion.
+  return (
+    <div
+      className={`${containerBase} ${containerColor} flex flex-col overflow-hidden`}
+      onClick={handleCardClick}
+      style={pulseStyle}
+    >
+      {/* Card body — sized to preserve the pre-Chunk-2 baseline look */}
+      <div className="flex flex-col items-center justify-center text-center px-2 py-3 min-h-[100px]">
+        {/* Participant avatars — only when non-default */}
         {showAvatars && (
-          <div className="flex -space-x-1 flex-shrink-0">
-            {participants.slice(0, 3).map((p) => (
+          <div className="flex -space-x-1 mb-1.5">
+            {participants.slice(0, 5).map((p) => (
               <MemberAvatar
                 key={p.id}
                 name={p.name}
                 photoUrl={p.photo_url}
                 color={p.color}
                 size="xs"
-                className="w-4 h-4 ring-2 ring-card-bg dark:ring-gray-800"
+                className="w-5 h-5 ring-2 ring-card-bg dark:ring-gray-800"
               />
             ))}
           </div>
         )}
-        {entry.was_cooked && (
-          <span className="bounce-in text-[10px] font-semibold text-sage-600 dark:text-green-400 flex-shrink-0">✓</span>
-        )}
 
-        {/* Hover action icons — 24×24 for the dense food-item row, top-right */}
+        {/* Name — dominant element */}
         <div
-          className="
-            absolute top-1 right-1
-            flex items-center gap-1
-            max-md:opacity-100
-            md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100
-            transition-opacity duration-150
-          "
+          className={`
+            text-base font-medium leading-tight
+            ${entry.was_cooked
+              ? 'line-through text-sage-600 dark:text-green-500'
+              : 'text-text-primary dark:text-gray-100'
+            }
+          `}
         >
-          <button
-            type="button"
-            onClick={handleToggleCooked}
-            disabled={isWorking}
-            title={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
-            aria-label={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
-            className="w-6 h-6 flex items-center justify-center rounded-full bg-sage-50 dark:bg-green-900/20 text-sage-600 dark:text-green-400 hover:bg-sage-100 dark:hover:bg-green-900/30 transition-colors disabled:opacity-50"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isWorking}
-            title="Delete meal"
-            aria-label="Delete meal"
-            className="w-6 h-6 flex items-center justify-center rounded-full bg-terracotta-50 dark:bg-red-900/20 text-terracotta-600 dark:text-red-400 hover:bg-terracotta-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
-          >
+          {displayName}
+        </div>
+
+        {/* Metadata row — cook-time only, centered */}
+        {cookTime > 0 && (
+          <div className="flex items-center justify-center gap-0.5 mt-1 text-xs text-text-muted dark:text-gray-400">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <circle cx="12" cy="12" r="10" />
+              <path strokeLinecap="round" d="M12 6v6l4 2" />
             </svg>
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // Recipe variant (and custom meals): vertical text-only card, preserved as-is
-  return (
-    <div
-      className={`${containerBase} ${containerColor} flex flex-col items-center justify-center text-center px-2 py-3 min-h-[100px]`}
-      onClick={handleCardClick}
-      style={pulseStyle}
-    >
-      {/* Participant avatars — only when non-default */}
-      {showAvatars && (
-        <div className="flex -space-x-1 mb-1.5">
-          {participants.slice(0, 5).map((p) => (
-            <MemberAvatar
-              key={p.id}
-              name={p.name}
-              photoUrl={p.photo_url}
-              color={p.color}
-              size="xs"
-              className="w-5 h-5 ring-2 ring-card-bg dark:ring-gray-800"
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Name — dominant element */}
-      <div
-        className={`
-          text-base font-medium leading-tight
-          ${entry.was_cooked
-            ? 'line-through text-sage-600 dark:text-green-500'
-            : 'text-text-primary dark:text-gray-100'
-          }
-        `}
-      >
-        {displayName}
-      </div>
-
-      {/* Metadata row */}
-      {(cookTime || servings) && (
-        <div className="flex items-center gap-1.5 mt-1 text-xs text-text-muted dark:text-gray-400">
-          {cookTime > 0 && (
-            <span className="flex items-center gap-0.5">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <circle cx="12" cy="12" r="10" />
-                <path strokeLinecap="round" d="M12 6v6l4 2" />
-              </svg>
-              {cookTime}m
-            </span>
-          )}
-          {cookTime > 0 && servings && <span>·</span>}
-          {servings && <span>{servings} servings</span>}
-        </div>
-      )}
-
-      {/* Cooked badge */}
-      {entry.was_cooked && (
-        <div className="bounce-in mt-1.5 text-xs font-semibold text-sage-600 dark:text-green-400">
-          ✓ Cooked
-        </div>
-      )}
-
-      {/* Hover action icons — desktop: hover-reveal, mobile: always visible */}
-      <div
-        className="
-          absolute bottom-2 left-1/2 -translate-x-1/2
-          flex items-center gap-1.5
-          max-md:opacity-100
-          md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100
-          transition-opacity duration-150
-        "
-      >
-        {/* View recipe (only for recipe entries) */}
-        {isRecipe && (
-          <button
-            type="button"
-            onClick={handleViewRecipe}
-            title="View recipe"
-            aria-label="View recipe"
-            className="
-              w-8 h-8 flex items-center justify-center rounded-full
-              bg-warm-sand dark:bg-gray-700
-              border border-card-border dark:border-gray-600
-              text-text-secondary dark:text-gray-300
-              hover:bg-warm-beige dark:hover:bg-gray-600
-              transition-colors
-            "
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-            </svg>
-          </button>
+            {cookTime}m
+          </div>
         )}
 
-        {/* Cooked toggle */}
-        <button
-          type="button"
+        {/* Cooked badge */}
+        {entry.was_cooked && (
+          <div className="bounce-in mt-1.5 text-xs font-semibold text-sage-600 dark:text-green-400">
+            ✓ Cooked
+          </div>
+        )}
+      </div>
+
+      <div className={actionZoneClass}>
+        <CardActionButton
           onClick={handleToggleCooked}
           disabled={isWorking}
-          title={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
-          aria-label={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
-          className="
-            w-8 h-8 flex items-center justify-center rounded-full
-            bg-sage-50 dark:bg-green-900/20
-            text-sage-600 dark:text-green-400
-            hover:bg-sage-100 dark:hover:bg-green-900/30
-            transition-colors disabled:opacity-50
-          "
+          label={entry.was_cooked ? 'Mark as not cooked' : 'Mark as cooked'}
+          variant="cooked"
+          size="md"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
-        </button>
-
-        {/* Delete */}
-        <button
-          type="button"
+        </CardActionButton>
+        <CardActionButton
           onClick={handleDelete}
           disabled={isWorking}
-          title="Delete meal"
-          aria-label="Delete meal"
-          className="
-            w-8 h-8 flex items-center justify-center rounded-full
-            bg-terracotta-50 dark:bg-red-900/20
-            text-terracotta-600 dark:text-red-400
-            hover:bg-terracotta-100 dark:hover:bg-red-900/30
-            transition-colors disabled:opacity-50
-          "
+          label="Delete meal"
+          variant="delete"
+          size="md"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
-        </button>
+        </CardActionButton>
       </div>
+
+      <CardErrorFlash kind={lastError} />
     </div>
   )
 }

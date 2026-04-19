@@ -346,6 +346,11 @@ class MealEntry(Base):
         Integer, ForeignKey("lists.id", ondelete="SET NULL"), nullable=True
     )
     soft_hidden_at = Column(DateTime, nullable=True)
+    # User-initiated-undo token. NULL for cascade-hidden rows (parent item deleted)
+    # and for live rows; NON-NULL only during a 5-second user undo window after a
+    # DELETE /meal-entries/{id}. Discriminates the two writers of soft_hidden_at
+    # — see crud_meal_entries.py module docstring.
+    undo_token = Column(String(64), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
@@ -368,6 +373,10 @@ class MealEntry(Base):
         Index(
             "meal_entries_soft_hidden_at_idx", "soft_hidden_at",
             postgresql_where=text("soft_hidden_at IS NOT NULL"),
+        ),
+        Index(
+            "meal_entries_undo_token_idx", "undo_token",
+            postgresql_where=text("undo_token IS NOT NULL"),
         ),
     )
 
