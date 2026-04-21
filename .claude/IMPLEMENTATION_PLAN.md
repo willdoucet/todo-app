@@ -157,6 +157,7 @@
 - [ ] Add type checking if applicable
 - [ ] Block merge on test failure
 - [ ] Add test coverage reporting
+- [ ] **Visual regression test infrastructure** — Playwright + geometric-invariant tests for mealboard surface. Plan: [`.claude/plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md`](./plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md). Status: CEO-reviewed 2026-04-20 (HOLD SCOPE, clean). Awaiting eng review. Introduces `frontend-preview` + `frontend-visual` + `api-test` docker-compose services under `profiles: [visual-test]`, new `visual-tests` parallel CI job, 4 canonical-state specs. Geometric-first (bbox deltas across hover/rest/exit) rather than pixel screenshots — deterministic without font-rendering Docker wrestling. First-land covers mealboard planner only (1440×900); mobile + other surfaces deferred to follow-up TODOs.
 
 ### Step 3.2: CD Pipeline Setup
 
