@@ -427,7 +427,7 @@ export default function MealPlannerView() {
       </div>
 
       {/* Swimlane grid */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div className="mealboard-scroll-stable flex-1 px-4 sm:px-6 lg:px-8 py-4">
         {/* Welcome card — shown only on empty mealboard when not dismissed */}
         {!loading && !welcomeDismissed && mealEntries.length === 0 && slotTypes.length > 0 && (
           <WelcomeCard onDismiss={dismissWelcome} onAddFirst={handleAddFirstMeal} />

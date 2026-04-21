@@ -226,4 +226,23 @@ body {
   display: none;
 }
 
+/* Mealboard inner scroll container — reserve scrollbar gutter so hover-expand
+   doesn't shift the grid when the scrollbar appears/disappears. Fallback forces
+   a permanent desktop scrollbar on browsers that ignore `scrollbar-gutter`
+   (notably older Safari in the project's documented support matrix). */
+@layer utilities {
+  .mealboard-scroll-stable {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  @supports not (scrollbar-gutter: stable) {
+    @media (min-width: 768px) {
+      .mealboard-scroll-stable {
+        overflow-y: scroll;
+      }
+    }
+  }
+}
+
 
