@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSwipeable } from 'react-swipeable'
 import MealCard from './MealCard'
+import UndoMealCard from './UndoMealCard'
+import { mergeEntriesWithPendingDeletes } from './lane-cell-merge'
 
 const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -33,9 +35,12 @@ export default function MobileDayView({
   slotTypes,
   mealEntries,
   familyMembers,
+  pendingDeletes,
   onAddMeal,
   onMealUpdated,
   onMealDeleted,
+  onMealUndo,
+  onViewRecipe,
 }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -162,7 +167,20 @@ export default function MobileDayView({
         {/* Slot sections */}
         <div className="space-y-3">
           {slotTypes.map((slot) => {
-            const entries = getEntries(selectedDate, slot.id)
+            const rawEntries = getEntries(selectedDate, slot.id)
+            const dayKey = formatDateKey(selectedDate)
+            const cellPending = pendingDeletes
+              ? Array.from(pendingDeletes.values()).filter(
+                  (pd) =>
+                    pd.entry &&
+                    pd.entry.date === dayKey &&
+                    pd.entry.meal_slot_type_id === slot.id
+                )
+              : []
+            const pendingIds = new Set(cellPending.map((pd) => pd.entry?.id))
+            const liveEntries = rawEntries.filter((e) => !pendingIds.has(e.id))
+            const merged = mergeEntriesWithPendingDeletes(liveEntries, cellPending)
+            const entries = merged // used for the "empty" rendering fork below
             const slotColor = slot.color || '#9CA3AF'
 
             return (
@@ -204,16 +222,29 @@ export default function MobileDayView({
                 {/* Entries */}
                 {entries.length > 0 ? (
                   <div className="space-y-1.5">
-                    {entries.map((entry) => (
-                      <MealCard
-                        key={entry.id}
-                        entry={entry}
-                        slotType={slot}
-                        familyMembers={familyMembers}
-                        onUpdated={onMealUpdated}
-                        onDeleted={onMealDeleted}
-                      />
-                    ))}
+                    {entries.map((item) => {
+                      if (item.kind === 'pending') {
+                        return (
+                          <UndoMealCard
+                            key={`pending-${item.entry.id}`}
+                            mealName={item.entry.item?.name || item.entry.custom_meal_name || 'Meal'}
+                            expiresAt={item.expiresAt}
+                            onUndo={() => onMealUndo(item.entry.id)}
+                          />
+                        )
+                      }
+                      return (
+                        <MealCard
+                          key={item.entry.id}
+                          entry={item.entry}
+                          slotType={slot}
+                          familyMembers={familyMembers}
+                          onUpdated={onMealUpdated}
+                          onDeleted={onMealDeleted}
+                          onViewRecipe={onViewRecipe}
+                        />
+                      )
+                    })}
                   </div>
                 ) : (
                   <button

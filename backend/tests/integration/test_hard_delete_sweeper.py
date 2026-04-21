@@ -19,12 +19,12 @@ from sqlalchemy import select
 
 class TestHardDeleteSweeper:
     async def test_no_op_when_no_items_expired(self, db_session, test_recipe):
-        """No soft-deleted items → helper returns 0, nothing removed."""
+        """No soft-deleted items → helper returns zero counts, nothing removed."""
         from app.crud_items import hard_delete_expired_soft_deletes_async
         from app.models import Item
 
-        deleted = await hard_delete_expired_soft_deletes_async(db_session)
-        assert deleted == 0
+        counts = await hard_delete_expired_soft_deletes_async(db_session)
+        assert counts == {"items_deleted": 0, "user_undo_entries_deleted": 0}
 
         # Fixture recipe is still intact
         item = (await db_session.execute(select(Item).where(Item.id == test_recipe.id))).scalar_one_or_none()
@@ -45,8 +45,8 @@ class TestHardDeleteSweeper:
         recipe_id = test_recipe.id
         entry_id = test_meal_entry.id
 
-        deleted = await hard_delete_expired_soft_deletes_async(db_session)
-        assert deleted == 1
+        counts = await hard_delete_expired_soft_deletes_async(db_session)
+        assert counts["items_deleted"] == 1
 
         assert (await db_session.execute(select(Item).where(Item.id == recipe_id))).scalar_one_or_none() is None
         assert (await db_session.execute(select(MealEntry).where(MealEntry.id == entry_id))).scalar_one_or_none() is None
@@ -60,8 +60,8 @@ class TestHardDeleteSweeper:
         test_recipe.deleted_at = datetime.utcnow() - timedelta(hours=1)
         await db_session.commit()
 
-        deleted = await hard_delete_expired_soft_deletes_async(db_session)
-        assert deleted == 0
+        counts = await hard_delete_expired_soft_deletes_async(db_session)
+        assert counts["items_deleted"] == 0
 
         item = (await db_session.execute(select(Item).where(Item.id == test_recipe.id))).scalar_one_or_none()
         assert item is not None
@@ -89,3 +89,50 @@ class TestHardDeleteSweeper:
         # Transaction rolled back — item still exists
         item = (await db_session.execute(select(Item).where(Item.id == recipe_id))).scalar_one_or_none()
         assert item is not None
+
+    async def test_sweeps_user_undo_rows_past_grace(
+        self, db_session, test_recipe, test_meal_entry,
+    ):
+        """User-undo rows whose 15s grace window has expired get hard-deleted.
+
+        Parent item is still alive (undo path is independent of cascade-hide),
+        so only the entry row is removed."""
+        from app.crud_items import hard_delete_expired_soft_deletes_async
+        from app.models import MealEntry
+
+        test_meal_entry.soft_hidden_at = datetime.utcnow() - timedelta(seconds=30)
+        test_meal_entry.undo_token = "deadbeef" * 4
+        await db_session.commit()
+        entry_id = test_meal_entry.id
+
+        counts = await hard_delete_expired_soft_deletes_async(db_session)
+        assert counts["user_undo_entries_deleted"] == 1
+
+        still_there = (await db_session.execute(
+            select(MealEntry).where(MealEntry.id == entry_id)
+        )).scalar_one_or_none()
+        assert still_there is None
+
+    async def test_leaves_user_undo_rows_within_grace(
+        self, db_session, test_recipe, test_meal_entry,
+    ):
+        """A user-undo row that's still inside the 15s grace window survives
+        the sweep — the user must keep their undo opportunity.
+
+        Without this regression test, a too-aggressive sweeper would silently
+        erase undo windows and we'd never notice."""
+        from app.crud_items import hard_delete_expired_soft_deletes_async
+        from app.models import MealEntry
+
+        test_meal_entry.soft_hidden_at = datetime.utcnow() - timedelta(seconds=5)
+        test_meal_entry.undo_token = "feedface" * 4
+        await db_session.commit()
+        entry_id = test_meal_entry.id
+
+        counts = await hard_delete_expired_soft_deletes_async(db_session)
+        assert counts["user_undo_entries_deleted"] == 0
+
+        still_there = (await db_session.execute(
+            select(MealEntry).where(MealEntry.id == entry_id)
+        )).scalar_one_or_none()
+        assert still_there is not None

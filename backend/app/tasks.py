@@ -540,7 +540,16 @@ def sync_shopping_list_remove(self, meal_entry_id: int, synced_to_list_id: int |
 
     Uses synced_to_list_id (provenance) to target the correct list.
     If None, no-op (meal was never synced or already cleaned up).
+
+    Undo-reentrancy guard: delete_meal_entry schedules this task with a
+    countdown past the undo window, but it can still race a successful
+    undo_delete_meal_entry if the task executes the moment before the undo
+    commit, or if this is a retry. Re-read the entry's soft_hidden_at before
+    touching the shopping list — if the entry is live (soft_hidden_at IS NULL),
+    the undo won; leave its groceries on the list.
     """
+    from sqlalchemy import select
+    from . import models
     from .services.shopping_sync import remove_meal_from_shopping_list
 
     if synced_to_list_id is None:
@@ -552,6 +561,21 @@ def sync_shopping_list_remove(self, meal_entry_id: int, synced_to_list_id: int |
 
     async def _remove():
         async with AsyncSessionLocal() as db:
+            stmt = select(models.MealEntry.soft_hidden_at).where(
+                models.MealEntry.id == meal_entry_id
+            )
+            result = await db.execute(stmt)
+            hidden_at = result.scalar_one_or_none()
+            if hidden_at is None:
+                # Either the row was undone (soft_hidden_at reset to NULL) or
+                # the sweeper hard-deleted it. In both cases, removing from the
+                # shopping list now would either undo an undone state (bad) or
+                # touch groceries that have no owning meal (benign but noisy).
+                logger.info(
+                    "Shopping sync (remove) no-op for meal entry %d — row is live or gone",
+                    meal_entry_id,
+                )
+                return
             await remove_meal_from_shopping_list(db, meal_entry_id, target_list_id=synced_to_list_id)
 
     try:
@@ -600,13 +624,14 @@ def hard_delete_expired_soft_deletes(self):
             return await hard_delete_expired_soft_deletes_async(db)
 
     try:
-        deleted_count = run_async(_sweep())
-        if deleted_count:
+        sweep_counts = run_async(_sweep())
+        if sweep_counts["items_deleted"] or sweep_counts["user_undo_entries_deleted"]:
             logger.info(
-                "Hard-delete sweep: removed %d expired soft-deleted items",
-                deleted_count,
+                "Hard-delete sweep: removed %d expired items, %d user-undo entries",
+                sweep_counts["items_deleted"],
+                sweep_counts["user_undo_entries_deleted"],
             )
-        return {"deleted_count": deleted_count}
+        return sweep_counts
     except Exception as e:
         attempt = self.request.retries + 1
         if attempt > self.max_retries:

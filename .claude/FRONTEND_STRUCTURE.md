@@ -1,6 +1,6 @@
 # Frontend Structure
 
-> Frontend directory layout, component inventory, and key patterns for the React app.
+> Frontend directory layout, component inventory, routes, and key patterns for the React app.
 
 ---
 
@@ -23,120 +23,205 @@
 
 ```
 frontend/src/
-├── App.jsx               # Root component + React Router routes
-├── App.css               # App-level styles
-├── main.jsx              # React entry point (renders App)
-├── index.css             # Global styles + Tailwind @theme (custom colors, dark mode)
+├── App.jsx               # Top-level route table
+├── App.css               # Legacy app-level stylesheet (present, not currently imported)
+├── main.jsx              # React entry point; mounts BrowserRouter + root providers
+├── index.css             # Global styles, utilities, and theme tokens
 │
 ├── pages/
-│   ├── FamilyMembersPage.jsx
-│   ├── ListsPage.jsx
-│   ├── MealboardPage.jsx
-│   └── ResponsibilitiesPage.jsx
+│   ├── FamilyMembersPage.jsx   # Settings page shell
+│   ├── ListsPage.jsx           # Lists page shell
+│   ├── MealboardPage.jsx       # Mealboard shell + nested routes
+│   └── ResponsibilitiesPage.jsx # Responsibilities page shell
 │
 ├── components/
 │   ├── calendar/           # Calendar dashboard (20 files — see Section 2)
 │   ├── family-members/     # Family member management (1 file — see Section 7)
-│   ├── layout/             # App shell: header, sidebar, nav (4 files — see Section 8)
-│   ├── lists/              # Task lists feature (8 files + 2 tests — see Section 6)
-│   ├── mealboard/          # Mealboard feature (12 files — see Section 3)
-│   ├── responsibilities/   # Responsibilities feature (3 files + 2 tests — see Section 5)
-│   ├── settings/           # Settings components (3 files — see Section 4)
-│   └── shared/             # Cross-cutting UI components (6 files — see Section 9)
+│   ├── layout/             # App shell chrome (4 files — see Section 8)
+│   ├── lists/              # Task list UI (11 files — see Section 6)
+│   ├── mealboard/          # Mealboard UI + helpers (26 files — see Section 3)
+│   ├── responsibilities/   # Responsibilities UI (5 files — see Section 5)
+│   ├── settings/           # Settings surfaces (8 files — see Section 4)
+│   └── shared/             # Cross-cutting UI + providers (10 files — see Section 9)
 │
 ├── contexts/
-│   └── DarkModeContext.jsx  # Dark mode toggle provider (class on document root)
+│   ├── DarkModeContext.jsx       # Dark mode provider + hook
+│   └── DarkModeContext.test.jsx  # Context tests
 │
 ├── hooks/
-│   ├── usePageTitle.js      # Sets document title
-│   ├── useMediaQuery.js     # Responsive breakpoint hook (SSR-safe)
-│   └── useDebounce.js       # Debounce callback invocation
+│   ├── useDebounce.js       # Debounce callback invocation
+│   ├── useDelayedFlag.js    # Delay loading indicators to avoid spinner flash
+│   ├── useFormShortcut.js   # Cmd/Ctrl+S form submit helper
+│   ├── useItems.js          # Unified Item-model CRUD hook for mealboard
+│   ├── useMediaQuery.js     # Responsive breakpoint hook
+│   └── usePageTitle.js      # Sets document title
 │
 └── assets/
     └── react.svg
 ```
 
-Tests live alongside components (`*.test.jsx`) and in `frontend/tests/` (MSW mocks, setup, integration tests).
+Tests are split between co-located files under `frontend/src/` and feature-focused tests in `frontend/tests/components/`.
 
 ---
 
 ## 2. Calendar Dashboard
 
-**Route:** `/` (home page)
+**Route:** `/`
+
+`App.jsx` routes the home page directly to `components/calendar/CalendarPage.jsx` rather than a `pages/CalendarPage.jsx` wrapper.
 
 ### Files (20)
 
 | File | Purpose |
 |------|---------|
-| `CalendarPage.jsx` | Top-level orchestrator — state, handlers, view switching |
-| `CalendarHeader.jsx` | Navigation (prev/next/today), view toggle (Month/Week/Day) |
-| `FamilyMemberFilter.jsx` | Filter events by family member |
-| `MonthView.jsx` | Month grid with day cells, overflow popover |
-| `WeekViewDesktop.jsx` | Desktop week view (>=768px) with time grid |
-| `WeekViewMobile.jsx` | Mobile week view (<768px) with swipeable days |
-| `DayView.jsx` | Single-day view with time grid |
-| `TimeGrid.jsx` | Shared time-slot grid for Week/Day views |
-| `AllDaySection.jsx` | All-day event row above time grid |
-| `CalendarItem.jsx` | Renders a single task or event on the calendar |
-| `MonthDayPopover.jsx` | Overflow popover for days with many events (month view) |
-| `QuickAddPopover.jsx` | Click-on-empty-slot popover — choose Task or Event |
-| `MobileDayList.jsx` | Day event list for mobile week view |
-| `EventFormModal.jsx` | Create/edit calendar event modal (includes calendar selector dropdown) |
-| `TaskFormModal.jsx` | Create/edit task modal from calendar |
-| `calendarUtils.js` | Date math, grid generation, formatting helpers |
-| `calendarUtils.test.js` | Tests for utils |
-| `useCalendarData.js` | Data fetching hook (events + tasks, auto-polling for pending syncs) |
-| `useCalendarData.test.js` | Tests for data hook |
-| `useCalendarNavigation.js` | Navigation state (current date, view mode, prev/next/today) |
+| `CalendarPage.jsx` | Top-level orchestrator for calendar state, handlers, and view switching |
+| `CalendarHeader.jsx` | Prev/next/today controls plus Month/Week/Day toggle |
+| `FamilyMemberFilter.jsx` | Filter events and tasks by family member |
+| `MonthView.jsx` | Month grid with overflow handling |
+| `WeekViewDesktop.jsx` | Desktop week view with shared time grid |
+| `WeekViewMobile.jsx` | Mobile week view with mobile-specific day navigation |
+| `DayView.jsx` | Single-day time-grid view |
+| `TimeGrid.jsx` | Shared timed-slot renderer for week/day layouts |
+| `AllDaySection.jsx` | All-day event row above timed slots |
+| `CalendarItem.jsx` | Individual task/event card inside the calendar |
+| `MonthDayPopover.jsx` | Overflow popover for crowded month cells |
+| `QuickAddPopover.jsx` | Empty-slot quick-add chooser for task vs event |
+| `MobileDayList.jsx` | Mobile list rendering for a day’s items |
+| `EventFormModal.jsx` | Create/edit event modal with calendar selection |
+| `TaskFormModal.jsx` | Create/edit task modal from the calendar |
+| `calendarUtils.js` | Date math, formatting, and grid helpers |
+| `calendarUtils.test.js` | Utility tests |
+| `useCalendarData.js` | Loads events/tasks and polls while sync is pending |
+| `useCalendarData.test.js` | Data-hook tests |
+| `useCalendarNavigation.js` | Current date, view mode, and prev/next/today logic |
 
 ### Behavioral Notes
 
-- **Click-to-edit:** Clicking any task/event opens its edit modal; task checkbox toggles completion with `stopPropagation`; MonthDayPopover closes before opening edit modal
-- **Quick add:** Clicking empty day/slot opens QuickAddPopover (Task or Event choice), then opens the appropriate form modal
-- **Views:** Month (desktop default), Week, Day — responsive switch at 768px breakpoint
-- **Calendar selector:** EventFormModal has a dropdown of iCloud calendars (fetched from `GET /calendars/`); setting `calendar_id` triggers MANUAL-to-ICLOUD source transitions
-- **Sync polling:** `useCalendarData` auto-refetches every 10s when any event has `sync_status === 'PENDING_PUSH'`
+- Clicking a task or event opens its edit modal; nested controls use `stopPropagation` to avoid accidental row clicks.
+- Empty day/slot clicks open `QuickAddPopover`, which then hands off to the relevant modal.
+- The view system is Month / Week / Day, with desktop/mobile week layouts split at the `768px` breakpoint.
+- Event creation supports selecting synced iCloud calendars.
+- `useCalendarData` polls every `10s` while any item has `sync_status === 'PENDING_PUSH'`.
 
 ---
 
 ## 3. Mealboard
 
-**Routes:** `/mealboard/planner`, `/mealboard/recipes`, `/mealboard/shopping`, `/mealboard/finder`
+**Routes:** `/mealboard/planner`, `/mealboard/recipes`, `/mealboard/finder`
 
-### Files (13)
+`/mealboard/shopping` no longer has its own view; direct hits redirect to `/lists`.
+
+### Files (27 total: 1 page shell + 26 mealboard files)
 
 | File | Location | Purpose |
 |------|----------|---------|
-| `MealboardPage.jsx` | `pages/` | Main layout with responsive navigation |
-| `MealboardNav.jsx` | `components/mealboard/` | Left panel (>=1200px) or dropdown menu (<1200px) |
-| `MealPlannerView.jsx` | `components/mealboard/` | Weekly calendar view with meal slots |
-| `MealPlannerRightPanel.jsx` | `components/mealboard/` | Recipe suggestions panel (>=1525px sidebar, <1525px modal) |
-| `MealDayColumn.jsx` | `components/mealboard/` | Single day column in planner grid |
-| `MealCard.jsx` | `components/mealboard/` | Individual meal slot card |
-| `AddMealModal.jsx` | `components/mealboard/` | Modal for adding meals to a slot |
-| `WeekSelector.jsx` | `components/mealboard/` | Week navigation (prev/next/current) |
-| `RecipesView.jsx` | `components/mealboard/` | Recipe catalog with filtering and sorting |
-| `RecipeCard.jsx` | `components/mealboard/` | Recipe card in catalog |
-| `RecipeFormModal.jsx` | `components/mealboard/` | Create/edit recipe modal |
-| `ShoppingListView.jsx` | `components/mealboard/` | Shopping list linked from existing lists |
-| `RecipeFinderView.jsx` | `components/mealboard/` | Placeholder for AI-powered recipe discovery |
+| `MealboardPage.jsx` | `pages/` | Mealboard shell with nested routes, responsive nav, and the `/mealboard/shopping -> /lists` redirect |
+| `MealboardNav.jsx` | `components/mealboard/` | Sidebar nav at desktop widths and dropdown nav on smaller screens |
+| `MealPlannerView.jsx` | `components/mealboard/` | Planner orchestrator: week state, slot types, entries, filters, add/edit/delete/undo flows |
+| `WeekSelector.jsx` | `components/mealboard/` | Prev/next/today week navigation |
+| `FamilyStrip.jsx` | `components/mealboard/` | Family-member filter pill strip |
+| `ShoppingCard.jsx` | `components/mealboard/` | Linked shopping-list card with sync status, warnings, and navigation into `/lists` |
+| `ShoppingLinkModal.jsx` | `components/mealboard/` | Two-step modal for linking or creating a shopping list |
+| `SwimlaneGrid.jsx` | `components/mealboard/` | Desktop planner grid: rows are slot types, columns are week days |
+| `MobileDayView.jsx` | `components/mealboard/` | Mobile planner view: one day at a time with swipe/day-pill navigation |
+| `MealCard.jsx` | `components/mealboard/` | Individual meal entry card inside planner cells |
+| `UndoMealCard.jsx` | `components/mealboard/` | Inline undo card shown while a planner delete is pending |
+| `AddMealPopover.jsx` | `components/mealboard/` | Add-meal picker for recipes, food items, or custom meal names |
+| `ProgressTracker.jsx` | `components/mealboard/` | Weekly slot-by-slot completion summary |
+| `WelcomeCard.jsx` | `components/mealboard/` | Empty-state onboarding card for a blank planner |
+| `lane-cell-merge.js` | `components/mealboard/` | Helper that merges live entries and pending-deletes in planner cells |
+| `RecipesView.jsx` | `components/mealboard/` | Catalog surface with tabs for Recipes vs Food Items |
+| `FoodItemsView.jsx` | `components/mealboard/` | Food-item library with filtering, view toggle, and undo delete flow |
+| `ItemCard.jsx` | `components/mealboard/` | Grid-card presentation for recipe and food-item records |
+| `ItemRow.jsx` | `components/mealboard/` | List-row presentation for recipe and food-item records |
+| `ItemDetailDrawer.jsx` | `components/mealboard/` | Side drawer / bottom sheet for item details (currently recipe-centric) |
+| `ItemFormModal.jsx` | `components/mealboard/` | Unified create/edit modal for both recipes and food items |
+| `ItemIcon.jsx` | `components/mealboard/` | Shared item icon renderer (emoji, image, or fallback) |
+| `ToolbarCount.jsx` | `components/mealboard/` | Reusable count badge/label for catalog toolbars |
+| `RecipeImageUpload.jsx` | `components/mealboard/` | Recipe image input/upload control |
+| `UnitCombobox.jsx` | `components/mealboard/` | Ingredient unit picker |
+| `itemDeleteCopy.jsx` | `components/mealboard/` | Shared delete-confirm copy helpers for item deletion |
+| `RecipeFinderView.jsx` | `components/mealboard/` | Placeholder “coming soon” recipe finder screen |
 
 ### Responsive Breakpoints
 
-- **1200px (xl:):** Desktop nav panel vs mobile dropdown menu
-- **1525px:** Right panel sidebar vs modal for recipe suggestions
+Mealboard uses Tailwind v4 default breakpoints (`sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px) with no custom `--breakpoint-*` overrides, plus custom `@media` rules in `index.css` that drive the recipes grid. Each row below lists the deltas that take effect **at or above** that width. Shell-level behavior (`Header`, `Sidebar`, `MealboardNav`, content padding) is identical across all three pages and is repeated in each table for completeness.
+
+#### Meal Planner page (`/mealboard/planner` → `MealPlannerView.jsx`)
+
+| Breakpoint | What changes |
+|---|---|
+| `<640px` (baseline) | Top `Header` visible (hamburger + title + dark toggle); no sidebar rail; `MealboardNav` renders as a dropdown under `Header`; content padding `px-4`. Planner renders `MobileDayView` — single day at a time with horizontal day-pill strip + swipe. Header is fully stacked (`flex flex-col gap-2`: title dropdown, week selector, family strip, shopping card on separate rows). `ProgressTracker` is `grid-cols-2`. `MealCard` meta row (time/servings) is always visible. |
+| `≥640px` (`sm`) | Top `Header` hides itself (`sm:hidden` on its root); app `Sidebar` appears as fixed 80px left rail (`sm:pl-20` on `MealboardPage`). Content padding `px-4` → `sm:px-6`. `ProgressTracker` `grid-cols-2` → `grid-cols-4`. `SwimlaneGrid` slot-label column widens from 80px to 100px (takes visible effect once the grid renders at `md`+). |
+| `≥768px` (`md`) | Planner swaps `MobileDayView` → `SwimlaneGrid` (meal-slot rows × 7-day columns); switch driven by `window.innerWidth < 768` in `MealPlannerView.jsx`. Planner header top row gains `md:grid md:grid-cols-[auto_1fr_auto]` layout (title / spacer / week selector); family strip + shopping card still sit on a second row below. `MealCard` meta row collapses from always-visible to hover/focus-reveal (`md:max-h-0 md:opacity-0` + `md:group-hover:*` / `md:group-focus-within:*`). |
+| `≥1024px` (`lg`) | Content padding `sm:px-6` → `lg:px-8`. |
+| `≥1280px` (`xl`) | `MealboardNav` switches from dropdown to full sidebar panel (`variant="sidebar"`, `hidden xl:flex`). Planner header flips from the stacked/`md:grid` layout to a single horizontal flex row (`hidden xl:flex xl:items-center xl:gap-6`): "What's Cooking?" heading + week selector, with family strip + shopping card on a secondary row. |
+
+#### Recipes page — Recipes tab (`/mealboard/recipes` → `RecipesView.jsx`, `activeTab === 'recipes'`)
+
+Recipe grid column counts are driven by custom `@media` rules on `.recipe-grid-responsive` in `index.css`, independent of Tailwind breakpoints. The grid container also has an inline `gridTemplateColumns: repeat(5, 1fr)` default that wins when no `@media` rule matches.
+
+| Breakpoint | What changes |
+|---|---|
+| `<400px` (baseline) | Top `Header` visible; no sidebar rail; `MealboardNav` dropdown at top of content (`xl:hidden` block); content padding `px-4`. Toolbar row fits on one line with small spacing; `ToolbarCount` hidden (`hidden sm:inline`). Recipe grid: 1 column. `ItemDetailDrawer` (when open) renders as a bottom sheet — full width, ~85vh tall, rounded top corners, slides up from the bottom. |
+| `≥400px` (custom `@media`) | Recipe grid: 1 → 2 columns. |
+| `≥500px` (custom `@media`) | Recipe grid: 2 → 3 columns. |
+| `≥640px` (`sm`) | Top `Header` hides (`sm:hidden`); app `Sidebar` becomes 80px left rail. Content padding `px-4` → `sm:px-6`. `ToolbarCount` becomes visible. |
+| `≥768px` (`md`) | `ItemDetailDrawer` flips from bottom sheet to right-side drawer — 480px wide, full height, left border, slides in from the right. |
+| `≥800px` (custom `@media`) | Recipe grid: 3 → 4 columns. |
+| `≥1024px` (`lg`) | Content padding `sm:px-6` → `lg:px-8`. |
+| `≥1100px` (custom `@media`) | Recipe grid: 4 → 5 columns (falls through to the inline `repeat(5, 1fr)` default on the grid container). |
+| `≥1280px` (`xl`) | `MealboardNav` switches from dropdown to full sidebar panel (`hidden xl:flex`); the `xl:hidden` dropdown row in `RecipesView.jsx` hides. |
+
+#### Recipes page — Food Items tab (`/mealboard/recipes` → `FoodItemsView.jsx`, `activeTab === 'food-items'`)
+
+Unlike the Recipes tab, the food-items grid is **not breakpoint-driven**. It uses `grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))`, so columns reflow organically to fit the viewport width with a 280px minimum card width.
+
+| Breakpoint | What changes |
+|---|---|
+| `<640px` (baseline) | Top `Header` visible; no sidebar rail; `MealboardNav` dropdown at top of content; content padding `px-4`. Toolbar stacks vertically (`flex flex-col ... gap-3` at line 90 of `FoodItemsView.jsx`). `ToolbarCount` hidden. Food-items grid fits as many 280px-min cards per row as the viewport allows. `ItemDetailDrawer` renders as bottom sheet. |
+| `≥640px` (`sm`) | Top `Header` hides (`sm:hidden`); app `Sidebar` becomes 80px left rail. Content padding `px-4` → `sm:px-6`. Toolbar flips to horizontal (`sm:flex-row sm:items-center`). `ToolbarCount` becomes visible. |
+| `≥768px` (`md`) | `ItemDetailDrawer` flips from bottom sheet to right-side drawer (480px wide, full height, slides in from right). |
+| `≥1024px` (`lg`) | Content padding `sm:px-6` → `lg:px-8`. |
+| `≥1280px` (`xl`) | `MealboardNav` switches from dropdown to full sidebar panel; the `xl:hidden` dropdown row hides. |
+
+### Behavioral Notes
+
+- `MealboardPage.jsx` owns nested routing; the planner, catalog, and finder are separate subroutes.
+- `MealPlannerView.jsx` loads `app-settings`, `meal-slot-types`, `family-members`, items, and week-specific `meal-entries`.
+- The planner uses the unified **Item** model: recipes and food items share `useItems`, `ItemFormModal`, `ItemCard`, and `ItemRow`.
+- Planner delete UX is inline: deleting a meal swaps the `MealCard` for an `UndoMealCard` in the same lane cell before the entry is purged.
+- Catalog delete UX is global: recipe and food-item deletes use the app-level `UndoToastProvider`.
+- Shopping-list linking now lives inside planner UI (`ShoppingCard` + `ShoppingLinkModal`) and ultimately points to the canonical task-list surface at `/lists`.
+- `RecipeFinderView` is present in the nav but intentionally disabled / placeholder.
 
 ---
 
 ## 4. Settings
 
-Components in `src/components/settings/`:
+**Route:** `/settings`
+
+The `/settings` route is implemented by `pages/FamilyMembersPage.jsx`, which renders a full settings page with multiple cards: family members, timezone, calendar integrations, and mealboard settings.
+
+### Settings Components (8)
 
 | File | Purpose |
 |------|---------|
-| `ICloudSettings.jsx` | iCloud calendar integration management (connect/disconnect, calendar selection) |
-| `TimezoneSettings.jsx` | App-wide timezone configuration (IANA timezone picker) |
-| `CalendarSelector.jsx` | Calendar checkbox list for selecting which iCloud calendars to sync |
+| `ICloudSettings.jsx` | Connect/disconnect iCloud integrations, validate credentials, select calendars, and manage reminder syncing |
+| `TimezoneSettings.jsx` | App-wide timezone selection |
+| `CalendarSelector.jsx` | Presentational checkbox list for iCloud calendars |
+| `ReminderListSelector.jsx` | Presentational checkbox list for iCloud reminder lists |
+| `MealboardSettings.jsx` | Mealboard preferences plus meal-slot CRUD |
+| `MealSlotCard.jsx` | Editable card for one meal slot type |
+| `DayPreview.jsx` | Live one-day preview of active/hidden meal slots |
+| `ReminderListSelector.test.jsx` | Reminder-list selector tests |
+
+### Behavioral Notes
+
+- `FamilyMembersPage.jsx` sets the page title to `Settings` and renders all settings surfaces in one page shell.
+- `ICloudSettings.jsx` supports both calendar syncing and reminders syncing.
+- `MealboardSettings.jsx` loads meal-slot types, family members, and app settings together.
+- Mealboard settings use a two-column layout at `lg`, with a sticky `DayPreview` sidebar on larger screens.
 
 ---
 
@@ -144,21 +229,24 @@ Components in `src/components/settings/`:
 
 **Route:** `/responsibilities`
 
-### Files (3 + 2 tests)
+`pages/ResponsibilitiesPage.jsx` is the route shell; `components/responsibilities/` contains the reusable feature UI.
+
+### Component Files (5)
 
 | File | Purpose |
 |------|---------|
-| `ResponsibilityCard.jsx` | Responsibility display card with swipe-to-complete |
-| `ResponsibilityForm.jsx` | Responsibility create/edit form (categories, frequency, icon) |
-| `ScheduleView.jsx` | Daily responsibility schedule grouped by category and family member |
-| `ResponsibilityCard.test.jsx` | Tests for ResponsibilityCard |
-| `ResponsibilityForm.test.jsx` | Tests for ResponsibilityForm |
+| `ResponsibilityCard.jsx` | Responsibility display card with swipe interactions |
+| `ResponsibilityForm.jsx` | Create/edit form for responsibility metadata |
+| `ScheduleView.jsx` | Daily schedule grouped by category and family member |
+| `ResponsibilityCard.test.jsx` | Card tests |
+| `ResponsibilityForm.test.jsx` | Form tests |
 
 ### Behavioral Notes
 
-- **Daily vs Edit tabs:** ResponsibilitiesPage toggles between ScheduleView (daily tracker) and edit list
-- **Category filter:** ScheduleView has filter pills (Morning/Afternoon/Evening/Chore)
-- **Mobile:** Tab bar for family member selection; Desktop: side-by-side member cards
+- The page toggles between `Daily View` and `Edit Responsibilities`.
+- `ScheduleView.jsx` is the daily tracker surface; editing happens in the separate edit tab.
+- Completion state is date-based and loaded alongside family members and responsibilities.
+- An additional `ScheduleView` test lives in `frontend/tests/components/ScheduleView.test.jsx`.
 
 ---
 
@@ -166,73 +254,96 @@ Components in `src/components/settings/`:
 
 **Route:** `/lists`
 
-### Files (8 + 2 tests)
+`pages/ListsPage.jsx` owns data loading, responsive shell layout, modal state, and task/list API calls. `components/lists/` contains the reusable list UI.
+
+### Files (11)
 
 | File | Purpose |
 |------|---------|
-| `ListPanel.jsx` | Task list sidebar (desktop aside, mobile slide-in drawer) |
-| `TaskItem.jsx` | Single task row with inline editing, action area, expand panel (React.memo) |
-| `TaskActionArea.jsx` | Bordered action container with indicators, separator, and buttons |
-| `InlineTaskFields.jsx` | Expanded detail panel: due date, description, assignee pills, priority pills |
-| `AddTaskRow.jsx` | Reusable "Add a task" row used at bottom of sections/unsectioned |
-| `SectionHeader.jsx` | Section header with inline name editing, collapse chevron |
-| `TaskListView.jsx` | Task list rendering with sections, add-task rows, empty state |
-| `TodoForm.jsx` | Task create/edit form (retained for mobile modal flow) |
-| `TaskItem.test.jsx` | Tests for TaskItem (28 tests: inline edit, blur, delete-on-empty, etc.) |
-| `TodoForm.test.jsx` | Tests for TodoForm |
+| `ListPanel.jsx` | List sidebar as desktop aside and mobile drawer |
+| `TaskListView.jsx` | Main sectioned task-list renderer |
+| `TaskItem.jsx` | Individual task row with inline editing and expand/collapse behavior |
+| `TaskActionArea.jsx` | Sync badges, indicators, and action buttons for a task row |
+| `InlineTaskFields.jsx` | Expanded due date, description, assignee, and priority fields |
+| `AddTaskRow.jsx` | Reusable “Add a task” row |
+| `SectionHeader.jsx` | Inline-editable section header with collapse control |
+| `TodoForm.jsx` | Task create/edit modal form |
+| `TaskItem.test.jsx` | Task item tests |
+| `TodoForm.test.jsx` | Todo form tests |
+| `iCloudBadges.test.jsx` | Badge/sync-state tests for list tasks |
+
+### Behavioral Notes
+
+- `ListsPage.jsx` persists the selected list in `localStorage`.
+- The mobile/desktop split happens at the Tailwind `sm` breakpoint (`640px`), not `768px`.
+- Lists poll every `10s` while any task has `sync_status === 'PENDING_PUSH'`, mirroring the calendar sync pattern.
+- The page loads family members once and threads them into task editing surfaces.
 
 ---
 
 ## 7. Family Members
 
-**Route:** `/settings` (rendered inside FamilyMembersPage)
+**Route surface:** `/settings`
 
-### Files (1)
+Family member management is not a standalone page; it is the first card inside `pages/FamilyMembersPage.jsx`.
+
+### Files (1 source file + tests elsewhere)
 
 | File | Purpose |
 |------|---------|
-| `FamilyMemberManager.jsx` | Family member CRUD UI with photo upload |
+| `FamilyMemberManager.jsx` | Family member CRUD, photo upload, color selection, and avatar handling |
+
+### Notes
+
+- The manager uses shared helpers like `PhotoUpload`, `MemberAvatar`, and `ColorPicker`.
+- Tests live in `frontend/tests/components/family-members/FamilyMemberManager.test.jsx`.
 
 ---
 
 ## 8. Layout
 
-App shell components used by all pages.
+App shell components used across pages.
 
 ### Files (4)
 
 | File | Purpose |
 |------|---------|
-| `Header.jsx` | App header with dark mode toggle |
-| `Sidebar.jsx` | App sidebar navigation (bottom bar on mobile, left rail on desktop) |
-| `DarkModeToggle.jsx` | Dark/light mode switch (used by Header and Sidebar) |
-| `AddButton.jsx` | Floating action button for creating new items |
+| `Header.jsx` | Top header bar used on most pages |
+| `Sidebar.jsx` | Primary app navigation; bottom bar on mobile, left rail on larger screens |
+| `DarkModeToggle.jsx` | Shared dark-mode toggle control |
+| `AddButton.jsx` | Floating action button for create flows |
 
 ---
 
 ## 9. Shared
 
-Cross-cutting UI components used across multiple features.
+Cross-cutting UI components, helpers, and providers used across multiple features.
 
-### Files (6)
+### Files (10)
 
 | File | Purpose |
 |------|---------|
-| `ConfirmDialog.jsx` | Reusable confirmation modal (used by responsibilities, lists, mealboard) |
-| `ToastProvider.jsx` | Toast notification context + provider + useToast hook (error/success/info) |
-| `EmptyState.jsx` | Empty state placeholder variants (tasks, responsibilities, daily view) |
-| `SwipeableItem.jsx` | Swipe-to-reveal actions wrapper (used by TaskItem, ResponsibilityCard) |
-| `PhotoUpload.jsx` | Image upload with preview (used by ResponsibilityForm, FamilyMemberManager) |
-| `Tooltip.jsx` | Tooltip and TruncatedText components (used by ListPanel) |
+| `ConfirmDialog.jsx` | Reusable confirmation modal |
+| `ToastProvider.jsx` | General toast provider + `useToast` hook |
+| `UndoToast.jsx` | Global undo-toast provider + hook for soft-delete flows |
+| `EmptyState.jsx` | Shared empty-state components |
+| `SwipeableItem.jsx` | Swipe-to-reveal action wrapper |
+| `PhotoUpload.jsx` | Image upload with preview |
+| `Tooltip.jsx` | Tooltip and truncated-text helpers |
+| `ColorPicker.jsx` | Shared family-member color picker |
+| `MemberAvatar.jsx` | Avatar/photo fallback renderer for family members |
+| `EmojiPicker.jsx` | Lazy-loaded emoji picker built on `emoji-mart` |
 
 ---
 
 ## 10. Key Patterns
 
-- **HTTP client:** Axios for all API calls (configured with `VITE_API_BASE_URL`)
-- **Server state:** TanStack Query installed but not fully integrated; most components use direct Axios calls with `useEffect`/`useState`
-- **Routing:** React Router v7 with route-level components in `src/pages/`; calendar is the home route (`/`)
-- **State management:** Local state (`useState`) + context (`DarkModeContext`); no global store
-- **Callback threading:** CalendarPage defines handlers, passes to views, views pass to leaf components. Uses `stopPropagation` for nested click targets (e.g., checkbox vs row click)
-- **Headless UI:** `@headlessui/react` for modals and popovers (render props for programmatic close)
-- **Design system:** See [FRONTEND_GUIDELINES.md](./FRONTEND_GUIDELINES.md) for colors, spacing, dark mode, and component patterns
+- **Stack:** Vite 7, React 19, React Router 7, Tailwind 4, Axios, Headless UI, Vitest, Testing Library, and MSW.
+- **Routing:** `main.jsx` mounts `BrowserRouter`; `App.jsx` owns top-level routes; `MealboardPage.jsx` owns nested `/mealboard/*` routes.
+- **Root providers:** `DarkModeProvider`, `ToastProvider`, and `UndoToastProvider` all wrap the app in `main.jsx`.
+- **HTTP/data fetching:** Axios is the standard client (`VITE_API_BASE_URL`). In `src/`, data flow is currently driven by component state and custom hooks, not TanStack Query.
+- **State management:** Local `useState` / `useEffect`, lightweight context (`DarkModeContext`, toast providers), and some `localStorage` persistence for UI preferences.
+- **Unified item model:** Mealboard recipes and food items share the `Item` API surface and frontend primitives such as `useItems`, `ItemFormModal`, `ItemCard`, and `ItemRow`.
+- **Responsive patterns:** Tailwind breakpoints are the default pattern, but some features also use explicit media checks (`useMediaQuery`, `window.innerWidth < 768`) for mode switching.
+- **Testing layout:** Tests are split between co-located component tests and `frontend/tests/components/` feature tests.
+- **Design system:** See [FRONTEND_GUIDELINES.md](./FRONTEND_GUIDELINES.md) for colors, spacing, dark mode, and component styling patterns.

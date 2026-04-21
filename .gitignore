@@ -15,7 +15,17 @@ wheels/
 prompts/
 screenshots/
 
-.claude/
+# .claude/ — ignore everything inside except the canonical project docs.
+# `/.claude/*` matches contents but not the directory itself, so the
+# `!` rules below can re-include specific files.
+/.claude/*
+!/.claude/APP_FLOW.md
+!/.claude/BACKEND_STRUCTURE.md
+!/.claude/FRONTEND_GUIDELINES.md
+!/.claude/FRONTEND_STRUCTURE.md
+!/.claude/IMPLEMENTATION_PLAN.md
+!/.claude/PRD.md
+!/.claude/TECH_STACK.md
 .cursor/
 .knowledge-quiz
 

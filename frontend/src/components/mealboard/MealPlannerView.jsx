@@ -86,6 +86,25 @@ export default function MealPlannerView() {
   // Item edit modal state — opened from the detail drawer's Edit button
   const [editingItem, setEditingItem] = useState(null)
 
+  // Pending-delete state for the in-place undo affordance. Map entries are
+  // `{ entry, undoToken, expiresAt, timerId }`. The Map preserves insertion
+  // order so multiple pending-deletes in the same cell render in the order
+  // they happened.
+  //
+  // IMPORTANT: every add/remove/clear must clone `new Map(prev)` inside the
+  // setter — mutating the existing Map would cause stale renders and stale
+  // cleanup closures.
+  const [pendingDeletes, setPendingDeletes] = useState(new Map())
+
+  // Ref mirror of `pendingDeletes` so the unmount cleanup has access to the
+  // latest timer IDs without re-running on every state change. An effect with
+  // `[pendingDeletes]` would fire its cleanup before EACH re-render and
+  // clearTimeout the previous Map's in-flight timers — a subtle bug where
+  // rapid sequential deletes cancel each other's 5s purge (adversarial review
+  // F3 / 2026-04-19). Keep this ref in sync via the setter calls below.
+  const pendingDeletesRef = useRef(pendingDeletes)
+  pendingDeletesRef.current = pendingDeletes
+
   const dismissWelcome = () => {
     localStorage.setItem(WELCOME_DISMISSED_KEY, '1')
     setWelcomeDismissed(true)
@@ -211,9 +230,111 @@ export default function MealPlannerView() {
     }
   }
 
-  const handleMealDeleted = (entryId) => {
-    setMealEntries((prev) => prev.filter((e) => e.id !== entryId))
+  // Soft-delete flow: MealCard POSTs DELETE, backend soft-hides the row + returns
+  // `{ undoToken, expiresAt }`. We keep the entry in `mealEntries` so the cell
+  // still renders its slot — the UndoMealCard replaces the MealCard via
+  // `mergeEntriesWithPendingDeletes`. After 5s the timer removes the entry.
+  //
+  // If the backend returns no undoToken (mixed-version rollback), MealCard calls
+  // `onDeleted(id)` without extras and we fall back to the old hard-delete UX.
+  const handleMealDeleted = (entryId, undoContext) => {
+    if (!undoContext) {
+      setMealEntries((prev) => prev.filter((e) => e.id !== entryId))
+      return
+    }
+    const { undoToken, entry } = undoContext
+    // The server's expires_at is naive UTC; parsing it locally would skew the
+    // display by the user's timezone offset. The UI timer is client-side
+    // anyway, so anchor the countdown on the client clock. Keep the server
+    // value as a hard upper bound via the 6.5s CAS window on the undo endpoint.
+    const expiresAtDate = new Date(Date.now() + 5000)
+
+    const timerId = setTimeout(() => {
+      setMealEntries((prev) => prev.filter((e) => e.id !== entryId))
+      setPendingDeletes((prev) => {
+        const next = new Map(prev)
+        next.delete(entryId)
+        return next
+      })
+    }, 5000)
+
+    setPendingDeletes((prev) => {
+      const next = new Map(prev)
+      next.set(entryId, { entry, undoToken, expiresAt: expiresAtDate, timerId })
+      return next
+    })
   }
+
+  const handleMealUndo = async (entryId) => {
+    const pending = pendingDeletes.get(entryId)
+    if (!pending) return
+
+    // Cancel the auto-purge timer and clear the pending-delete state up front.
+    // If the POST fails (410 / network error after retry), we still want the
+    // entry out of the list — the delete is backend-committed either way.
+    clearTimeout(pending.timerId)
+    setPendingDeletes((prev) => {
+      const next = new Map(prev)
+      next.delete(entryId)
+      return next
+    })
+
+    const postUndo = () =>
+      axios.post(`${API_BASE}/meal-entries/${entryId}/undo`, {
+        undo_token: pending.undoToken,
+      })
+
+    try {
+      const res = await postUndo()
+      setMealEntries((prev) => prev.map((e) => (e.id === entryId ? res.data : e)))
+    } catch (err) {
+      // Only retry when we're confident the first POST never reached the
+      // server — axios timeout ('ECONNABORTED') or transport-level network
+      // failure ('ERR_NETWORK'). Retrying on every undefined-status error
+      // would double-consume the undo token on a "server committed, response
+      // lost" scenario: the first POST restored the row, the retry hits the
+      // now-consumed token with 410, and we'd drop an already-live entry.
+      const status = err?.response?.status
+      const code = err?.code
+      const canSafelyRetry = status === undefined && (code === 'ECONNABORTED' || code === 'ERR_NETWORK')
+      if (canSafelyRetry) {
+        try {
+          const res = await postUndo()
+          setMealEntries((prev) => prev.map((e) => (e.id === entryId ? res.data : e)))
+          return
+        } catch {
+          // fall through to the "too late" removal path
+        }
+      }
+      // 410 / 404 / retried-and-failed → drop the entry; it's already hidden
+      // backend-side. A toast could surface here; keep it quiet for now since
+      // the slot-level UX already communicates the state.
+      console.warn('undo_failed', entryId, status, code)
+      setMealEntries((prev) => prev.filter((e) => e.id !== entryId))
+    }
+  }
+
+  // Cleanup: cancel every pending timer on unmount so we don't setState after
+  // the component is gone. Read from the ref so this effect only fires once on
+  // mount/unmount — an effect keyed on `pendingDeletes` would cancel prior
+  // timers every time the Map changes, killing pending-deletes created back to
+  // back (adversarial review F3).
+  useEffect(() => {
+    return () => {
+      pendingDeletesRef.current.forEach((pd) => clearTimeout(pd.timerId))
+    }
+  }, [])
+
+  // On week navigation, clear pending-deletes entirely. The backend delete is
+  // already committed; the user navigated away from the slot, so the undo
+  // affordance is gone — we only forfeit an undo opportunity, never their data.
+  useEffect(() => {
+    setPendingDeletes((prev) => {
+      if (prev.size === 0) return prev
+      prev.forEach((pd) => clearTimeout(pd.timerId))
+      return new Map()
+    })
+  }, [weekDates])
 
   const handleMealUpdated = (updated) => {
     setMealEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)))
@@ -319,9 +440,12 @@ export default function MealPlannerView() {
               slotTypes={slotTypes}
               mealEntries={mealEntries}
               familyMembers={familyMembers}
+              pendingDeletes={pendingDeletes}
               onAddMeal={handleOpenAddMeal}
               onMealUpdated={handleMealUpdated}
               onMealDeleted={handleMealDeleted}
+              onMealUndo={handleMealUndo}
+              onViewRecipe={(itemId) => setDrawerItemId(itemId)}
             />
           ) : (
             <SwimlaneGrid
@@ -329,9 +453,11 @@ export default function MealPlannerView() {
               slotTypes={slotTypes}
               mealEntries={mealEntries}
               familyMembers={familyMembers}
+              pendingDeletes={pendingDeletes}
               onAddMeal={handleOpenAddMeal}
               onMealUpdated={handleMealUpdated}
               onMealDeleted={handleMealDeleted}
+              onMealUndo={handleMealUndo}
               onViewRecipe={(itemId) => setDrawerItemId(itemId)}
               initialLoaded={initialLoaded}
             />

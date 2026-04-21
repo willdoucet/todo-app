@@ -13,9 +13,15 @@ from unittest.mock import patch
 # Mock Celery tasks to avoid dispatching real background tasks during tests
 @pytest.fixture(autouse=True)
 def mock_celery_tasks():
-    """Prevent Celery tasks from being dispatched during tests."""
+    """Prevent Celery tasks from being dispatched during tests.
+
+    `sync_shopping_list_remove` is dispatched via `.apply_async(countdown=...)`
+    to delay past the undo window; `sync_shopping_list_add` still uses `.delay`.
+    Patch both entry points so the tests can assert dispatch regardless of which
+    entry point production code picks.
+    """
     with patch("app.tasks.sync_shopping_list_add.delay") as mock_add, \
-         patch("app.tasks.sync_shopping_list_remove.delay") as mock_remove:
+         patch("app.tasks.sync_shopping_list_remove.apply_async") as mock_remove:
         yield {"add": mock_add, "remove": mock_remove}
 
 
@@ -208,21 +214,206 @@ class TestUpdateMealEntry:
 
 
 class TestDeleteMealEntry:
-    """Tests for DELETE /meal-entries/{id}. Meal entries are hard-deleted (only items
-    are soft-deleted — the soft_hidden_at column is cascaded by Item soft-delete)."""
+    """Tests for DELETE /meal-entries/{id}. User-initiated deletes are soft:
+    the row is hidden immediately but a 5s undo window lets the user restore
+    it via POST /meal-entries/{id}/undo."""
 
-    async def test_deletes_meal_entry(self, client, test_meal_entry):
+    async def test_soft_deletes_meal_entry_returning_undo_token(self, client, test_meal_entry):
         entry_id = test_meal_entry.id
         response = await client.delete(f"/meal-entries/{entry_id}")
         assert response.status_code == 200
+        body = response.json()
+        assert body["entry"]["id"] == entry_id
+        assert isinstance(body["undo_token"], str) and len(body["undo_token"]) >= 16
+        assert "expires_at" in body
 
-        # Verify it's deleted
+        # Verify it's hidden from reads
         get_response = await client.get(f"/meal-entries/{entry_id}")
         assert get_response.status_code == 404
+
+    async def test_delete_dispatches_shopping_removal(self, client, test_meal_entry, mock_celery_tasks):
+        await client.delete(f"/meal-entries/{test_meal_entry.id}")
+        mock_celery_tasks["remove"].assert_called_once()
+
+    async def test_concurrent_delete_returns_404(self, client, test_meal_entry):
+        """A second DELETE on an already-soft-hidden row returns 404 — natural
+        behavior of get_meal_entry's soft_hidden_at filter (CEO review 4.2)."""
+        entry_id = test_meal_entry.id
+        first = await client.delete(f"/meal-entries/{entry_id}")
+        assert first.status_code == 200
+        second = await client.delete(f"/meal-entries/{entry_id}")
+        assert second.status_code == 404
 
     async def test_returns_404_when_not_found(self, client):
         response = await client.delete("/meal-entries/99999")
         assert response.status_code == 404
+
+
+class TestUndoMealEntry:
+    """Tests for POST /meal-entries/{id}/undo."""
+
+    async def test_undo_within_window_restores_entry(self, client, test_meal_entry, mock_celery_tasks):
+        entry_id = test_meal_entry.id
+        delete_body = (await client.delete(f"/meal-entries/{entry_id}")).json()
+        token = delete_body["undo_token"]
+
+        response = await client.post(
+            f"/meal-entries/{entry_id}/undo",
+            json={"undo_token": token},
+        )
+        assert response.status_code == 200
+        assert response.json()["id"] == entry_id
+
+        # Entry is visible again
+        get_response = await client.get(f"/meal-entries/{entry_id}")
+        assert get_response.status_code == 200
+
+    async def test_undo_redispatches_shopping_add(self, client, test_meal_entry, mock_celery_tasks):
+        entry_id = test_meal_entry.id
+        delete_body = (await client.delete(f"/meal-entries/{entry_id}")).json()
+        mock_celery_tasks["add"].reset_mock()
+
+        await client.post(
+            f"/meal-entries/{entry_id}/undo",
+            json={"undo_token": delete_body["undo_token"]},
+        )
+        mock_celery_tasks["add"].assert_called_once_with(entry_id)
+
+    async def test_undo_wrong_token_returns_410(self, client, test_meal_entry):
+        entry_id = test_meal_entry.id
+        await client.delete(f"/meal-entries/{entry_id}")
+
+        response = await client.post(
+            f"/meal-entries/{entry_id}/undo",
+            json={"undo_token": "wrong-token"},
+        )
+        assert response.status_code == 410
+        assert response.json()["detail"]["reason"] == "token_mismatch"
+
+    async def test_undo_expired_window_returns_410(self, client, db_session, test_meal_entry):
+        """Seed an old soft_hidden_at directly instead of freezing time — matches
+        the plan's expiry test approach."""
+        from datetime import datetime, timedelta
+        from sqlalchemy import update
+        from app.models import MealEntry
+
+        entry_id = test_meal_entry.id
+        delete_body = (await client.delete(f"/meal-entries/{entry_id}")).json()
+
+        # Push soft_hidden_at well past the 6.5s window
+        await db_session.execute(
+            update(MealEntry)
+            .where(MealEntry.id == entry_id)
+            .values(soft_hidden_at=datetime.utcnow() - timedelta(seconds=30))
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            f"/meal-entries/{entry_id}/undo",
+            json={"undo_token": delete_body["undo_token"]},
+        )
+        assert response.status_code == 410
+        assert response.json()["detail"]["reason"] == "expired"
+
+    async def test_undo_when_parent_item_deleted_returns_410(
+        self, client, db_session, test_meal_entry,
+    ):
+        from datetime import datetime
+        from sqlalchemy import update
+        from app.models import Item
+
+        entry_id = test_meal_entry.id
+        item_id = test_meal_entry.item_id
+        delete_body = (await client.delete(f"/meal-entries/{entry_id}")).json()
+
+        # Soft-delete the parent item
+        await db_session.execute(
+            update(Item).where(Item.id == item_id).values(deleted_at=datetime.utcnow())
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            f"/meal-entries/{entry_id}/undo",
+            json={"undo_token": delete_body["undo_token"]},
+        )
+        assert response.status_code == 410
+        assert response.json()["detail"]["reason"] == "parent_deleted"
+
+    async def test_undo_unknown_entry_returns_404(self, client):
+        response = await client.post(
+            "/meal-entries/99999/undo",
+            json={"undo_token": "anything"},
+        )
+        assert response.status_code == 404
+
+    async def test_undo_on_live_entry_returns_404(self, client, test_meal_entry):
+        """A row that was never soft-deleted has undo_token IS NULL — treat as not_found."""
+        response = await client.post(
+            f"/meal-entries/{test_meal_entry.id}/undo",
+            json={"undo_token": "anything"},
+        )
+        assert response.status_code == 404
+
+    async def test_undo_still_succeeds_when_celery_unavailable(
+        self, client, test_meal_entry, mock_celery_tasks,
+    ):
+        """Kombu OperationalError on sync_shopping_list_add.delay must not block
+        the user-visible restore (CEO review Issue 2.1)."""
+        import kombu.exceptions
+
+        entry_id = test_meal_entry.id
+        delete_body = (await client.delete(f"/meal-entries/{entry_id}")).json()
+
+        mock_celery_tasks["add"].side_effect = kombu.exceptions.OperationalError("broker down")
+        response = await client.post(
+            f"/meal-entries/{entry_id}/undo",
+            json={"undo_token": delete_body["undo_token"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["id"] == entry_id
+
+    async def test_cas_rejects_token_after_concurrent_winner_already_consumed_it(
+        self, client, db_session, test_meal_entry, mock_celery_tasks,
+    ):
+        """Simulate the concurrent-undo race at the CAS layer.
+
+        The production CAS is `UPDATE ... WHERE undo_token=? AND soft_hidden_at
+        > cutoff RETURNING *` — documented as "the concurrency linchpin" in
+        crud_meal_entries.py. We can't fire two true-parallel POSTs through
+        this test client (the fixture pins every request to one shared
+        AsyncSession via dependency override; concurrent queries on a single
+        session deadlock). Instead we simulate the race: delete → manually
+        commit the CAS side-effect (clearing token + soft_hidden_at) in a
+        separate SQL statement → then POST /undo with the still-held token.
+        The CAS predicate must match zero rows and the caller must see 410
+        with reason `token_mismatch` — matching the behavior a race loser
+        would observe.
+        """
+        from sqlalchemy import update
+        from app.models import MealEntry
+
+        entry_id = test_meal_entry.id
+        delete_body = (await client.delete(f"/meal-entries/{entry_id}")).json()
+        token = delete_body["undo_token"]
+
+        # Simulate a concurrent winner already completed their CAS
+        await db_session.execute(
+            update(MealEntry)
+            .where(MealEntry.id == entry_id)
+            .values(undo_token=None, soft_hidden_at=None)
+        )
+        await db_session.commit()
+
+        # Our "loser" request still holds the old token and hits the CAS
+        response = await client.post(
+            f"/meal-entries/{entry_id}/undo",
+            json={"undo_token": token},
+        )
+        # Entry is now live without a token → pre-flight sees undo_token IS
+        # NULL → not_found (404). This is the race-loser shape when the winner
+        # finished first: we observe a live row we have no capability to touch.
+        assert response.status_code == 404
+        assert response.json()["detail"]["reason"] == "not_found"
 
 
 class TestItemFKRestrict:
