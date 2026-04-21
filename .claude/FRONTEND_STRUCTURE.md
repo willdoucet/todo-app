@@ -143,15 +143,55 @@ Tests are split between co-located files under `frontend/src/` and feature-focus
 | `itemDeleteCopy.jsx` | `components/mealboard/` | Shared delete-confirm copy helpers for item deletion |
 | `RecipeFinderView.jsx` | `components/mealboard/` | Placeholder “coming soon” recipe finder screen |
 
+### Responsive Breakpoints
+
+Mealboard uses Tailwind v4 default breakpoints (`sm` 640px, `md` 768px, `lg` 1024px, `xl` 1280px) with no custom `--breakpoint-*` overrides, plus custom `@media` rules in `index.css` that drive the recipes grid. Each row below lists the deltas that take effect **at or above** that width. Shell-level behavior (`Header`, `Sidebar`, `MealboardNav`, content padding) is identical across all three pages and is repeated in each table for completeness.
+
+#### Meal Planner page (`/mealboard/planner` → `MealPlannerView.jsx`)
+
+| Breakpoint | What changes |
+|---|---|
+| `<640px` (baseline) | Top `Header` visible (hamburger + title + dark toggle); no sidebar rail; `MealboardNav` renders as a dropdown under `Header`; content padding `px-4`. Planner renders `MobileDayView` — single day at a time with horizontal day-pill strip + swipe. Header is fully stacked (`flex flex-col gap-2`: title dropdown, week selector, family strip, shopping card on separate rows). `ProgressTracker` is `grid-cols-2`. `MealCard` meta row (time/servings) is always visible. |
+| `≥640px` (`sm`) | Top `Header` hides itself (`sm:hidden` on its root); app `Sidebar` appears as fixed 80px left rail (`sm:pl-20` on `MealboardPage`). Content padding `px-4` → `sm:px-6`. `ProgressTracker` `grid-cols-2` → `grid-cols-4`. `SwimlaneGrid` slot-label column widens from 80px to 100px (takes visible effect once the grid renders at `md`+). |
+| `≥768px` (`md`) | Planner swaps `MobileDayView` → `SwimlaneGrid` (meal-slot rows × 7-day columns); switch driven by `window.innerWidth < 768` in `MealPlannerView.jsx`. Planner header top row gains `md:grid md:grid-cols-[auto_1fr_auto]` layout (title / spacer / week selector); family strip + shopping card still sit on a second row below. `MealCard` meta row collapses from always-visible to hover/focus-reveal (`md:max-h-0 md:opacity-0` + `md:group-hover:*` / `md:group-focus-within:*`). |
+| `≥1024px` (`lg`) | Content padding `sm:px-6` → `lg:px-8`. |
+| `≥1280px` (`xl`) | `MealboardNav` switches from dropdown to full sidebar panel (`variant="sidebar"`, `hidden xl:flex`). Planner header flips from the stacked/`md:grid` layout to a single horizontal flex row (`hidden xl:flex xl:items-center xl:gap-6`): "What's Cooking?" heading + week selector, with family strip + shopping card on a secondary row. |
+
+#### Recipes page — Recipes tab (`/mealboard/recipes` → `RecipesView.jsx`, `activeTab === 'recipes'`)
+
+Recipe grid column counts are driven by custom `@media` rules on `.recipe-grid-responsive` in `index.css`, independent of Tailwind breakpoints. The grid container also has an inline `gridTemplateColumns: repeat(5, 1fr)` default that wins when no `@media` rule matches.
+
+| Breakpoint | What changes |
+|---|---|
+| `<400px` (baseline) | Top `Header` visible; no sidebar rail; `MealboardNav` dropdown at top of content (`xl:hidden` block); content padding `px-4`. Toolbar row fits on one line with small spacing; `ToolbarCount` hidden (`hidden sm:inline`). Recipe grid: 1 column. `ItemDetailDrawer` (when open) renders as a bottom sheet — full width, ~85vh tall, rounded top corners, slides up from the bottom. |
+| `≥400px` (custom `@media`) | Recipe grid: 1 → 2 columns. |
+| `≥500px` (custom `@media`) | Recipe grid: 2 → 3 columns. |
+| `≥640px` (`sm`) | Top `Header` hides (`sm:hidden`); app `Sidebar` becomes 80px left rail. Content padding `px-4` → `sm:px-6`. `ToolbarCount` becomes visible. |
+| `≥768px` (`md`) | `ItemDetailDrawer` flips from bottom sheet to right-side drawer — 480px wide, full height, left border, slides in from the right. |
+| `≥800px` (custom `@media`) | Recipe grid: 3 → 4 columns. |
+| `≥1024px` (`lg`) | Content padding `sm:px-6` → `lg:px-8`. |
+| `≥1100px` (custom `@media`) | Recipe grid: 4 → 5 columns (falls through to the inline `repeat(5, 1fr)` default on the grid container). |
+| `≥1280px` (`xl`) | `MealboardNav` switches from dropdown to full sidebar panel (`hidden xl:flex`); the `xl:hidden` dropdown row in `RecipesView.jsx` hides. |
+
+#### Recipes page — Food Items tab (`/mealboard/recipes` → `FoodItemsView.jsx`, `activeTab === 'food-items'`)
+
+Unlike the Recipes tab, the food-items grid is **not breakpoint-driven**. It uses `grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))`, so columns reflow organically to fit the viewport width with a 280px minimum card width.
+
+| Breakpoint | What changes |
+|---|---|
+| `<640px` (baseline) | Top `Header` visible; no sidebar rail; `MealboardNav` dropdown at top of content; content padding `px-4`. Toolbar stacks vertically (`flex flex-col ... gap-3` at line 90 of `FoodItemsView.jsx`). `ToolbarCount` hidden. Food-items grid fits as many 280px-min cards per row as the viewport allows. `ItemDetailDrawer` renders as bottom sheet. |
+| `≥640px` (`sm`) | Top `Header` hides (`sm:hidden`); app `Sidebar` becomes 80px left rail. Content padding `px-4` → `sm:px-6`. Toolbar flips to horizontal (`sm:flex-row sm:items-center`). `ToolbarCount` becomes visible. |
+| `≥768px` (`md`) | `ItemDetailDrawer` flips from bottom sheet to right-side drawer (480px wide, full height, slides in from right). |
+| `≥1024px` (`lg`) | Content padding `sm:px-6` → `lg:px-8`. |
+| `≥1280px` (`xl`) | `MealboardNav` switches from dropdown to full sidebar panel; the `xl:hidden` dropdown row hides. |
+
 ### Behavioral Notes
 
 - `MealboardPage.jsx` owns nested routing; the planner, catalog, and finder are separate subroutes.
-- `MealboardNav.jsx` uses an `xl` sidebar on large screens and a dropdown menu below that breakpoint.
 - `MealPlannerView.jsx` loads `app-settings`, `meal-slot-types`, `family-members`, items, and week-specific `meal-entries`.
 - The planner uses the unified **Item** model: recipes and food items share `useItems`, `ItemFormModal`, `ItemCard`, and `ItemRow`.
 - Planner delete UX is inline: deleting a meal swaps the `MealCard` for an `UndoMealCard` in the same lane cell before the entry is purged.
 - Catalog delete UX is global: recipe and food-item deletes use the app-level `UndoToastProvider`.
-- Compact planner mode kicks in below `768px`, where the weekly swimlane grid is replaced by `MobileDayView`.
 - Shopping-list linking now lives inside planner UI (`ShoppingCard` + `ShoppingLinkModal`) and ultimately points to the canonical task-list surface at `/lists`.
 - `RecipeFinderView` is present in the nav but intentionally disabled / placeholder.
 
