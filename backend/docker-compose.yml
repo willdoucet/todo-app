@@ -66,6 +66,7 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      target: dev
     ports:
       - "5173:5173"           # Vite dev server port
     volumes:
@@ -127,6 +128,96 @@ services:
         condition: service_healthy
     env_file:
       - .env
+
+  # ── Visual regression test stack (profile: visual-test) ────────────────────
+  # These services only start when the `visual-test` profile is active, so a
+  # normal `docker-compose up` never touches them:
+  #
+  #   docker-compose --profile visual-test up -d --wait \
+  #     db redis api-test frontend-preview
+  #   docker-compose --profile visual-test run --rm frontend-visual
+  #
+  # api-test points at todo_app_test so seeding doesn't pollute the local dev
+  # database. frontend-preview serves the production bundle via `vite preview`
+  # (VITE_API_BASE_URL baked to api-test:8000). frontend-visual runs Playwright
+  # against the preview. Rebuild frontend-preview + frontend-visual whenever
+  # frontend code / config / specs change — no bind-mount (see Adversarial A5).
+  api-test:
+    build:
+      context: .
+      target: dev
+    profiles: [visual-test]
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/todo_app_test
+      - PYTHONUNBUFFERED=1
+      - UPLOAD_DIR=/app/uploads
+      - REDIS_URL=redis://redis:6379/0
+      - FERNET_KEY=${FERNET_KEY}
+      # Eng review rerun R1 — widens CORS allowlist so the browser loading
+      # frontend-preview:4173 can reach api-test:8000. Without this, every
+      # API call from the visual-test bundle fails CORS and the suite dies
+      # on aaa-smoke.spec.js.
+      - CORS_ALLOW_ORIGINS=http://localhost:5173,http://localhost:3000,http://frontend-preview:4173
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    healthcheck:
+      # `depends_on: service_started` fires when the container starts, not when
+      # alembic finishes. Without this healthcheck, frontend-preview can build
+      # before migrations complete and seed against a half-migrated schema.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/').read(); sys.exit(0)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  frontend-preview:
+    build:
+      context: ../frontend
+      target: preview
+      args:
+        VITE_API_BASE_URL: http://api-test:8000
+    profiles: [visual-test]
+    ports:
+      - "4173:4173"
+    depends_on:
+      api-test:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4173/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend-visual:
+    build:
+      context: ../frontend
+      target: visual-test
+    profiles: [visual-test]
+    depends_on:
+      frontend-preview:
+        condition: service_healthy
+      api-test:
+        condition: service_healthy
+    environment:
+      - PREVIEW_URL=http://frontend-preview:4173
+      - API_URL=http://api-test:8000
+      # Adversarial review A5: NO bind mount — specs, fixtures, and frontend
+      # app code are baked into the images at build time. Rebuild
+      # frontend-preview and frontend-visual whenever the frontend working
+      # tree changes or local runs can silently go green against a stale bundle.
+    volumes:
+      - ../frontend/test-results:/app/test-results
+    command: ["npx", "playwright", "test"]
 
 volumes:
   postgres_data:

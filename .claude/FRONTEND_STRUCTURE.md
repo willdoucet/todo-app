@@ -60,7 +60,25 @@ frontend/src/
     └── react.svg
 ```
 
-Tests are split between co-located files under `frontend/src/` and feature-focused tests in `frontend/tests/components/`.
+Tests are split between:
+- Co-located files under `frontend/src/` (Vitest + RTL, unit scope)
+- Feature-focused tests in `frontend/tests/components/` (Vitest + RTL, cross-component scope)
+- Visual regression specs in `frontend/tests/visual/` (Playwright against prod bundle, geometric bbox assertions — see `frontend/tests/visual/README.md`)
+
+```
+frontend/tests/visual/
+├── fixtures/
+│   ├── geometric.js       # expectStableAcrossHover, expectDeltaOnHover, waitForMealboardReady, bboxOf, PX_TOLERANCE, DELTA_TOLERANCE
+│   ├── seed.js            # Idempotent API-based seed of 3 canonical VRT items + meal entries for the current week
+│   └── global-setup.js    # Playwright globalSetup — runs seedKnownWeek() once per job
+├── specs/
+│   ├── aaa-smoke.spec.js           # Runs first; page load + MealCard count + no console errors
+│   ├── mealcard-recipe.spec.js     # Recipe card bbox stability
+│   ├── mealcard-food-item.spec.js  # Food-item card bbox stability + < recipe height invariant
+│   ├── mealcard-undo.spec.js       # Undo card matches replaced-card bbox (owns a throwaway entry)
+│   └── swimlane-hover-jitter.spec.js  # Grid.width + day-header.x stable across hover/rest/exit
+└── README.md
+```
 
 ---
 
