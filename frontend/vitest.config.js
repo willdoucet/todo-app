@@ -21,6 +21,13 @@ export default defineConfig({
       'src/**/*.{test,spec}.{js,jsx}',
       'tests/**/*.{test,spec}.{js,jsx}',
     ],
+    // Visual regression specs run via Playwright, not vitest. Pattern-match
+    // the directory instead of individual filenames so future additions are
+    // excluded automatically.
+    exclude: [
+      '**/node_modules/**',
+      'tests/visual/**',
+    ],
 
     // Coverage configuration
     coverage: {

@@ -14,13 +14,22 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Task & Recipe API")
 
-# Configure CORS
+
+def _parse_cors_origins(raw: str | None) -> list[str]:
+    """Parse CORS_ALLOW_ORIGINS env var (comma-separated). Falls back to the
+    default localhost dev servers when unset. Empty entries are dropped so a
+    trailing comma in the env var doesn't produce an empty-string origin."""
+    _DEFAULT = ["http://localhost:5173", "http://localhost:3000"]
+    source = raw if raw is not None else ",".join(_DEFAULT)
+    return [o.strip() for o in source.split(",") if o.strip()]
+
+
+# Env-driven so the visual-regression test stack can inject
+# `http://frontend-preview:4173` without changing prod config. Prod behavior is
+# unchanged when CORS_ALLOW_ORIGINS is unset.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],  # Frontend dev servers
+    allow_origins=_parse_cors_origins(os.getenv("CORS_ALLOW_ORIGINS")),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

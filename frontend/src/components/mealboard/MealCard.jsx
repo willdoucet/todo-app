@@ -201,6 +201,9 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
         className={`${containerBase} ${containerColor} flex flex-col overflow-hidden`}
         onClick={handleCardClick}
         style={pulseStyle}
+        data-testid="meal-card"
+        data-variant="food_item"
+        data-entry-id={entry.id}
       >
         <div className="flex flex-col items-center justify-center text-center px-2 py-2 min-h-[52px]">
           <ItemIcon item={item} size={24} />
@@ -271,6 +274,9 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
       className={`${containerBase} ${containerColor} flex flex-col overflow-hidden`}
       onClick={handleCardClick}
       style={pulseStyle}
+      data-testid="meal-card"
+      data-variant="recipe"
+      data-entry-id={entry.id}
     >
       {/* Card body — sized to preserve the pre-Chunk-2 baseline look */}
       <div className="flex flex-col items-center justify-center text-center px-2 py-3 min-h-[100px]">

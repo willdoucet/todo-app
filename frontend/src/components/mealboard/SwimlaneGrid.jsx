@@ -104,15 +104,17 @@ export default function SwimlaneGrid({
   }
 
   return (
-    <div role="grid" aria-label="Weekly meal plan">
+    <div role="grid" aria-label="Weekly meal plan" data-testid="swimlane-grid">
       {/* Day headers */}
       <div
         className="grid grid-cols-[80px_repeat(7,1fr)] gap-0 mb-2 sm:grid-cols-[100px_repeat(7,1fr)]"
         role="row"
+        data-testid="week-header"
       >
         <div role="columnheader" /> {/* Spacer for slot label column */}
         {weekDates.map((date, dayIdx) => {
           const isToday = isSameDay(date, today)
+          const dayTestId = DAY_NAMES[date.getDay()].toLowerCase()
           // Day/date entrance animation (Chunk 2 item 6): staggered fade-up.
           // 30ms stagger per day, 200ms duration each → 7 days land inside 380ms
           // (last day starts at 180ms + 200ms duration). Uses the existing
@@ -131,6 +133,7 @@ export default function SwimlaneGrid({
               style={dayAnimStyle}
               role="columnheader"
               aria-label={date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              data-testid={`day-header-${dayTestId}`}
             >
               <div
                 className={`text-[10px] font-semibold uppercase tracking-wider ${

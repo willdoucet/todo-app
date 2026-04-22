@@ -87,7 +87,18 @@ cd backend
 docker-compose exec frontend npm test                      # Watch mode
 docker-compose exec frontend npm run test:run              # Single run (CI)
 docker-compose exec frontend npm run test:coverage         # With coverage report
+
+# Visual regression (Playwright against `vite preview`)
+cd backend
+docker-compose --profile visual-test build frontend-preview frontend-visual
+docker-compose --profile visual-test up -d --wait db redis api-test frontend-preview
+docker-compose --profile visual-test run --rm frontend-visual
+# Teardown:
+docker-compose --profile visual-test down -v
 ```
+
+See `frontend/tests/visual/README.md` for the flake-response protocol,
+debugging workflow, version-bump rules, and the `CI_FERNET_KEY` one-time setup.
 
 ### Local Workflow Helper Tests (host-side)
 ```bash
@@ -97,7 +108,7 @@ python3 -m pytest .claude/tests/test_obsidian_workflow.py -q
 
 These tests cover the local Obsidian workflow helper only. They are intentionally separate from the Dockerized backend test suite.
 
-CI runs automatically on push/PR to main via `.github/workflows/test.yml`.
+CI runs automatically on push/PR to `master` via `.github/workflows/test.yml`.
 
 ## Workflow Orchestration
 

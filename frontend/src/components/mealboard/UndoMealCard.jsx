@@ -74,6 +74,8 @@ export default function UndoMealCard({ mealName, expiresAt, onUndo }) {
       onClick={handleClick}
       disabled={isSubmitting}
       aria-label={ariaLabel}
+      data-testid="meal-card"
+      data-variant="undo"
       className={`
         group relative w-full overflow-hidden
         flex flex-col items-center justify-center text-center
