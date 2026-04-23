@@ -24,6 +24,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        # Integration tests exercise Celery-backed flows (soft-delete undo
+        # scheduling, iCloud sync dispatch, etc.) which need a reachable
+        # Redis. Docker compose provides one on port 6379; mirror that in CI.
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +64,15 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/todo_app_test
           UPLOAD_DIR: /tmp/uploads
+          # Celery broker/result URL. Docker compose uses `redis:6379`; in CI
+          # the service is reachable at localhost:6379.
+          REDIS_URL: redis://localhost:6379/0
+          # iCloud integration tests encrypt credentials at rest with Fernet.
+          # Reuse the same ephemeral test secret the visual-tests job uses.
+          # If this secret is unset the integration tests will fail at setup
+          # with "FERNET_KEY environment variable is not set" — the fix is
+          # Settings → Secrets → Actions → add CI_FERNET_KEY.
+          FERNET_KEY: ${{ secrets.CI_FERNET_KEY }}
         run: uv run pytest tests/integration -v
 
   frontend-tests:
