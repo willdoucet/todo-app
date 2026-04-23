@@ -134,15 +134,15 @@ Designed primarily for nuclear families (2 parents + children), but flexible eno
 | P0 | Responsibilities (Recurring Routines) | Built |
 | P1 | Meal Planning (Flexible Swimlane Calendar) | Rebuilding |
 | P1 | Recipe Management | Built |
-| P1 | User Authentication | Not Started |
+| P1 | User Authentication | Planned — [see plan](./plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md) |
 | P2 | Shopping Lists (with meal auto-sync) | Rebuilding |
 | P2 | Notifications/Reminders | Not Started |
 | P2 | iCloud Calendar Sync | Built |
 | P3 | Family Member Management | Built |
 | P3 | Gamification (Points, Streaks) | Not Started |
-| P3 | Add Recipe from URL (AI) | Planned — [see plan](./.claude/plans/features/mealboard-ai-recipe-creator/mealboard-ai-recipe-creator-plan-20260416-151059.md) |
+| P3 | Add Recipe from URL (AI) | Planned — [see plan](./plans/features/mealboard-ai-recipe-creator/mealboard-ai-recipe-creator-plan-20260416-151059.md) |
 | P1 | Calendar (Dashboard Home) | Built |
-| P1 | CI/CD & Easy Deployment | Not Started |
+| P1 | CI/CD & Easy Deployment | Planned — [see plan](./plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md) |
 
 ---
 
@@ -421,27 +421,43 @@ Categories: Produce, Protein, Dairy, Pantry, Frozen, Bakery, Beverages, Other
 
 ---
 
-### 5.7 User Authentication (Planned)
+### 5.7 User Authentication (Planned for v1 productionization)
 
-**Purpose:** Secure multi-family access with household isolation.
+**Purpose:** Secure one shared login per deployment. The app is single-tenant by design — each household runs its own deployment, so there is no cross-household isolation layer or public signup in v1.
+
+> Authoritative source: the 8-milestone productionization plan at
+> `.claude/plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md`.
+> This section summarizes the product-visible surface; the plan owns the implementation spec.
+
+#### v1 identity model
+
+- Exactly one shared household login per deployment.
+- Family members inside the app remain application entities, not auth identities.
+- No per-user accounts, no household-join flow, no invite codes, no open public signup.
 
 #### Requirements
 
 | Requirement | Description |
 |-------------|-------------|
-| User Registration | Email/password signup |
-| User Login | Email/password authentication |
-| Household Creation | First user creates household, gets invite code |
-| Household Join | Additional users join via invite code |
-| Data Isolation | Users only see their household's data |
-| Session Management | Secure tokens, logout functionality |
-| Password Reset | Email-based password recovery |
+| Unified Auth Portal | Single `/auth` route showing both Sign in and Create new account. The Create button is hidden after the first account exists, based on `GET /auth/status`. |
+| Gated First-Run Registration | `POST /auth/register` creates the one shared login. Gated by `HOUSEHOLD_ACCESS_KEY` (a deployment-specific secret) AND a "no existing account" check. Backend rejects defensively even if the UI still surfaces Create. |
+| Login | Email + password. Short-lived JWT access token (15-min TTL, in-memory only) + HttpOnly refresh cookie (`__Host-refresh`, `Secure`, 30-day TTL, rotated on login and refresh). |
+| Refresh | `POST /auth/refresh` against the refresh cookie returns a fresh access token and rotates the refresh cookie. 60-second grace window on rotation handles parallel in-flight refreshes. |
+| Logout | Revokes the refresh token. Requires the access token in `Authorization: Bearer` (cookie-only logout is rejected as CSRF). |
+| Password Recovery | No self-service password reset in v1. Operator rotates the shared password via CLI (`fly ssh console`) — the rotation also invalidates all outstanding refresh tokens AND any still-unexpired access JWTs via a server-side token/session version check. |
+| Route Protection | Unauthenticated users on `/`, `/lists`, `/responsibilities`, `/settings`, `/mealboard/*` are redirected to `/auth?return_to=<path>`. Only `/healthz` and `/auth/*` remain public. |
 
-#### Family Member Linking (Future)
+#### What this explicitly does NOT include in v1
 
-- Optionally link family member profiles to user accounts
-- Enables per-user permissions and personal views
-- Kids could have limited accounts
+- Multi-user accounts within a household (one shared login only).
+- Invite codes, household-join flows, public signup.
+- Self-service password reset, magic-link login, OAuth/social login.
+- Cross-household data isolation (single-tenant-per-deployment replaces this entirely).
+
+#### Deferred beyond v1
+
+- Magic-link login and self-service password reset are v2 candidates.
+- Multi-user per household remains intentionally out of roadmap — adding it would require re-architecting the single-tenant assumption, and the current product model (separate deployment per family) is the canonical answer to "how do two households use the app?"
 
 ---
 
@@ -1009,6 +1025,11 @@ class CalendarEventSource:
 
 ## 11. Future Roadmap
 
+### v1.0 (Productionization — active)
+
+- [ ] First-party email + password auth for one shared household login (see plan at `.claude/plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md`, milestones M3-M5)
+- [ ] Production deployment on Vercel + Fly.io + Fly managed Postgres + Upstash Redis + Cloudflare R2 (same plan, milestones M2, M6-M8; M6 is residual cleanup and may be skipped)
+
 ### v1.1 (Post-Launch Polish)
 
 - [ ] Family member deletion dialog with task reassignment
@@ -1018,11 +1039,12 @@ class CalendarEventSource:
 
 ### v1.2 (Integration)
 
-- [ ] User authentication and multi-household support
 - [x] iCloud Calendar sync (two-way via CalDAV + Celery)
 - [ ] iCloud Reminders sync
 - [ ] Google Calendar sync
 - [ ] Push notifications
+
+> **Not on the roadmap:** multi-household SaaS within a single shared deployment. The app is single-tenant-per-deployment by design. A second household that wants to use the app gets its own independent deployment (separate Fly app, DB, Redis, R2 bucket, Vercel project). Multi-tenant shared hosting would require re-architecting the data model and auth boundary and is explicitly deferred indefinitely.
 
 ### v1.3 (Engagement)
 
