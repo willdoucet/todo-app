@@ -142,68 +142,56 @@
 
 ---
 
-## 3. Phase 2: CI/CD & Deployment
+## 3. Phase 2: v1 Productionization (8-milestone plan)
 
-**Goal:** Automated testing, deployment pipeline, and easy access for users.
+**Goal:** Take the repo from local-only `docker-compose` dev state to a secure v1 production deployment.
 
-### Step 3.1: CI Pipeline Enhancement
+> **Authoritative source of truth:** [`.claude/plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md`](./plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md).
+> This section summarizes milestones; the plan owns scope, verification, and deferrals. Anything the plan and this section disagree on, the plan wins.
 
-**Files to modify:**
-- `.github/workflows/test.yml`
+### Locked architecture
 
-**Tasks:**
-- [ ] Ensure all tests run on every PR
-- [ ] Add linting step (ESLint + Python linting)
-- [ ] Add type checking if applicable
-- [ ] Block merge on test failure
-- [ ] Add test coverage reporting
-- [ ] **Visual regression test infrastructure** — Playwright + geometric-invariant tests for mealboard surface. Plan: [`.claude/plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md`](./plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md). Status: CEO-reviewed 2026-04-20 (HOLD SCOPE, clean). Awaiting eng review. Introduces `frontend-preview` + `frontend-visual` + `api-test` docker-compose services under `profiles: [visual-test]`, new `visual-tests` parallel CI job, 4 canonical-state specs. Geometric-first (bbox deltas across hover/rest/exit) rather than pixel screenshots — deterministic without font-rendering Docker wrestling. First-land covers mealboard planner only (1440×900); mobile + other surfaces deferred to follow-up TODOs.
+- Frontend: Vercel SPA at `todo.williamdoucet.dev`
+- Backend: Fly.io with `web` + `worker` + `beat` process groups at `api.todo.williamdoucet.dev`
+- Database: Fly managed Postgres
+- Broker/result backend: Upstash Redis (TLS: `rediss://`)
+- File storage: Cloudflare R2 (single provider — no S3 fallback)
+- Tenancy: single-tenant per household (one deployment per family)
+- Auth: custom first-party, email + password, JWT access token + `__Host-refresh` HttpOnly cookie
+- Merge strategy: squash-and-merge on `master`; direct push blocked by branch protection
 
-### Step 3.2: CD Pipeline Setup
+### Milestone sequence
 
-**Files to create:**
-- `.github/workflows/deploy.yml`
-- `fly.toml` or equivalent hosting config
+1. **M1 `prod-contract-freeze`** (this milestone) — doc alignment; enable `master` branch protection; configure squash-merge.
+2. **M2 `prod-deploy-skeleton`** — provision Fly + Upstash + R2 + Vercel + DNS; `/healthz`; Cloudflare Access edge gate; `/plumbing-test` proves the split-origin cookie + CORS + preflight flow end-to-end before any auth code depends on it.
+3. **M3 `prod-auth-backend-foundation`** — auth models + migrations; argon2 password hashing; `/auth/register` (gated by `HOUSEHOLD_ACCESS_KEY` + "no existing account"); `/auth/login`; `/auth/refresh` (60s rotation grace window); `/auth/logout`; `/auth/status`; refresh-token SHA-256 hash at rest; session-version column for immediate post-rotation access revocation.
+4. **M4 `prod-auth-frontend-session`** — centralized `frontend/src/lib/api.js` (all 27 existing `VITE_API_BASE_URL` callers migrated); unified `/auth` portal; in-memory access token (never `localStorage`/`sessionStorage`); boot-sequence refresh; `return_to` redirect; silent-refresh on 401 for long-running requests.
+5. **M5 `prod-auth-enforcement`** — **ships in two PRs**: (1) wrap backend routes with auth dependency + frontend route protection behind the edge gate, verify end-to-end; (2) remove the Cloudflare Access policy and `/plumbing-test*` endpoints.
+6. **M6 `prod-config-health`** — residual localhost cleanup only (may be skipped if `grep -r "localhost" frontend/src backend/app` is already clean at end of M5).
+7. **M7 `prod-r2-storage`** — storage abstraction; backend-proxied uploads with atomic R2+DB transaction; UUID-keyed R2 objects; private-read with first-party auth; bundled stock icons get an authenticated backend route (not R2); remove `/uploads` StaticFiles mount.
+8. **M8 `prod-launch-release`** — manual release runbook committed to the repo; smoke + rollback checklists; operator password-rotation CLI (runnable via `fly ssh console`); backup-restore dry-run against a scratch Fly Postgres; `fly scale show` verifies `web=1, worker=1, beat=1` before closing any release.
 
-**Tasks:**
-- [ ] Choose hosting platform (Fly.io recommended)
-- [ ] Create production environment
-- [ ] Set up managed PostgreSQL
-- [ ] Configure environment variables securely
-- [ ] Build and push Docker images on main branch merge
-- [ ] Auto-deploy to staging
-- [ ] Manual promotion to production (or auto with approval)
+### Explicitly deferred to v1.1
 
-### Step 3.3: Production Infrastructure
+- `.github/workflows/deploy.yml` as an approval-gated release workflow — v1 uses the manual runbook from M8 instead. Running the runbook 2-3 times by hand surfaces real procedure gaps that a YAML workflow would otherwise hide.
+- Vercel PR preview deployments — preview URLs run on `*.vercel.app`, which cannot receive the `__Host-refresh` cookie scoped to `api.todo.williamdoucet.dev`. Previews would degrade to unauthenticated CSS smoke-checks only.
+- `visual-tests` promoted to a required check on `master` (stays informational until soaked).
+- Sentry / structured JSON logging / app-layer rate limiting beyond the M2 Cloudflare edge rule.
+- Password-rotation CLI exposed as a `workflow_dispatch` action (M8 ships the CLI; `fly ssh console` is enough for v1).
+- Any other hardening the first few releases reveal is actually necessary.
 
-**Tasks:**
-- [ ] Set up production PostgreSQL (Fly Postgres / Supabase / Railway)
-- [ ] Configure S3-compatible storage for uploads (Cloudflare R2 / AWS S3)
-- [ ] Set up SSL certificates (auto-provisioned)
-- [ ] Configure custom domain (optional)
-- [ ] Set up health checks and monitoring
-- [ ] Add error tracking (Sentry)
+### Explicitly out of scope for v1
 
-### Step 3.4: Easy User Access
+- Automated deploy on merge to `master` (manual runbook instead — see M8).
+- Full mirrored staging environment.
+- Multi-household, multi-user-per-household, invite flows, public signup.
+- Magic-link login, self-service password reset, OAuth/social login.
+- Native apps / PWA install.
+- Any storage provider other than Cloudflare R2 (no S3, no AWS fallback — single-provider decision, locked).
 
-**Tasks:**
-- [ ] Deploy to public URL (e.g., familyhub.fly.dev)
-- [ ] Create landing page with app access
-- [ ] Document self-hosting option with Docker Compose
-- [ ] Add one-click deploy buttons (Railway, Render)
-- [ ] Write user onboarding guide
+### Visual regression test infrastructure
 
-**Deployment checklist:**
-```
-[ ] CI tests pass on all PRs
-[ ] CD deploys automatically on main merge
-[ ] Production environment accessible via public URL
-[ ] Database backups configured
-[ ] File uploads working in production
-[ ] SSL/HTTPS enabled
-[ ] Error tracking active
-[ ] Health monitoring in place
-```
+Shipped separately on `mealboard-visual-regression` (merged 2026-04-21, commit `ceb324c`). Plan: [`.claude/plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md`](./plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md). Introduced `frontend-preview` + `frontend-visual` + `api-test` docker-compose services under `profiles: [visual-test]`, a `visual-tests` parallel CI job, and 4 canonical-state specs. Geometric-first (bbox deltas across hover/rest/exit) rather than pixel screenshots. M5 PR #1 must preserve this via the `AUTH_BYPASS_FOR_VISUAL_TESTS=1` flag (gated on `APP_ENV=test`).
 
 ---
 
