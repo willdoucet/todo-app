@@ -12,7 +12,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        # Bumped 15 → 16 in M2 Slice 6 to match prod (docker-compose.yml)
+        # and the new migration-upgrade job below — closes test/prod
+        # version drift.
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -167,3 +170,59 @@ jobs:
         if: always()
         working-directory: backend
         run: docker compose --profile visual-test down -v
+
+  migration-upgrade:
+    # Verifies (1) the full Alembic chain applies cleanly from a fresh
+    # postgres:16 (catches autogenerate-emitted SQL that mismatches Alembic's
+    # actual upgrade path) and (2) the newest revision's down/up symmetry.
+    # Lock-heavy migration quiesce enforcement is M8 runbook scope; this job
+    # only proves Alembic ⇄ schema integrity. Added in M2 Slice 6.
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: migration_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --all-extras
+
+      - name: Apply full migration chain (alembic upgrade head from base)
+        working-directory: backend
+        env:
+          # alembic/env.py uses async_engine_from_config (asyncpg), so the
+          # URL must use the asyncpg driver scheme — sync postgres:// would
+          # crash with NoSuchModuleError.
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/migration_check
+          # FERNET_KEY is read at app-import time; alembic/env.py imports
+          # app.models which transitively touches settings, so the key must
+          # be set even though no Fernet operations run during migrations.
+          FERNET_KEY: ${{ secrets.CI_FERNET_KEY }}
+        run: uv run alembic upgrade head
+
+      - name: Verify newest revision down/up symmetry
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/migration_check
+          FERNET_KEY: ${{ secrets.CI_FERNET_KEY }}
+        run: uv run alembic downgrade -1 && uv run alembic upgrade +1

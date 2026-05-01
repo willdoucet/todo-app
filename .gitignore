@@ -35,3 +35,4 @@ todo-app-notes/
 .DS_Store
 .playwright-mcp/
 *.png
+.vercel

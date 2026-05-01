@@ -1,0 +1,68 @@
+# Fly.io deploy config for the mealy-app-prod API.
+# Process groups: web (uvicorn), worker (celery jobs), beat (celery scheduler).
+
+app = "mealy-app-prod"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+  # Pin the Dockerfile build stage. Fly auto-selects the last FROM stage
+  # otherwise — any future stage added after `prod` would silently ship.
+  build_target = "prod"
+
+[deploy]
+  # Runs against the new image before web takes traffic. Migrations must be
+  # backward-compatible: a release_command failure leaves the previous
+  # image serving.
+  release_command = "alembic upgrade head"
+
+[processes]
+  web = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  worker = "celery -A app.celery_app worker --loglevel=info --concurrency=2"
+  # Beat must be exactly one process — multiple beat instances would fire
+  # the iCloud sync schedule N times every 10 min and corrupt task state.
+  # Singleton invariant enforced via `fly scale count beat=1` post-deploy.
+  # --schedule writes the shelve DB to /tmp because /app is owned by root
+  # in the prod image (USER appuser cannot write the default cwd location).
+  beat = "celery -A app.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+  processes = ["web"]
+  # Web stays warm: cold-start would break M4's <300ms refresh budget.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.http_checks]]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "get"
+    path = "/healthz"
+    protocol = "http"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["web"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  processes = ["worker"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  processes = ["beat"]
