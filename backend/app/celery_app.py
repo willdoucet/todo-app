@@ -1,4 +1,5 @@
 import os
+import ssl
 from celery import Celery
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -26,6 +27,18 @@ celery_app.conf.update(
             "soft_time_limit": 110,
         },
     },
+    **(
+        # Celery refuses to boot with broker_use_ssl + redis:// (mismatch
+        # error) AND refuses with rediss:// + no ssl_cert_reqs (missing-reqs
+        # error). Gate the SSL config on the URL scheme so dev (redis://) and
+        # prod (rediss:// via Upstash) both boot from the same code.
+        {
+            "broker_use_ssl": {"ssl_cert_reqs": ssl.CERT_REQUIRED},
+            "redis_backend_use_ssl": {"ssl_cert_reqs": ssl.CERT_REQUIRED},
+        }
+        if REDIS_URL.startswith("rediss://")
+        else {}
+    ),
     beat_schedule={
         "sync-icloud-calendars": {
             "task": "app.tasks.sync_all_icloud_integrations",

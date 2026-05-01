@@ -151,8 +151,8 @@
 
 ### Locked architecture
 
-- Frontend: Vercel SPA at `todo.williamdoucet.dev`
-- Backend: Fly.io with `web` + `worker` + `beat` process groups at `api.todo.williamdoucet.dev`
+- Frontend: Vercel SPA at `mealy.dev`
+- Backend: Fly.io with `web` + `worker` + `beat` process groups at `api.mealy.dev`
 - Database: Fly managed Postgres
 - Broker/result backend: Upstash Redis (TLS: `rediss://`)
 - File storage: Cloudflare R2 (single provider — no S3 fallback)
@@ -174,7 +174,7 @@
 ### Explicitly deferred to v1.1
 
 - `.github/workflows/deploy.yml` as an approval-gated release workflow — v1 uses the manual runbook from M8 instead. Running the runbook 2-3 times by hand surfaces real procedure gaps that a YAML workflow would otherwise hide.
-- Vercel PR preview deployments — preview URLs run on `*.vercel.app`, which cannot receive the `__Host-refresh` cookie scoped to `api.todo.williamdoucet.dev`. Previews would degrade to unauthenticated CSS smoke-checks only.
+- Vercel PR preview deployments — preview URLs run on `*.vercel.app`, which cannot receive the `__Host-refresh` cookie scoped to `api.mealy.dev`. Previews would degrade to unauthenticated CSS smoke-checks only.
 - `visual-tests` promoted to a required check on `master` (stays informational until soaked).
 - Sentry / structured JSON logging / app-layer rate limiting beyond the M2 Cloudflare edge rule.
 - Password-rotation CLI exposed as a `workflow_dispatch` action (M8 ships the CLI; `fly ssh console` is enough for v1).

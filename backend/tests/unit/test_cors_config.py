@@ -6,6 +6,8 @@ pin that contract so the prod default (unset env var → localhost dev
 servers only) stays unchanged as the parser evolves.
 """
 
+import pytest
+
 from app.main import _parse_cors_origins
 
 
@@ -54,4 +56,32 @@ class TestParsing:
         assert _parse_cors_origins("http://a.com,,http://b.com") == [
             "http://a.com",
             "http://b.com",
+        ]
+
+
+class TestProductionFailFast:
+    """APP_ENV=production must turn a missing/empty CORS_ALLOW_ORIGINS into a
+    hard import-time error so a missing-secret deploy can't silently fall
+    back to localhost defaults and reject every real cross-origin XHR."""
+
+    def test_unset_origins_raises_in_production(self):
+        with pytest.raises(RuntimeError, match="CORS_ALLOW_ORIGINS must be set"):
+            _parse_cors_origins(None, app_env="production")
+
+    def test_set_origins_does_not_raise_in_production(self):
+        result = _parse_cors_origins(
+            "https://mealy.dev", app_env="production"
+        )
+        assert result == ["https://mealy.dev"]
+
+    def test_unset_origins_returns_defaults_in_dev(self):
+        # APP_ENV unset → existing dev behavior preserved.
+        assert _parse_cors_origins(None, app_env=None) == [
+            "http://localhost:5173",
+            "http://localhost:3000",
+        ]
+        # APP_ENV=development explicitly → also dev behavior.
+        assert _parse_cors_origins(None, app_env="development") == [
+            "http://localhost:5173",
+            "http://localhost:3000",
         ]
