@@ -162,8 +162,8 @@
 
 ### Milestone sequence
 
-1. **M1 `prod-contract-freeze`** (this milestone) — doc alignment; enable `master` branch protection; configure squash-merge.
-2. **M2 `prod-deploy-skeleton`** — provision Fly + Upstash + R2 + Vercel + DNS; `/healthz`; Cloudflare Access edge gate; `/plumbing-test` proves the split-origin cookie + CORS + preflight flow end-to-end before any auth code depends on it.
+1. **M1 `prod-contract-freeze`** ✓ shipped 2026-04-22 (#25) — doc alignment; enable `master` branch protection; configure squash-merge.
+2. **M2 `prod-deploy-skeleton`** ✓ shipped 2026-05-01 (#26) — provision Fly + Upstash + R2 + Vercel + DNS; `/healthz`; Cloudflare Access edge gate; `/plumbing-test` proves the split-origin cookie + CORS + preflight flow end-to-end before any auth code depends on it.
 3. **M3 `prod-auth-backend-foundation`** — auth models + migrations; argon2 password hashing; `/auth/register` (gated by `HOUSEHOLD_ACCESS_KEY` + "no existing account"); `/auth/login`; `/auth/refresh` (60s rotation grace window); `/auth/logout`; `/auth/status`; refresh-token SHA-256 hash at rest; session-version column for immediate post-rotation access revocation.
 4. **M4 `prod-auth-frontend-session`** — centralized `frontend/src/lib/api.js` (all 27 existing `VITE_API_BASE_URL` callers migrated); unified `/auth` portal; in-memory access token (never `localStorage`/`sessionStorage`); boot-sequence refresh; `return_to` redirect; silent-refresh on 401 for long-running requests.
 5. **M5 `prod-auth-enforcement`** — **ships in two PRs**: (1) wrap backend routes with auth dependency + frontend route protection behind the edge gate, verify end-to-end; (2) remove the Cloudflare Access policy and `/plumbing-test*` endpoints.
