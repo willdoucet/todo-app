@@ -11,8 +11,8 @@ The bypass-application section is removed in M5 PR #2 when the
 feeds into the M8 runbook drift-detection work.
 
 Last verified: 2026-05-01 by willdoucet
-Cloudflare account ID: <TODO — Cloudflare dashboard right sidebar (32-char hex)>
-Zone: mealy.dev (zone ID: <TODO — Cloudflare zone overview right sidebar (32-char hex)>)
+Cloudflare account ID: f7f2bff79b487f5d1552a1c5eebd3992
+Zone: mealy.dev (zone ID: f188a6cea2ead74660b191d435cb370b)
 Cloudflare Access team subdomain: mealyapp.cloudflareaccess.com
 
 ## DNS records (Cloudflare → mealy.dev zone)
@@ -32,7 +32,7 @@ setting.
 
 ## Access — Application 1: Edge gate (full app)
 
-Name: <TODO — name as configured (runbook suggested "Mealy M2-M5 Edge Gate")>
+Name: Mealy Edge Gate
 Application domains:
   - mealy.dev (no path — matches all paths)
   - api.mealy.dev (no path — matches all paths)
@@ -51,7 +51,7 @@ paths is a SECOND self-hosted Application with the path-specific domains
 and a Bypass policy. Cloudflare evaluates the more-specific path-bound
 Application before the broader Edge gate Application.
 
-Name: <TODO — name as configured (runbook suggested "Mealy plumbing-test bypass")>
+Name: Bypass plumbing-test
 Application domains:
   - api.mealy.dev / Path: plumbing-test
   - api.mealy.dev / Path: plumbing-test/read
