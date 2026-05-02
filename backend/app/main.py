@@ -1,18 +1,55 @@
-from fastapi import FastAPI, Depends
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
 from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries, plumbing_test
+from app.auth import router as auth_router
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 
 # Ensure uploads directory exists
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Task & Recipe API")
+
+def _initialize_auth_config() -> None:
+    """Lifespan startup hook for the M3 auth subsystem.
+
+    In production (``APP_ENV=production``), fail closed: any
+    :class:`AuthConfigError` propagates and crashes startup — Fly's
+    restart loop will keep the deploy unhealthy until secrets are fixed.
+
+    In dev / local docker, try to load; if env vars are missing or
+    invalid, leave auth unconfigured. Auth endpoints will surface
+    :class:`AuthConfigError` at call time (other routes work fine), so a
+    contributor who hasn't set ``JWT_SECRET_KEY`` / ``HOUSEHOLD_ACCESS_KEY``
+    can still run the existing app.
+    """
+    from app.auth.config import AuthConfigError, configure, load_from_env
+
+    if os.getenv("APP_ENV") == "production":
+        configure(load_from_env())
+        return
+
+    try:
+        configure(load_from_env())
+    except AuthConfigError:
+        # Dev: contributor hasn't set auth env vars yet. Auth endpoints
+        # will surface a clear error if hit; other routes are unaffected.
+        pass
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _initialize_auth_config()
+    yield
+
+
+app = FastAPI(title="Task & Recipe API", lifespan=lifespan)
 
 
 def _parse_cors_origins(raw: str | None, app_env: str | None = None) -> list[str]:
@@ -52,6 +89,31 @@ app.add_middleware(
     max_age=3600,
 )
 
+
+# Production host gate — reject direct Fly-hostname traffic for any
+# non-/healthz path. Cloudflare Access + the /auth/* WAF rule are
+# load-bearing through M5; if a caller can hit *.fly.dev directly, both
+# are bypassed (Adversarial review run 2). The gate is a no-op outside
+# production so dev / test can continue to use arbitrary Host headers.
+@app.middleware("http")
+async def production_host_gate(request: Request, call_next):
+    if os.getenv("APP_ENV") != "production":
+        return await call_next(request)
+
+    # /healthz must remain reachable for Fly's TCP health checks.
+    if request.url.path == "/healthz":
+        return await call_next(request)
+
+    allowed = os.getenv("PUBLIC_API_HOST", "").strip().lower()
+    # Strip port; Host headers may carry one (e.g. ``api.mealy.dev:443``).
+    incoming = request.headers.get("host", "").strip().lower().split(":")[0]
+    if not allowed or incoming != allowed:
+        return JSONResponse(
+            status_code=421,
+            content={"detail": "host_not_allowed"},
+        )
+    return await call_next(request)
+
 # Include routers BEFORE mounting StaticFiles so the specific
 # POST /uploads/item-icon route wins over the static mount, which would
 # otherwise intercept all /uploads/* requests and return 405 for non-GET.
@@ -70,6 +132,7 @@ app.include_router(sections.router)
 app.include_router(meal_slot_types.router)
 app.include_router(meal_entries.router)
 app.include_router(plumbing_test.router)
+app.include_router(auth_router)
 
 # Mount static files AFTER routers so that specific router paths (e.g.
 # POST /uploads/item-icon) take precedence over the catch-all static mount.

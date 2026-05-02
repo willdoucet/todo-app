@@ -119,6 +119,16 @@
 | `beautifulsoup4` | >=4.12 | HTML cleaning before LLM extraction |
 | `httpx` | >=0.27 | HTTP client for fetching web pages (prod dep; also used by the test suite) |
 
+### Auth (M3)
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `argon2-cffi` | >=23.0 | OWASP-recommended password hashing for the singleton household login |
+| `PyJWT` | >=2.8 | HS256 JWT encode/decode for short-lived access tokens |
+| `email-validator` | >=2.0 | Backs Pydantic's `EmailStr` field on `RegisterIn` / `LoginIn` |
+
+Related env vars: `JWT_SECRET_KEY` (required at runtime in production — must be ≥32 chars and pass the placeholder deny-list), `HOUSEHOLD_ACCESS_KEY` (required at runtime in production — gates first-run register), `APP_ENV` (set to `production` to enable the production host gate + fail-closed secret validation), `PUBLIC_API_HOST` (used by the host gate to identify the legitimate public API domain in production).
+
 Related env vars: `ANTHROPIC_API_KEY` (required at runtime for `/items/import-from-url` worker + `/items/suggest-icon`), `AI_MODEL_NAME` (default `claude-haiku-4-5-20251001`). Both are read by `app/services/ai_client.py`.
 
 Build note: the `Dockerfile` builder stage installs `libxml2-dev`, `libxslt-dev`, and `gcc` so `lxml` (transitive dep of `recipe-scrapers`) compiles on `python:3.12-slim`.
