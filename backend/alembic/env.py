@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 import os
 from app.models import Base
+from app.auth import models as _auth_models  # noqa: F401  # Eng review 1: registers User + RefreshToken with Base.metadata so autogenerate sees them.
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

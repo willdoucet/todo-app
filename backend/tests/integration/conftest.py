@@ -74,8 +74,11 @@ async def db_session(postgres_url):
     # Create fresh engine for this test
     engine = create_async_engine(postgres_url, echo=False)
 
-    # Create tables
+    # Create tables. The citext extension is required by users.email (M3
+    # auth tables) — install idempotently before create_all so the
+    # CITEXT column DDL doesn't fail on a fresh test database.
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS citext"))
         await conn.run_sync(Base.metadata.create_all)
 
     # Create session

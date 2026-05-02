@@ -54,6 +54,14 @@ services:
       - FERNET_KEY=${FERNET_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - AI_MODEL_NAME=${AI_MODEL_NAME:-claude-haiku-4-5-20251001}
+      # M3 auth secrets — dev only. Production sets these via
+      # `fly secrets set`, never via docker-compose. Empty defaults keep
+      # the dev container bootable without these set; auth endpoints
+      # surface a clear AuthConfigError when called until provided.
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - HOUSEHOLD_ACCESS_KEY=${HOUSEHOLD_ACCESS_KEY:-}
+      - APP_ENV=${APP_ENV:-development}
+      - PUBLIC_API_HOST=${PUBLIC_API_HOST:-}
     depends_on:
       db:
         condition: service_healthy

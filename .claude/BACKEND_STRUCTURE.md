@@ -34,6 +34,8 @@
 | **Calendar** | Individual iCloud calendars/reminder lists | `calendar_url`, `name`, `color`, `is_todo`, FK→CalendarIntegration (cascade) |
 | **CalendarIntegration** | External calendar connections | `provider`, `email`, `encrypted_password`, `status`, `reminders_status`, `sync_range_*_days` |
 | **AppSettings** | Singleton app config | `timezone` (IANA name, default UTC) |
+| **User** | Singleton household login (M3 — 0 or 1 rows in v1) | `email` (CITEXT, unique), `password_hash` (argon2id PHC), `session_version` (bumped on operator password rotation), timestamps |
+| **RefreshToken** | Append-only refresh-token rotation chain (M3) | `user_id` FK CASCADE, `token_hash` BYTEA (32-byte SHA-256, unique), `successor_id` self-FK SET NULL (rotation chain pointer, `use_alter=True`), `issued_at`, `expires_at`, `superseded_at`, `revoked_at` |
 
 ### Entity Relationship Diagram
 
@@ -675,6 +677,47 @@ Post-refactor, meal entries reference items via a single `item_id` field (the ol
 |--------|----------|-------------|
 | POST | `/upload` | Upload file (multipart/form-data) |
 
+### Auth (M3)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Create the singleton household account. Gated by `HOUSEHOLD_ACCESS_KEY` (constant-time compare via `hmac.compare_digest`) AND a "no existing account" check protected by a transaction-scoped pg advisory lock. Returns 200 + access JWT in body + `__Host-refresh` cookie. Wrong key / account-exists / concurrent-loser all return byte-identical `401 {"detail": "registration_unavailable"}`. Password >128 chars → 422. |
+| POST | `/auth/login` | Email + password authentication. Same-client login rotation: if the request carries the user's own refresh cookie, only that one row is revoked (multi-device household preserved). Unknown email / wrong password / overlong password all return byte-identical `401 {"detail": "invalid_credentials"}` and log `reason=bad_credentials`. `password_hasher.verify` is called on every attempt (timing-oracle defense via lazy-cached dummy hash). |
+| POST | `/auth/refresh` | Rotate the refresh cookie. Cases A/B/C documented in `app/auth/service.py`: Case A = fresh cookie → new cookie + new access token; Case B = superseded within 60s grace → access token only, NO Set-Cookie; Case C = past grace → 401. Row-locked (SELECT FOR UPDATE) for serialization across concurrent refreshes. Cookie unknown / expired / revoked / past grace / chain-corrupt all return byte-identical `401 {"detail": "refresh_failed"}`. |
+| POST | `/auth/logout` | Bearer-token-required (CSRF defense — cookie-only logout is rejected). Validates the access JWT against live `users.session_version` BEFORE any mutation. Revokes ALL active refresh tokens for the user. Returns 204 with `Set-Cookie: __Host-refresh=; Max-Age=0` to clear the browser cookie. Stale bearer after operator password rotation returns 401 and does NOT revoke any newly-issued valid refresh token. |
+| GET | `/auth/status` | Public — no auth. Returns `{"account_exists": bool}`. Drives the M4 portal's "Create account" toggle. No version / hostname / config leakage. |
+
+**Endpoint contract notes:**
+- All auth-related failures return `401`; only body-shape failures return `422` (Pydantic).
+- Every `/auth/*` request emits exactly one structured JSON log line at completion via `app.auth.logging_utils.emit_log_line`. Fields: `event`, `outcome`, `reason`, `user_id`, `ip` (sanitized via CF-Connecting-IP → XFF first-entry → 128-char truncate), `request_id` (sanitized via allowlist → UUID4 fallback), `latency_ms`.
+- Refresh tokens are NOT JWTs — they're opaque `secrets.token_urlsafe(32)` strings. Their identity is the SHA-256 hash row in `refresh_tokens`. Plaintext is never persisted.
+- Access JWTs are HS256 with claims `{sub, iat, exp, session_version}`. 15-min TTL.
+- The `__Host-refresh` cookie is `HttpOnly`, `Secure`, `Path=/`, `SameSite=Lax`, no `Domain` (host-only on `api.<domain>`), 30-day Max-Age.
+- `app/auth/dependencies.py::get_current_user` is shipped + unit-tested but NOT wired into any non-auth route in M3. M5 PR #1 wires it across the API.
+
+#### Production host gate
+
+A FastAPI middleware in `app/main.py` rejects direct Fly-hostname traffic for any non-`/healthz` path when `APP_ENV=production`. Cloudflare Access + the `/auth/*` WAF rule are load-bearing through M5; without this gate, callers could hit `*.fly.dev` directly and bypass both. Configured via `PUBLIC_API_HOST=api.mealy.dev`. Disabled in dev/test so contributors can use any Host header. Returns `421 Misdirected Request` on rejection.
+
+#### Auth subsystem layout (`app/auth/`)
+
+```
+backend/app/auth/
+├── __init__.py        # Re-exports `router` + `get_current_user` (the only public surface)
+├── config.py          # AuthConfig dataclass + load_from_env + configure/get_settings/reset
+├── models.py          # User + RefreshToken (SQLAlchemy ORM, registered with shared Base)
+├── schemas.py         # RegisterIn, LoginIn, AccessTokenOut, AuthStatusOut (Pydantic)
+├── tokens.py          # JWT encode/decode + opaque refresh-token plaintext + SHA-256 hash helpers
+├── passwords.py       # PasswordHasher injectable + verify_or_dummy + lazy dummy-hash cache
+├── errors.py          # Single source for byte-identical 401 responses (with log_reason attr)
+├── service.py         # Async business logic (register, login, refresh case A/B/C, logout, status)
+├── dependencies.py    # validate_bearer + get_current_user (FastAPI dep wrapper)
+├── routes.py          # POST /auth/register, /login, /refresh, /logout, GET /auth/status
+└── logging_utils.py   # emit_log_line + IP/request-id sanitization
+```
+
+Audit surface is intentionally one folder. Production secret loading runs in lifespan (fail-closed); test code calls `auth_config.configure(AuthConfig(...))` directly without reading process env.
+
 **Response:**
 ```json
 {"filename": "photo_123456.jpg", "url": "/uploads/photo_123456.jpg"}
@@ -720,6 +763,19 @@ backend/
 │   │
 │   ├── utils/
 │   │   └── encryption.py     # Fernet encrypt/decrypt for stored passwords
+│   │
+│   ├── auth/                 # M3 first-party auth subsystem (audit-surface package)
+│   │   ├── __init__.py       # Re-exports `router` + `get_current_user`
+│   │   ├── config.py         # AuthConfig + load_from_env + fail-closed validation
+│   │   ├── models.py         # User + RefreshToken (registered with shared Base)
+│   │   ├── schemas.py        # RegisterIn, LoginIn, AccessTokenOut, AuthStatusOut
+│   │   ├── tokens.py         # JWT encode/decode + refresh-token plaintext + SHA-256 hash
+│   │   ├── passwords.py      # PasswordHasher injectable + verify_or_dummy + dummy-cache
+│   │   ├── errors.py         # Single source for byte-identical 401 responses
+│   │   ├── service.py        # Async business logic (register/login/refresh/logout/status)
+│   │   ├── dependencies.py   # validate_bearer + get_current_user (NOT applied in M3)
+│   │   ├── routes.py         # /auth/* endpoints
+│   │   └── logging_utils.py  # emit_log_line + IP/request-id sanitization
 │   │
 │   └── routes/
 │       ├── __init__.py
