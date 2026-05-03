@@ -54,7 +54,11 @@ primary_region = "sjc"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"
+  # M3 plan requires web ≥1 GB: argon2id at OWASP defaults consumes
+  # ~64 MiB per concurrent hash (asyncio.to_thread offload, default
+  # threadpool ~5 slots → ~320 MiB worst case + ~150 MiB for the rest
+  # of the app). Below 1 GB the web VM OOMs under any login burst.
+  memory = "1024mb"
   processes = ["web"]
 
 [[vm]]
