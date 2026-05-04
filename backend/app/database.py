@@ -6,7 +6,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Only create engine if DATABASE_URL is set (lazy initialization)
 if DATABASE_URL:
-    engine = create_async_engine(DATABASE_URL, echo=True)
+    engine = create_async_engine(
+        DATABASE_URL,
+        echo=True,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+    )
     AsyncSessionLocal = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
