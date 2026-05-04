@@ -36,3 +36,6 @@ todo-app-notes/
 .playwright-mcp/
 *.png
 .vercel
+
+# Curl cookie jars left over from auth smoke tests (contain refresh-token plaintexts)
+backend/cookies-*.txt
