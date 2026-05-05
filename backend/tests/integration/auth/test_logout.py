@@ -53,10 +53,28 @@ async def test_logout_clears_cookie_with_correct_attributes(client, register_use
     assert "Path=/" in set_cookie
     assert "Secure" in set_cookie
     assert "HttpOnly" in set_cookie
-    assert "SameSite=lax" in set_cookie
+    assert "SameSite=strict" in set_cookie
     assert "Domain=" not in set_cookie
     # Either Max-Age=0 or expires-in-the-past.
     assert ("Max-Age=0" in set_cookie) or ("expires=" in set_cookie.lower())
+
+
+@pytest.mark.asyncio
+async def test_logout_bumps_session_version_so_old_access_token_is_dead(
+    client, register_user, db_session
+):
+    access, _, _ = await register_user("alice@example.com", "pwd-1234567890")
+
+    r = await client.post("/auth/logout", headers=_bearer(access))
+    assert r.status_code == 204
+
+    user = (await db_session.execute(select(User))).scalar_one()
+    assert user.session_version == 1
+
+    # The same access token must no longer validate after logout. This is the
+    # server-side backstop for stale tabs that have not yet heard about logout.
+    second = await client.post("/auth/logout", headers=_bearer(access))
+    assert second.status_code == 401
 
 
 @pytest.mark.asyncio

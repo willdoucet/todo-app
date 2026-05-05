@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import MemberAvatar from '../shared/MemberAvatar'
 import ItemIcon from './ItemIcon'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
  * Meal card for the swimlane grid. Branches on `entry.item?.item_type`:
@@ -112,7 +110,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     setIsWorking(true)
     try {
       const markingCooked = !entry.was_cooked
-      const res = await axios.patch(`${API_BASE}/meal-entries/${entry.id}`, {
+      const res = await api.patch(`/meal-entries/${entry.id}`, {
         was_cooked: markingCooked,
       })
       // Pulse only on false → true (marking cooked), not on unmarking
@@ -139,7 +137,7 @@ export default function MealCard({ entry, slotType, familyMembers, onUpdated, on
     if (isWorking) return
     setIsWorking(true)
     try {
-      const res = await axios.delete(`${API_BASE}/meal-entries/${entry.id}`)
+      const res = await api.delete(`/meal-entries/${entry.id}`)
       // New backend: `{ entry, undo_token, expires_at }`.
       // Mixed-version guard: if `undo_token` is missing (briefly-old backend),
       // degrade to the old hard-delete UX rather than blocking the user.

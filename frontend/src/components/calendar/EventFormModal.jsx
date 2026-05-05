@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import { formatDateKey, convertTime } from './calendarUtils'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 function extractErrorMessage(err, fallback) {
   const detail = err.response?.data?.detail
@@ -142,9 +140,9 @@ export default function EventFormModal({
 
     try {
       if (initialEvent) {
-        await axios.patch(`${API_BASE}/calendar-events/${initialEvent.id}`, payload)
+        await api.patch(`/calendar-events/${initialEvent.id}`, payload)
       } else {
-        await axios.post(`${API_BASE}/calendar-events`, payload)
+        await api.post(`/calendar-events`, payload)
       }
       onSaved()
       onClose()
@@ -168,7 +166,7 @@ export default function EventFormModal({
 
     setLoading(true)
     try {
-      await axios.delete(`${API_BASE}/calendar-events/${initialEvent.id}`)
+      await api.delete(`/calendar-events/${initialEvent.id}`)
       onSaved()
       onClose()
     } catch (err) {

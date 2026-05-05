@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import TodoForm from '../lists/TodoForm'
 import { formatDateKey } from './calendarUtils'
 import useFormShortcut from '../../hooks/useFormShortcut'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
  * Modal wrapping TodoForm for creating/editing tasks from the calendar.
@@ -30,7 +28,7 @@ export default function TaskFormModal({
   useEffect(() => {
     if (isOpen) {
       setError(null)
-      axios.get(`${API_BASE}/lists`).then((res) => {
+      api.get(`/lists`).then((res) => {
         setLists(res.data)
         if (initialTask) {
           setSelectedListId(initialTask.list_id)
@@ -52,9 +50,9 @@ export default function TaskFormModal({
         list_id: selectedListId,
       }
       if (initialTask) {
-        await axios.patch(`${API_BASE}/tasks/${initialTask.id}`, payload)
+        await api.patch(`/tasks/${initialTask.id}`, payload)
       } else {
-        await axios.post(`${API_BASE}/tasks`, payload)
+        await api.post(`/tasks`, payload)
       }
       onSaved()
       onClose()
@@ -70,7 +68,7 @@ export default function TaskFormModal({
     if (!initialTask) return
     setLoading(true)
     try {
-      await axios.delete(`${API_BASE}/tasks/${initialTask.id}`)
+      await api.delete(`/tasks/${initialTask.id}`)
       onSaved()
       onClose()
     } catch (err) {

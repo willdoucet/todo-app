@@ -1,45 +1,56 @@
-// Pins both branches of the VITE_M2_SHELL env-gate in App.jsx. A future
-// polarity flip (=== 'true' → !== 'true'), a typo ('TRUE' instead of
-// 'true'), or a debug-forgotten unconditional return <PlumbingShell />
-// would silently ship without a test like this; ditto a missing import.
-//
-// Page imports are stubbed because rendering the real CalendarPage tree
-// would require DarkModeProvider/ToastProvider context that's wired in
-// main.jsx, not App.jsx. The env-gate is App.jsx's job; pages are
-// out-of-scope.
-//
-// Deleted in M5 PR #2 alongside PlumbingShell.jsx and the App.jsx guard.
+// SC #39 — VITE_M2_SHELL=true bypasses the data router entirely. Pins both
+// branches of the env-gate that now lives in AppEntry.jsx (lifted out of the
+// deleted App.jsx). M5 PR #2 deletes this test alongside PlumbingShell + the
+// AppEntry gate.
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
 
-vi.mock('../../src/components/calendar/CalendarPage', () => ({
-  default: () => <div>__CalendarPage_stub__</div>,
+const { routerProviderSpy } = vi.hoisted(() => ({
+  routerProviderSpy: vi.fn(),
 }))
-vi.mock('../../src/pages/ListsPage', () => ({ default: () => null }))
-vi.mock('../../src/pages/ResponsibilitiesPage', () => ({ default: () => null }))
-vi.mock('../../src/pages/FamilyMembersPage', () => ({ default: () => null }))
-vi.mock('../../src/pages/MealboardPage', () => ({ default: () => null }))
 
-import App from '../../src/App'
+vi.mock('../../src/lib/router', () => ({
+  router: { navigate: vi.fn() },
+}))
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    RouterProvider: (props) => {
+      routerProviderSpy(props)
+      return <div>__RouterProvider_stub__</div>
+    },
+  }
+})
 
-describe('App VITE_M2_SHELL env-gate', () => {
+import AppEntry from '../../src/AppEntry'
+
+describe('AppEntry VITE_M2_SHELL env-gate', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
+    routerProviderSpy.mockClear()
   })
 
   it('renders PlumbingShell when VITE_M2_SHELL is the string "true"', () => {
     vi.stubEnv('VITE_M2_SHELL', 'true')
-    render(<App />)
+    render(<AppEntry />)
     expect(screen.getByText(/M2 plumbing alive/i)).toBeInTheDocument()
-    expect(screen.queryByText('__CalendarPage_stub__')).not.toBeInTheDocument()
+    expect(screen.queryByText('__RouterProvider_stub__')).not.toBeInTheDocument()
   })
 
-  it('renders the Routes tree when VITE_M2_SHELL is unset', () => {
+  it('renders the data router when VITE_M2_SHELL is unset', () => {
     vi.stubEnv('VITE_M2_SHELL', '')
-    render(<App />, { wrapper: MemoryRouter })
-    expect(screen.getByText('__CalendarPage_stub__')).toBeInTheDocument()
+    render(<AppEntry />)
+    expect(screen.getByText('__RouterProvider_stub__')).toBeInTheDocument()
     expect(screen.queryByText(/M2 plumbing alive/i)).not.toBeInTheDocument()
+  })
+
+  it('passes HydrateFallback as the CSR router fallback', () => {
+    vi.stubEnv('VITE_M2_SHELL', '')
+    render(<AppEntry />)
+    expect(routerProviderSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackElement: expect.any(Object) })
+    )
   })
 })

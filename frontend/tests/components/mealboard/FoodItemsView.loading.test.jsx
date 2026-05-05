@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
-import axios from 'axios'
+import { api } from '../../../src/lib/api'
 import FoodItemsView from '../../../src/components/mealboard/FoodItemsView'
 import { UndoToastProvider } from '../../../src/components/shared/UndoToast'
 
-vi.mock('axios')
+vi.mock('../../../src/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() } }))
 
 function renderWithProviders(ui) {
   return render(<UndoToastProvider>{ui}</UndoToastProvider>)
@@ -20,7 +20,7 @@ describe('FoodItemsView loading behavior', () => {
 
   it('does not render spinner when food items load within 200ms', async () => {
     // API resolves instantly
-    axios.get.mockResolvedValue({ data: [{ id: 1, name: 'Apple', category: 'fruit' }] })
+    api.get.mockResolvedValue({ data: [{ id: 1, name: 'Apple', category: 'fruit' }] })
 
     await act(async () => {
       renderWithProviders(<FoodItemsView />)
@@ -37,7 +37,7 @@ describe('FoodItemsView loading behavior', () => {
 
   it('shows spinner after 200ms on slow load', async () => {
     // API never resolves
-    axios.get.mockImplementation(() => new Promise(() => {}))
+    api.get.mockImplementation(() => new Promise(() => {}))
 
     await act(async () => {
       renderWithProviders(<FoodItemsView />)

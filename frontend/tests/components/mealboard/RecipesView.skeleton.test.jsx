@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import axios from 'axios'
+import { api } from '../../../src/lib/api'
 
-vi.mock('axios')
+vi.mock('../../../src/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() } }))
 
 // Mock ItemDetailDrawer to avoid unrelated rendering during skeleton tests.
 vi.mock('../../../src/components/mealboard/ItemDetailDrawer', () => ({
@@ -32,7 +32,7 @@ describe('RecipesView skeleton behavior', () => {
 
   it('does not render skeleton placeholders when recipes load within 200ms', async () => {
     // API resolves instantly
-    axios.get.mockResolvedValue({ data: [{ id: 1, name: 'Test Recipe', tags: [], is_favorite: false }] })
+    api.get.mockResolvedValue({ data: [{ id: 1, name: 'Test Recipe', tags: [], is_favorite: false }] })
 
     await act(async () => {
       renderWithProviders(<RecipesView />)
@@ -50,7 +50,7 @@ describe('RecipesView skeleton behavior', () => {
 
   it('renders exactly 5 grid skeleton cards after 200ms on slow load', async () => {
     // API never resolves
-    axios.get.mockImplementation(() => new Promise(() => {}))
+    api.get.mockImplementation(() => new Promise(() => {}))
 
     await act(async () => {
       renderWithProviders(<RecipesView />)

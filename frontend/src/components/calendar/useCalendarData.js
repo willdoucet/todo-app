@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import { convertEventForDisplay } from './calendarUtils'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
  * Hook for fetching calendar data (tasks, events, family members) for a date range.
@@ -38,11 +36,11 @@ export default function useCalendarData(startDate, endDate, activeMembers = null
 
     try {
       const [tasksRes, eventsRes, membersRes, settingsRes, calendarsRes] = await Promise.all([
-        axios.get(`${API_BASE}/tasks?start_date=${startDate}&end_date=${endDate}`),
-        axios.get(`${API_BASE}/calendar-events?start_date=${paddedRange.start}&end_date=${paddedRange.end}`),
-        axios.get(`${API_BASE}/family-members`),
-        axios.get(`${API_BASE}/app-settings/`),
-        axios.get(`${API_BASE}/calendars/`),
+        api.get(`/tasks?start_date=${startDate}&end_date=${endDate}`),
+        api.get(`/calendar-events?start_date=${paddedRange.start}&end_date=${paddedRange.end}`),
+        api.get(`/family-members`),
+        api.get(`/app-settings/`),
+        api.get(`/calendars/`),
       ])
       setTasks(tasksRes.data)
       setEvents(eventsRes.data)

@@ -3,7 +3,7 @@
  * recipe modal. Covers the four visual states (input / loading / preview /
  * error), prop wiring, and the broken-image fallback.
  *
- * Network via MSW (per-test overrides), NOT vi.mock('axios').
+ * Network via MSW (per-test overrides), NOT vi.mock('../../src/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() } })).
  */
 
 import { describe, it, expect, vi } from 'vitest'

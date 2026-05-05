@@ -45,11 +45,11 @@ async def test_register_success_returns_token_and_cookie(
     assert body["token_type"] == "bearer"
     assert "__Host-refresh" in r.cookies
 
-    # Cookie attribute set: HttpOnly, Secure, SameSite=lax, Path=/.
+    # Cookie attribute set: HttpOnly, Secure, SameSite=strict, Path=/.
     set_cookie = r.headers.get("set-cookie", "")
     assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
-    assert "SameSite=lax" in set_cookie
+    assert "SameSite=strict" in set_cookie
     assert "Path=/" in set_cookie
     # __Host- prefix forbids Domain — must NOT appear.
     assert "Domain=" not in set_cookie

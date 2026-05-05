@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import CalendarSelector from './CalendarSelector'
 import ReminderListSelector from './ReminderListSelector'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
  * iCloud Calendar integration management.
@@ -34,7 +32,7 @@ export default function ICloudSettings() {
 
   const loadIntegrations = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_BASE}/integrations/`)
+      const res = await api.get(`/integrations/`)
       setIntegrations(res.data)
     } catch (err) {
       console.error('Failed to load integrations:', err)
@@ -46,7 +44,7 @@ export default function ICloudSettings() {
   // Load integrations + family members on mount
   useEffect(() => {
     loadIntegrations()
-    axios.get(`${API_BASE}/family-members`)
+    api.get(`/family-members`)
       .then((res) => setFamilyMembers(res.data))
       .catch((err) => console.error('Failed to load family members:', err))
   }, [loadIntegrations])
@@ -86,7 +84,7 @@ export default function ICloudSettings() {
     setValidating(true)
     setError(null)
     try {
-      const res = await axios.post(`${API_BASE}/integrations/icloud/validate`, {
+      const res = await api.post(`/integrations/icloud/validate`, {
         email,
         password,
         family_member_id: parseInt(selectedMember),
@@ -108,7 +106,7 @@ export default function ICloudSettings() {
     setConnecting(true)
     setError(null)
     try {
-      await axios.post(`${API_BASE}/integrations/icloud/connect`, {
+      await api.post(`/integrations/icloud/connect`, {
         email,
         password,
         family_member_id: parseInt(selectedMember),
@@ -126,7 +124,7 @@ export default function ICloudSettings() {
   // Sync Now
   const handleSync = async (integrationId) => {
     try {
-      await axios.post(`${API_BASE}/integrations/${integrationId}/sync`)
+      await api.post(`/integrations/${integrationId}/sync`)
       await loadIntegrations()
     } catch (err) {
       console.error('Failed to trigger sync:', err)
@@ -141,7 +139,7 @@ export default function ICloudSettings() {
     if (!confirmed) return
 
     try {
-      await axios.delete(`${API_BASE}/integrations/${integrationId}`)
+      await api.delete(`/integrations/${integrationId}`)
       await loadIntegrations()
     } catch (err) {
       console.error('Failed to disconnect:', err)
@@ -334,7 +332,7 @@ function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
     setValidatingReminders(true)
     setRemindersError(null)
     try {
-      const res = await axios.post(`${API_BASE}/integrations/icloud/validate-reminders`, {
+      const res = await api.post(`/integrations/icloud/validate-reminders`, {
         integration_id: integration.id,
       })
       setReminderLists(res.data)
@@ -352,7 +350,7 @@ function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
     setConnectingReminders(true)
     setRemindersError(null)
     try {
-      await axios.post(`${API_BASE}/integrations/icloud/connect-reminders`, {
+      await api.post(`/integrations/icloud/connect-reminders`, {
         integration_id: integration.id,
         selected_lists: selectedReminderLists,
       })
@@ -367,7 +365,7 @@ function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
 
   const handleSyncReminders = async () => {
     try {
-      await axios.post(`${API_BASE}/integrations/${integration.id}/sync-reminders`)
+      await api.post(`/integrations/${integration.id}/sync-reminders`)
       onRefresh?.()
     } catch (err) {
       console.error('Failed to sync reminders:', err)
@@ -380,7 +378,7 @@ function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
     )
     if (!confirmed) return
     try {
-      await axios.delete(`${API_BASE}/integrations/${integration.id}/reminders`)
+      await api.delete(`/integrations/${integration.id}/reminders`)
       onRefresh?.()
     } catch (err) {
       console.error('Failed to disconnect reminders:', err)

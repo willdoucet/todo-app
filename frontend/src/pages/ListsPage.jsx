@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import axios from 'axios'
+import { api } from '../lib/api'
 import TaskListView from '../components/lists/TaskListView'
 import TodoForm from '../components/lists/TodoForm'
 import ListPanel from '../components/lists/ListPanel'
@@ -11,8 +11,6 @@ import Sidebar from '../components/layout/Sidebar'
 import usePageTitle from '../hooks/usePageTitle'
 import useMediaQuery from '../hooks/useMediaQuery'
 import { useToast } from '../components/shared/ToastProvider'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function ListsPage() {
   // Lists state
@@ -99,7 +97,7 @@ export default function ListsPage() {
   // API: Load family members (once)
   const loadFamilyMembers = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/family-members`)
+      const response = await api.get(`/family-members`)
       setFamilyMembers(response.data)
     } catch (err) {
       console.error('Error loading family members:', err)
@@ -110,7 +108,7 @@ export default function ListsPage() {
   const loadLists = async () => {
     setIsLoadingLists(true)
     try {
-      const response = await axios.get(`${API_BASE}/lists`)
+      const response = await api.get(`/lists`)
       setLists(response.data)
 
       // Auto-select first list if none selected or selected list doesn't exist
@@ -133,7 +131,7 @@ export default function ListsPage() {
   // API: Create list
   const createList = async (data) => {
     try {
-      const response = await axios.post(`${API_BASE}/lists`, data)
+      const response = await api.post(`/lists`, data)
       setLists([...lists, response.data])
       setSelectedListId(response.data.id)
     } catch (err) {
@@ -145,7 +143,7 @@ export default function ListsPage() {
   // API: Update list
   const updateList = async (id, data) => {
     try {
-      const response = await axios.patch(`${API_BASE}/lists/${id}`, data)
+      const response = await api.patch(`/lists/${id}`, data)
       setLists(lists.map(l => l.id === id ? response.data : l))
     } catch (err) {
       console.error('Error updating list:', err)
@@ -156,7 +154,7 @@ export default function ListsPage() {
   // API: Delete list
   const deleteList = async (id) => {
     try {
-      await axios.delete(`${API_BASE}/lists/${id}`)
+      await api.delete(`/lists/${id}`)
       const newLists = lists.filter(l => l.id !== id)
       setLists(newLists)
 
@@ -179,7 +177,7 @@ export default function ListsPage() {
     if (!silent) setError(null)
 
     try {
-      const response = await axios.get(`${API_BASE}/tasks?list_id=${listId}`)
+      const response = await api.get(`/tasks?list_id=${listId}`)
       // Guard: ignore stale responses if user switched lists while in-flight
       if (listId !== selectedListIdRef.current) return
       setTasks(response.data)
@@ -203,7 +201,7 @@ export default function ListsPage() {
       return t
     }))
     try {
-      const response = await axios.patch(`${API_BASE}/tasks/${taskId}`, fieldData)
+      const response = await api.patch(`/tasks/${taskId}`, fieldData)
       // Field-level merge: reconcile with server response
       setTasks(prev => prev.map(t =>
         t.id === taskId
@@ -240,14 +238,14 @@ export default function ListsPage() {
 
     try {
       if (editingTask) {
-        const response = await axios.patch(
-          `${API_BASE}/tasks/${editingTask.id}`,
+        const response = await api.patch(
+          `/tasks/${editingTask.id}`,
           data
         )
         setTasks(tasks.map(t => t.id === editingTask.id ? response.data : t))
         setEditingTask(null)
       } else {
-        const response = await axios.post(`${API_BASE}/tasks`, {
+        const response = await api.post(`/tasks`, {
           ...data,
           list_id: selectedListId,
         })
@@ -267,7 +265,7 @@ export default function ListsPage() {
     try {
       const data = { title, list_id: selectedListId, assigned_to: familyMembers[0]?.id }
       if (sectionId) data.section_id = sectionId
-      const response = await axios.post(`${API_BASE}/tasks`, data)
+      const response = await api.post(`/tasks`, data)
       setTasks(prev => [...prev, response.data])
     } catch (err) {
       console.error('Error creating task:', err)
@@ -280,7 +278,7 @@ export default function ListsPage() {
   // Task handlers
   const deleteTask = useCallback(async (id) => {
     try {
-      await axios.delete(`${API_BASE}/tasks/${id}`)
+      await api.delete(`/tasks/${id}`)
       setTasks(prev => prev.filter(t => t.id !== id))
       if (editingTaskId === id) setEditingTaskId(null)
     } catch (err) {
@@ -297,7 +295,7 @@ export default function ListsPage() {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))
 
     try {
-      const response = await axios.patch(`${API_BASE}/tasks/${id}`, {
+      const response = await api.patch(`/tasks/${id}`, {
         completed: !task.completed
       })
       setTasks(prev => prev.map(t => t.id === id ? response.data : t))
@@ -331,7 +329,7 @@ export default function ListsPage() {
   // Section handlers
   const editSection = async (sectionId, data) => {
     try {
-      await axios.patch(`${API_BASE}/sections/${sectionId}`, data)
+      await api.patch(`/sections/${sectionId}`, data)
       await loadLists()
     } catch (err) {
       console.error('Error updating section:', err)
@@ -341,7 +339,7 @@ export default function ListsPage() {
 
   const deleteSection = async (sectionId) => {
     try {
-      await axios.delete(`${API_BASE}/sections/${sectionId}`)
+      await api.delete(`/sections/${sectionId}`)
       await loadLists()
     } catch (err) {
       console.error('Error deleting section:', err)
@@ -357,7 +355,7 @@ export default function ListsPage() {
   const createSection = async (name) => {
     if (!selectedListId || !name?.trim()) return
     try {
-      await axios.post(`${API_BASE}/lists/${selectedListId}/sections`, { name: name.trim() })
+      await api.post(`/lists/${selectedListId}/sections`, { name: name.trim() })
       await loadLists()
     } catch (err) {
       console.error('Error creating section:', err)

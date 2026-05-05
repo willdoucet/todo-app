@@ -23,13 +23,30 @@
 
 ```
 frontend/src/
-├── App.jsx               # Top-level route table
-├── App.css               # Legacy app-level stylesheet (present, not currently imported)
-├── main.jsx              # React entry point; mounts BrowserRouter + root providers
+├── main.jsx              # React entry point; createRoot(<StrictMode><AppEntry/></StrictMode>)
+├── AppEntry.jsx          # VITE_M2_SHELL env-gate; binds router, picks PlumbingShell vs RouterProvider
+├── RootLayout.jsx        # Data-router root layout; mounts QueryClient/DarkMode/Toast/UndoToast providers + <Outlet/>
+├── PlumbingShell.jsx     # M2-only placeholder; deleted in M5 PR #2 alongside the env gate
 ├── index.css             # Global styles, utilities, and theme tokens
 │
+├── lib/
+│   ├── apiBase.js        # API_BASE_URL + apiUrl(path) — single source of VITE_API_BASE_URL reads
+│   ├── api.js            # Shared axios instance + request/response interceptors (Bearer + 401 refresh)
+│   ├── queryClient.js    # createQueryClient() — QueryCache/MutationCache route 401s to redirect helper
+│   ├── router.jsx        # createBrowserRouter + ProtectedOutlet + rootAuthLoader
+│   └── auth/
+│       ├── tokenStore.js       # Module-scope in-memory token + pub/sub
+│       ├── useAuth.js          # useSyncExternalStore wrapper over tokenStore
+│       ├── refresh.js          # performRefresh single-flight + waitForRefreshToSettle + setLoggingOut
+│       ├── redirect.js         # redirectToAuthOnce one-shot + setRouter (late-bound)
+│       ├── returnTo.js         # isSafeReturnTo / safeReturnTo open-redirect defense
+│       ├── queries.js          # TanStack Query hooks for /auth/status, login, register, logout
+│       ├── HydrateFallback.jsx # Boot-time spinner shown while rootAuthLoader runs
+│       └── BootErrorScreen.jsx # errorElement for non-401 refresh failures (revalidate to retry)
+│
 ├── pages/
-│   ├── FamilyMembersPage.jsx   # Settings page shell
+│   ├── AuthPortalPage.jsx      # /auth — login + setup forms, discriminated by /auth/status
+│   ├── FamilyMembersPage.jsx   # Settings page shell (now also mounts AccountSection logout)
 │   ├── ListsPage.jsx           # Lists page shell
 │   ├── MealboardPage.jsx       # Mealboard shell + nested routes
 │   └── ResponsibilitiesPage.jsx # Responsibilities page shell
@@ -84,9 +101,9 @@ frontend/tests/visual/
 
 ## 2. Calendar Dashboard
 
-**Route:** `/`
+**Route:** `/` (under the protected layout in `lib/router.jsx`)
 
-`App.jsx` routes the home page directly to `components/calendar/CalendarPage.jsx` rather than a `pages/CalendarPage.jsx` wrapper.
+The data router routes the index of the protected layout directly to `components/calendar/CalendarPage.jsx` rather than a `pages/CalendarPage.jsx` wrapper.
 
 ### Files (20)
 
@@ -221,7 +238,7 @@ Unlike the Recipes tab, the food-items grid is **not breakpoint-driven**. It use
 
 The `/settings` route is implemented by `pages/FamilyMembersPage.jsx`, which renders a full settings page with multiple cards: family members, timezone, calendar integrations, and mealboard settings.
 
-### Settings Components (8)
+### Settings Components (9)
 
 | File | Purpose |
 |------|---------|
@@ -232,6 +249,7 @@ The `/settings` route is implemented by `pages/FamilyMembersPage.jsx`, which ren
 | `MealboardSettings.jsx` | Mealboard preferences plus meal-slot CRUD |
 | `MealSlotCard.jsx` | Editable card for one meal slot type |
 | `DayPreview.jsx` | Live one-day preview of active/hidden meal slots |
+| `AccountSection.jsx` | Settings account card with logout action |
 | `ReminderListSelector.test.jsx` | Reminder-list selector tests |
 
 ### Behavioral Notes
@@ -356,10 +374,11 @@ Cross-cutting UI components, helpers, and providers used across multiple feature
 
 ## 10. Key Patterns
 
-- **Stack:** Vite 7, React 19, React Router 7, Tailwind 4, Axios, Headless UI, Vitest, Testing Library, and MSW.
-- **Routing:** `main.jsx` mounts `BrowserRouter`; `App.jsx` owns top-level routes; `MealboardPage.jsx` owns nested `/mealboard/*` routes.
-- **Root providers:** `DarkModeProvider`, `ToastProvider`, and `UndoToastProvider` all wrap the app in `main.jsx`.
-- **HTTP/data fetching:** Axios is the standard client (`VITE_API_BASE_URL`). In `src/`, data flow is currently driven by component state and custom hooks, not TanStack Query.
+- **Stack:** Vite 7, React 19, React Router 7 (data router), Tailwind 4, Axios, Headless UI, TanStack Query, Vitest, Testing Library, and MSW.
+- **Routing:** `main.jsx` renders `<AppEntry/>` which gates between `<PlumbingShell/>` (M2) and `<RouterProvider/>`; `lib/router.jsx` defines `createBrowserRouter` with `<RootLayout/>` as the layout and a pathless protected layout (loader = `rootAuthLoader`); `MealboardPage.jsx` owns nested `/mealboard/*` routes.
+- **Root providers:** `DarkModeProvider`, `ToastProvider`, `UndoToastProvider`, and `QueryClientProvider` mount inside `RootLayout` so they wrap both `/auth` and protected routes; `HydrateFallback`/`BootErrorScreen` use inline localStorage reads since they may render before RootLayout's children mount.
+- **HTTP/data fetching:** Single shared axios instance in `lib/api.js` (with request/response interceptors for Bearer injection + single-flight refresh on 401). `lib/apiBase.js` is the only place that reads `VITE_API_BASE_URL`. TanStack Query hosts the `/auth/*` surface (status query + login/register/logout mutations); the existing 28 imperative callers keep their current shape and route through `api` (TanStack Query migration of those callers is deferred to Phase 3.1).
+- **Auth state:** Access token lives in `lib/auth/tokenStore.js` (module-scope, in-memory only — never `localStorage`). React subscribes via `useSyncExternalStore` in `useAuth()`; axios reads the token directly. Single-flight refresh in `lib/auth/refresh.js`; one-shot redirect to `/auth` via `lib/auth/redirect.js` shared by axios + Query.
 - **State management:** Local `useState` / `useEffect`, lightweight context (`DarkModeContext`, toast providers), and some `localStorage` persistence for UI preferences.
 - **Unified item model:** Mealboard recipes and food items share the `Item` API surface and frontend primitives such as `useItems`, `ItemFormModal`, `ItemCard`, and `ItemRow`.
 - **Responsive patterns:** Tailwind breakpoints are the default pattern, but some features also use explicit media checks (`useMediaQuery`, `window.innerWidth < 768`) for mode switching.

@@ -4,6 +4,7 @@ import FamilyMemberManager from '../components/family-members/FamilyMemberManage
 import TimezoneSettings from '../components/settings/TimezoneSettings'
 import ICloudSettings from '../components/settings/ICloudSettings'
 import MealboardSettings from '../components/settings/MealboardSettings'
+import AccountSection from '../components/settings/AccountSection'
 import usePageTitle from '../hooks/usePageTitle'
 
 export default function FamilyMembersPage() {
@@ -46,6 +47,8 @@ export default function FamilyMembersPage() {
           </h2>
           <MealboardSettings />
         </div>
+
+        <AccountSection />
       </main>
     </div>
   )

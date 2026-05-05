@@ -10,10 +10,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import axios from 'axios'
+import { api } from '../../../src/lib/api'
 import MealPlannerView from '../../../src/components/mealboard/MealPlannerView'
 
-vi.mock('axios')
+vi.mock('../../../src/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() } }))
 vi.mock('../../../src/components/mealboard/ItemDetailDrawer', () => ({
   default: () => null,
 }))
@@ -70,7 +70,7 @@ function bananaEntry(id) {
 const mockSettingsResponse = { data: { week_start_day: 'monday', slot_types: [] } }
 
 function mockAxiosWithEntries(entries) {
-  axios.get.mockImplementation((url) => {
+  api.get.mockImplementation((url) => {
     if (url.includes('app-settings')) return Promise.resolve(mockSettingsResponse)
     if (url.includes('meal-slot-types')) return Promise.resolve({ data: [DINNER_SLOT] })
     if (url.includes('family-members')) return Promise.resolve({ data: [] })
@@ -100,7 +100,7 @@ describe('MealPlannerView — single-delete invariant (regression)', () => {
     // deleted entry's MealCard is replaced in-place by an UndoMealCard — the
     // underlying mealEntries state still contains the row, and only live
     // entries not in pendingDeletes should render as MealCards.
-    axios.delete.mockResolvedValue({
+    api.delete.mockResolvedValue({
       data: {
         entry: { ...entries[1], soft_hidden_at: '2026-04-18T00:00:05Z' },
         undo_token: 'tok-2',
@@ -138,8 +138,8 @@ describe('MealPlannerView — single-delete invariant (regression)', () => {
     expect(screen.getAllByRole('button', { name: /Undo deletion of/ })).toHaveLength(1)
 
     // The backend was hit for entry 2 only.
-    expect(axios.delete).toHaveBeenCalledTimes(1)
-    expect(axios.delete).toHaveBeenCalledWith(expect.stringContaining('/meal-entries/2'))
+    expect(api.delete).toHaveBeenCalledTimes(1)
+    expect(api.delete).toHaveBeenCalledWith(expect.stringContaining('/meal-entries/2'))
   })
 
   it('deleting one meal removes exactly one (mixed-version fallback: no undo_token)', async () => {
@@ -147,7 +147,7 @@ describe('MealPlannerView — single-delete invariant (regression)', () => {
     mockAxiosWithEntries(entries)
     // Old backend shape — no undo_token. MealCard falls back to hard-delete UX:
     // the entry is removed from mealEntries immediately, no UndoMealCard.
-    axios.delete.mockResolvedValue({ data: { ...entries[0] } })
+    api.delete.mockResolvedValue({ data: { ...entries[0] } })
 
     await act(async () => {
       renderWithRouter(<MealPlannerView />)
@@ -173,7 +173,7 @@ describe('MealPlannerView — single-delete invariant (regression)', () => {
     mockAxiosWithEntries(entries)
 
     let tokenCounter = 0
-    axios.delete.mockImplementation(() => {
+    api.delete.mockImplementation(() => {
       tokenCounter += 1
       return Promise.resolve({
         data: {

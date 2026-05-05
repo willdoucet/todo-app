@@ -377,9 +377,18 @@ async def _refresh_case_b(
 # =============================================================================
 
 async def logout(db: AsyncSession, user_id: int) -> None:
-    """Revoke ALL active refresh tokens for the user. Caller MUST validate
-    the access token before calling — we trust user_id is derived from a
-    fully-validated bearer (session_version checked, exp verified)."""
+    """Revoke all sessions for the user.
+
+    Caller MUST validate the access token before calling — we trust user_id is
+    derived from a fully-validated bearer (session_version checked, exp
+    verified). Bumping session_version invalidates already-minted access JWTs
+    in other tabs/devices instead of leaving them live until exp.
+    """
+    await db.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(session_version=User.session_version + 1)
+    )
     await db.execute(
         update(RefreshToken)
         .where(

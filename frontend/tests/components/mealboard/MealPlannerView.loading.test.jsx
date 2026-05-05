@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import axios from 'axios'
+import { api } from '../../../src/lib/api'
 import MealPlannerView from '../../../src/components/mealboard/MealPlannerView'
 
-vi.mock('axios')
+vi.mock('../../../src/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() } }))
 
 // Stub child components that aren't relevant to loading behavior
 vi.mock('../../../src/components/mealboard/RecipeDetailDrawer', () => ({
@@ -32,8 +32,8 @@ describe('MealPlannerView loading behavior', () => {
 
   it('renders content immediately without spinner on fast load', async () => {
     // API resolves instantly
-    axios.get.mockResolvedValue(mockEmptyArray)
-    axios.get.mockImplementation((url) => {
+    api.get.mockResolvedValue(mockEmptyArray)
+    api.get.mockImplementation((url) => {
       if (url.includes('app-settings')) return Promise.resolve(mockSettingsResponse)
       return Promise.resolve(mockEmptyArray)
     })
@@ -49,7 +49,7 @@ describe('MealPlannerView loading behavior', () => {
 
   it('shows delayed spinner overlay after 200ms on slow load', async () => {
     // API never resolves — simulates slow network
-    axios.get.mockImplementation(() => new Promise(() => {}))
+    api.get.mockImplementation(() => new Promise(() => {}))
 
     await act(async () => {
       renderWithRouter(<MealPlannerView />)

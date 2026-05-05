@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import MealboardNav from './MealboardNav'
 import WeekSelector from './WeekSelector'
 import SwimlaneGrid from './SwimlaneGrid'
@@ -14,8 +14,6 @@ import ItemFormModal from './ItemFormModal'
 import useDelayedFlag from '../../hooks/useDelayedFlag'
 
 const WELCOME_DISMISSED_KEY = 'mealboard_welcome_dismissed'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 function getWeekDates(anchorDate, weekStartDay = 'monday') {
   const d = new Date(anchorDate)
@@ -118,10 +116,10 @@ export default function MealPlannerView() {
   const loadInitialData = async () => {
     try {
       const [settingsRes, slotsRes, familyRes, itemsRes] = await Promise.all([
-        axios.get(`${API_BASE}/app-settings/`),
-        axios.get(`${API_BASE}/meal-slot-types/`),
-        axios.get(`${API_BASE}/family-members/`),
-        axios.get(`${API_BASE}/items/`),  // unified — fetches both recipes and food items
+        api.get(`/app-settings/`),
+        api.get(`/meal-slot-types/`),
+        api.get(`/family-members/`),
+        api.get(`/items/`),  // unified — fetches both recipes and food items
       ])
       setSettings(settingsRes.data)
       setSlotTypes(slotsRes.data.filter((s) => s.is_active))
@@ -155,7 +153,7 @@ export default function MealPlannerView() {
       if (filterFamilyMemberId) {
         params.set('family_member_id', filterFamilyMemberId)
       }
-      const res = await axios.get(`${API_BASE}/meal-entries/?${params}`)
+      const res = await api.get(`/meal-entries/?${params}`)
       // Drop stale responses if a newer fetch has already started.
       if (requestId === fetchRequestIdRef.current) {
         setMealEntries(res.data)
@@ -280,7 +278,7 @@ export default function MealPlannerView() {
     })
 
     const postUndo = () =>
-      axios.post(`${API_BASE}/meal-entries/${entryId}/undo`, {
+      api.post(`/meal-entries/${entryId}/undo`, {
         undo_token: pending.undoToken,
       })
 
@@ -506,7 +504,7 @@ export default function MealPlannerView() {
         type={editingItem?.item_type}
         initialItem={editingItem}
         onSubmit={async (payload) => {
-          const res = await axios.patch(`${API_BASE}/items/${editingItem.id}`, payload)
+          const res = await api.patch(`/items/${editingItem.id}`, payload)
           setItems((prev) => prev.map((it) => (it.id === editingItem.id ? res.data : it)))
           setEditingItem(null)
           // Meal cards display entry.item.name from the meal-entries payload;

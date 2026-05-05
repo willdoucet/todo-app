@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import PhotoUpload from '../shared/PhotoUpload'
 import MemberAvatar from '../shared/MemberAvatar'
 import ColorPicker from '../shared/ColorPicker'
 import { getFirstUnusedColor } from '../../constants/familyColors'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function FamilyMemberManager() {
   const [familyMembers, setFamilyMembers] = useState([])
@@ -39,7 +37,7 @@ export default function FamilyMemberManager() {
   const loadFamilyMembers = async () => {
     try {
       setIsLoading(true)
-      const response = await axios.get(`${API_BASE}/family-members`)
+      const response = await api.get(`/family-members`)
       setFamilyMembers(response.data)
       setError(null)
     } catch (err) {
@@ -58,7 +56,7 @@ export default function FamilyMemberManager() {
     setIsSubmitting(true)
     setError(null)
     try {
-      const response = await axios.post(`${API_BASE}/family-members`, {
+      const response = await api.post(`/family-members`, {
         name: newMemberName.trim(),
         photo_url: newMemberPhotoUrl,
         color: newMemberColor,
@@ -97,7 +95,7 @@ export default function FamilyMemberManager() {
     setIsSubmitting(true)
     setError(null)
     try {
-      const response = await axios.patch(`${API_BASE}/family-members/${id}`, {
+      const response = await api.patch(`/family-members/${id}`, {
         name: editingName.trim(),
         photo_url: editingPhotoUrl,
         color: editingColor,
@@ -122,7 +120,7 @@ export default function FamilyMemberManager() {
 
     setError(null)
     try {
-      await axios.delete(`${API_BASE}/family-members/${id}`)
+      await api.delete(`/family-members/${id}`)
       setFamilyMembers(familyMembers.filter(m => m.id !== id))
     } catch (err) {
       console.error('Error deleting family member:', err)

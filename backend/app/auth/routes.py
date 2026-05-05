@@ -28,9 +28,11 @@ from app.database import get_db
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 REFRESH_COOKIE_NAME = "__Host-refresh"
-# M2 plumbing-test settled on lax. If the M2 browser matrix forces a flip
-# to "none", the change is one constant edit + a re-run of the matrix.
-REFRESH_COOKIE_SAMESITE = "lax"
+# Same-origin SPA on Vercel — no email-link sign-in flow needs the cookie
+# to survive cross-origin top-level nav, so Strict is safe and stricter
+# than the M2 plumbing default. M3 originally settled on "lax"; bumped
+# pre-M4 because the frontend silent-refresh flow runs same-origin.
+REFRESH_COOKIE_SAMESITE = "strict"
 
 
 def _set_refresh_cookie(response: Response, plaintext: str) -> None:

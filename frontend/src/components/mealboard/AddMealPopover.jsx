@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import MemberAvatar from '../shared/MemberAvatar'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const FILTER_OPTIONS = [
   { value: null, label: 'All' },
@@ -102,7 +100,7 @@ export default function AddMealPopover({
         participant_ids: selectedParticipantIds,
         notes: notes.trim() || null,
       }
-      const res = await axios.post(`${API_BASE}/meal-entries/`, body)
+      const res = await api.post(`/meal-entries/`, body)
       onCreated(res.data)
     } catch (err) {
       const detail = err.response?.data?.detail
