@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../lib/api'
 
 /**
  * Canonical hook for the unified Item model (replaces useRecipes + useFoodItems).
@@ -40,7 +38,7 @@ export function useItems({ type, favoritesOnly = false, search = '', skip = fals
       if (type) params.type = type
       if (favoritesOnly) params.favorites_only = true
       if (search) params.search = search
-      const res = await axios.get(`${API_BASE}/items/`, { params })
+      const res = await api.get(`/items/`, { params })
       if (id === requestIdRef.current) {
         setItems(res.data)
       }
@@ -61,13 +59,13 @@ export function useItems({ type, favoritesOnly = false, search = '', skip = fals
   }, [refetch, skip])
 
   const createItem = useCallback(async (payload) => {
-    const res = await axios.post(`${API_BASE}/items/`, payload)
+    const res = await api.post(`/items/`, payload)
     setItems((prev) => [...prev, res.data])
     return res.data
   }, [])
 
   const updateItem = useCallback(async (id, patch) => {
-    const res = await axios.patch(`${API_BASE}/items/${id}`, patch)
+    const res = await api.patch(`/items/${id}`, patch)
     setItems((prev) => prev.map((it) => (it.id === id ? res.data : it)))
     return res.data
   }, [])
@@ -85,7 +83,7 @@ export function useItems({ type, favoritesOnly = false, search = '', skip = fals
       return prev.filter((it) => it.id !== id)
     })
     try {
-      const res = await axios.delete(`${API_BASE}/items/${id}`)
+      const res = await api.delete(`/items/${id}`)
       return res.data  // { id, undo_token, expires_at }
     } catch (err) {
       // Rollback on failure: restore the item at its original index.
@@ -101,7 +99,7 @@ export function useItems({ type, favoritesOnly = false, search = '', skip = fals
   }, [])
 
   const undoDeleteItem = useCallback(async (id, undoToken) => {
-    const res = await axios.post(`${API_BASE}/items/${id}/undo`, { undo_token: undoToken })
+    const res = await api.post(`/items/${id}/undo`, { undo_token: undoToken })
     setItems((prev) => {
       // Insert the restored item if it's not already there (it shouldn't be, since deleteItem
       // optimistically removed it).

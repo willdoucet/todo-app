@@ -1,6 +1,5 @@
 import { getRecipeGradient } from '../../constants/recipeGradients'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { apiUrl } from '../../lib/apiBase'
 
 // Category color map for food-item card stripe
 const CATEGORY_COLORS = {
@@ -50,7 +49,7 @@ function RecipeTile({ item, index, onClick, onEdit, onDelete, onToggleFavorite }
   }
 
   const imgSrc = rd.image_url
-    ? (rd.image_url.startsWith('http') ? rd.image_url : `${API_BASE}${rd.image_url}`)
+    ? apiUrl(rd.image_url)
     : null
 
   return (

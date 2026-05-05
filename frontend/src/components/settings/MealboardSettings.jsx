@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import MealSlotCard from './MealSlotCard'
 import DayPreview from './DayPreview'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function MealboardSettings() {
   const [slotTypes, setSlotTypes] = useState([])
@@ -23,9 +21,9 @@ export default function MealboardSettings() {
     setLoading(true)
     try {
       const [slotsRes, membersRes, settingsRes] = await Promise.all([
-        axios.get(`${API_BASE}/meal-slot-types/`),
-        axios.get(`${API_BASE}/family-members/`),
-        axios.get(`${API_BASE}/app-settings/`),
+        api.get(`/meal-slot-types/`),
+        api.get(`/family-members/`),
+        api.get(`/app-settings/`),
       ])
       setSlotTypes(slotsRes.data)
       setFamilyMembers(membersRes.data)
@@ -40,7 +38,7 @@ export default function MealboardSettings() {
 
   const handleUpdate = async (slotId, updates) => {
     try {
-      const res = await axios.patch(`${API_BASE}/meal-slot-types/${slotId}`, updates)
+      const res = await api.patch(`/meal-slot-types/${slotId}`, updates)
       setSlotTypes((prev) => prev.map((s) => (s.id === slotId ? res.data : s)))
       setEditingSlotId(null)
     } catch (err) {
@@ -56,7 +54,7 @@ export default function MealboardSettings() {
   const handleDelete = async (slotId) => {
     if (!confirm('Delete this meal slot? If it has meals, it will be hidden instead.')) return
     try {
-      const res = await axios.delete(`${API_BASE}/meal-slot-types/${slotId}`)
+      const res = await api.delete(`/meal-slot-types/${slotId}`)
       // If soft-delete (still has entries), update; if hard-delete, remove
       if (res.data.is_active === false) {
         // Soft-deleted — slot still returned
@@ -75,7 +73,7 @@ export default function MealboardSettings() {
     try {
       // Compute sort_order as max+1
       const maxOrder = slotTypes.reduce((max, s) => Math.max(max, s.sort_order), 0)
-      const res = await axios.post(`${API_BASE}/meal-slot-types/`, {
+      const res = await api.post(`/meal-slot-types/`, {
         ...slotData,
         sort_order: maxOrder + 1,
       })
@@ -90,7 +88,7 @@ export default function MealboardSettings() {
   const handleResetDefaults = async () => {
     if (!confirm('Reset meal slots to defaults? Custom slots without meals will be deleted.')) return
     try {
-      const res = await axios.post(`${API_BASE}/meal-slot-types/reset`)
+      const res = await api.post(`/meal-slot-types/reset`)
       setSlotTypes(res.data)
     } catch (err) {
       console.error('Failed to reset:', err)
@@ -100,7 +98,7 @@ export default function MealboardSettings() {
 
   const handleSettingChange = async (key, value) => {
     try {
-      const res = await axios.patch(`${API_BASE}/app-settings/`, { [key]: value })
+      const res = await api.patch(`/app-settings/`, { [key]: value })
       setSettings(res.data)
     } catch (err) {
       console.error('Failed to update settings:', err)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import { useNavigate } from 'react-router-dom'
 import ShoppingLinkModal from './ShoppingLinkModal'
 
@@ -7,8 +7,6 @@ const OVERFLOW_ITEMS = [
   { key: 'change', label: 'Change list', icon: '🔄' },
   { key: 'unlink', label: 'Unlink', icon: '🔗' },
 ]
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 // How long to poll after a meal add/remove to catch Celery sync completion
 const POLL_DURATION_MS = 30000
@@ -53,8 +51,8 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
     if (!listId) return
     try {
       const [listRes, tasksRes] = await Promise.all([
-        axios.get(`${API_BASE}/lists/${listId}`),
-        axios.get(`${API_BASE}/tasks?list_id=${listId}`),
+        api.get(`/lists/${listId}`),
+        api.get(`/tasks?list_id=${listId}`),
       ])
       setLinkedListName(listRes.data.name)
       setItemCount(tasksRes.data.filter((t) => !t.completed).length)
@@ -62,7 +60,7 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
       if (err.response?.status === 404) {
         // Linked list was deleted — clear the link
         try {
-          const res = await axios.patch(`${API_BASE}/app-settings/`, {
+          const res = await api.patch(`/app-settings/`, {
             mealboard_shopping_list_id: null,
           })
           onSettingsChange(res.data)
@@ -155,7 +153,7 @@ export default function ShoppingCard({ settings, onSettingsChange, mealEntries =
   const handleUnlink = async () => {
     setOverflowOpen(false)
     try {
-      const res = await axios.patch(`${API_BASE}/app-settings/`, {
+      const res = await api.patch(`/app-settings/`, {
         mealboard_shopping_list_id: null,
       })
       onSettingsChange(res.data)

@@ -10,10 +10,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import axios from 'axios'
 
-vi.mock('axios')
+vi.mock('../../lib/api', () => ({
+  api: { get: vi.fn() },
+}))
 
+import { api } from '../../lib/api'
 import useCalendarData from './useCalendarData'
 
 describe('useCalendarData', () => {
@@ -41,7 +43,7 @@ describe('useCalendarData', () => {
   }
 
   function mockApiResponses(events) {
-    axios.get.mockImplementation((url) => {
+    api.get.mockImplementation((url) => {
       if (url.includes('/calendar-events')) {
         return Promise.resolve({ data: events })
       }
@@ -71,7 +73,7 @@ describe('useCalendarData', () => {
     await flushPromises()
     expect(result.current.events[0].sync_status).toBe('SYNCED')
 
-    const callCount = axios.get.mock.calls.length
+    const callCount = api.get.mock.calls.length
 
     // Advance well past poll interval
     await act(async () => {
@@ -79,13 +81,13 @@ describe('useCalendarData', () => {
     })
 
     // No additional fetches
-    expect(axios.get.mock.calls.length).toBe(callCount)
+    expect(api.get.mock.calls.length).toBe(callCount)
   })
 
   it('auto-refetches when events have PENDING_PUSH status', async () => {
     // First fetch returns PENDING_PUSH, second returns SYNCED
     let fetchCount = 0
-    axios.get.mockImplementation((url) => {
+    api.get.mockImplementation((url) => {
       if (url.includes('/calendar-events')) {
         fetchCount++
         return Promise.resolve({ data: [fetchCount <= 1 ? pendingEvent : syncedEvent] })
@@ -118,7 +120,7 @@ describe('useCalendarData', () => {
 
   it('stops polling once all events are SYNCED', async () => {
     let fetchCount = 0
-    axios.get.mockImplementation((url) => {
+    api.get.mockImplementation((url) => {
       if (url.includes('/calendar-events')) {
         fetchCount++
         return Promise.resolve({ data: [fetchCount <= 1 ? pendingEvent : syncedEvent] })
@@ -144,13 +146,13 @@ describe('useCalendarData', () => {
     })
 
     expect(result.current.events[0].sync_status).toBe('SYNCED')
-    const callCountAfterSync = axios.get.mock.calls.length
+    const callCountAfterSync = api.get.mock.calls.length
 
     // Advance again — should NOT trigger more fetches
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30000)
     })
 
-    expect(axios.get.mock.calls.length).toBe(callCountAfterSync)
+    expect(api.get.mock.calls.length).toBe(callCountAfterSync)
   })
 })

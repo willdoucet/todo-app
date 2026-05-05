@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import axios from 'axios'
+import { api } from '../../lib/api'
+import { apiUrl } from '../../lib/apiBase'
 import UnitCombobox from './UnitCombobox'
 import RecipeImageUpload from './RecipeImageUpload'
 import EmojiPicker from '../shared/EmojiPicker'
@@ -8,8 +9,6 @@ import RecipeUrlImport from './RecipeUrlImport'
 import { suggestEmoji } from '../../constants/foodEmojis'
 import useFormShortcut from '../../hooks/useFormShortcut'
 import { useToast } from '../shared/ToastProvider'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const INGREDIENT_CATEGORIES = ['Produce', 'Protein', 'Dairy', 'Pantry', 'Frozen', 'Bakery', 'Beverages', 'Other']
 const FOOD_CATEGORIES = [
@@ -554,7 +553,7 @@ function FoodItemFormBody({ isOpen, onClose, onSubmit, onDelete, initialItem, is
     try {
       const form = new FormData()
       form.append('file', file)
-      const res = await axios.post(`${API_BASE}/uploads/item-icon`, form)
+      const res = await api.post(`/uploads/item-icon`, form)
       setIconUrl(res.data.url)
       // Uploading a file implies URL mode — flip the tab state + clear emoji.
       setIconMode(ICON_MODE_URL)
@@ -906,7 +905,7 @@ function IconSquare({ mode, iconEmoji, iconUrl, onPickEmoji, onPickFile, uploadi
           aria-label="Change uploaded image"
         >
           <img
-            src={iconUrl.startsWith('http') ? iconUrl : `${API_BASE}${iconUrl}`}
+            src={apiUrl(iconUrl)}
             alt=""
             className="w-full h-full object-cover"
           />

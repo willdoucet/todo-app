@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../../lib/api'
 
 export default function TodoForm({ initial = null, listId = null, sectionId = null, onSubmit, onCancel, formRef }) {
   const [title, setTitle] = useState(initial?.title || '')
@@ -15,7 +13,7 @@ export default function TodoForm({ initial = null, listId = null, sectionId = nu
   useEffect(() => {
     const loadFamilyMembers = async () => {
       try {
-        const response = await axios.get(`${API_BASE}/family-members`)
+        const response = await api.get(`/family-members`)
         setFamilyMembers(response.data)
 
         if (!initial?.assigned_to && response.data.length > 0) {

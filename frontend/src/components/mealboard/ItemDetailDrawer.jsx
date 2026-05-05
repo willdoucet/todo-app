@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../../lib/api'
+import { apiUrl } from '../../lib/apiBase'
 
 /**
  * Side drawer for reading item details. Replaces RecipeDetailDrawer after the
@@ -27,7 +26,7 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem, 
     setLoading(true)
     setError(null)
     try {
-      const res = await axios.get(`${API_BASE}/items/${itemId}`)
+      const res = await api.get(`/items/${itemId}`)
       setItem(res.data)
     } catch (err) {
       if (err.response?.status === 404) {
@@ -73,7 +72,7 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem, 
     // Optimistic: flip locally so the button responds instantly.
     setItem({ ...item, is_favorite: next })
     try {
-      await axios.patch(`${API_BASE}/items/${item.id}`, { is_favorite: next })
+      await api.patch(`/items/${item.id}`, { is_favorite: next })
     } catch {
       // Roll back on failure
       setItem({ ...item, is_favorite: !next })
@@ -81,9 +80,7 @@ export default function ItemDetailDrawer({ itemId, isOpen, onClose, onEditItem, 
   }
 
   const rd = item?.recipe_detail || {}
-  const heroSrc = rd.image_url
-    ? (rd.image_url.startsWith('http') ? rd.image_url : `${API_BASE}${rd.image_url}`)
-    : null
+  const heroSrc = rd.image_url ? apiUrl(rd.image_url) : null
 
   return (
     <Transition.Root show={isOpen} as={Fragment} appear>

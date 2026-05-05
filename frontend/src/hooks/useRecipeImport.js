@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../lib/api'
 
 // Poll cadence: 1.5s × ~40 polls = 60s ceiling.
 const POLL_INTERVAL_MS = 1500
@@ -58,7 +56,7 @@ export function useRecipeImport() {
 
     let submitResponse
     try {
-      submitResponse = await axios.post(`${API_BASE}/items/import-from-url`, { url })
+      submitResponse = await api.post('/items/import-from-url', { url })
     } catch (err) {
       if (thisAttempt !== attemptIdRef.current) return  // stale
       const httpStatus = err.response?.status
@@ -105,7 +103,7 @@ export function useRecipeImport() {
 
       let statusResponse
       try {
-        statusResponse = await axios.get(`${API_BASE}/items/import-status/${taskId}`)
+        statusResponse = await api.get(`/items/import-status/${taskId}`)
       } catch (err) {
         if (thisAttempt !== attemptIdRef.current) return
         const httpStatus = err.response?.status

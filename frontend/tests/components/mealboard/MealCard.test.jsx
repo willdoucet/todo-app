@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import axios from 'axios'
+import { api } from '../../../src/lib/api'
 import MealCard from '../../../src/components/mealboard/MealCard'
 
-vi.mock('axios')
+vi.mock('../../../src/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() } }))
 
 describe('MealCard', () => {
   const mockSlotType = {
@@ -82,8 +82,8 @@ describe('MealCard', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    axios.patch = vi.fn().mockResolvedValue({ data: { ...mockRecipeEntry, was_cooked: true } })
-    axios.delete = vi.fn().mockResolvedValue({ data: {} })
+    api.patch = vi.fn().mockResolvedValue({ data: { ...mockRecipeEntry, was_cooked: true } })
+    api.delete = vi.fn().mockResolvedValue({ data: {} })
   })
 
   it('renders recipe name when item_type is recipe', () => {
@@ -144,7 +144,7 @@ describe('MealCard', () => {
     render(<MealCard {...defaultProps} />)
     const toggleButton = screen.getByLabelText(/Mark as cooked/i)
     await user.click(toggleButton)
-    expect(axios.patch).toHaveBeenCalledWith(
+    expect(api.patch).toHaveBeenCalledWith(
       expect.stringContaining('/meal-entries/10'),
       { was_cooked: true }
     )
@@ -156,7 +156,7 @@ describe('MealCard', () => {
     render(<MealCard {...defaultProps} />)
     const deleteButton = screen.getByLabelText(/Delete meal/i)
     await user.click(deleteButton)
-    expect(axios.delete).toHaveBeenCalledWith(expect.stringContaining('/meal-entries/10'))
+    expect(api.delete).toHaveBeenCalledWith(expect.stringContaining('/meal-entries/10'))
     expect(defaultProps.onDeleted).toHaveBeenCalledWith(10)
   })
 
@@ -260,11 +260,11 @@ describe('MealCard', () => {
   })
 
   it('food-item card calls onUpdated via PATCH when Mark as cooked is clicked', async () => {
-    axios.patch = vi.fn().mockResolvedValue({ data: { ...foodItemEntry, was_cooked: true } })
+    api.patch = vi.fn().mockResolvedValue({ data: { ...foodItemEntry, was_cooked: true } })
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} entry={foodItemEntry} />)
     await user.click(screen.getByLabelText(/Mark as cooked/i))
-    expect(axios.patch).toHaveBeenCalledWith(
+    expect(api.patch).toHaveBeenCalledWith(
       expect.stringContaining('/meal-entries/21'),
       { was_cooked: true }
     )
@@ -272,7 +272,7 @@ describe('MealCard', () => {
   })
 
   it('food-item card forwards undo metadata on delete when the backend returns it', async () => {
-    axios.delete = vi.fn().mockResolvedValue({
+    api.delete = vi.fn().mockResolvedValue({
       data: {
         entry: foodItemEntry,
         undo_token: 'tok-abc',
@@ -294,7 +294,7 @@ describe('MealCard', () => {
 
   it('food-item card falls back to legacy hard-delete behavior when undo metadata is missing', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    axios.delete = vi.fn().mockResolvedValue({ data: {} })
+    api.delete = vi.fn().mockResolvedValue({ data: {} })
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} entry={foodItemEntry} />)
     await user.click(screen.getByLabelText(/Delete meal/i))
@@ -305,7 +305,7 @@ describe('MealCard', () => {
 
   it('food-item card shows generic error text when Mark as cooked fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    axios.patch = vi.fn().mockRejectedValue(new Error('network'))
+    api.patch = vi.fn().mockRejectedValue(new Error('network'))
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} entry={foodItemEntry} />)
     await user.click(screen.getByLabelText(/Mark as cooked/i))
@@ -318,7 +318,7 @@ describe('MealCard', () => {
 
   it('food-item card shows "already deleted" text when delete returns 404', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    axios.delete = vi.fn().mockRejectedValue({ response: { status: 404 } })
+    api.delete = vi.fn().mockRejectedValue({ response: { status: 404 } })
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} entry={foodItemEntry} />)
     await user.click(screen.getByLabelText(/Delete meal/i))
@@ -329,7 +329,7 @@ describe('MealCard', () => {
 
   it('recipe card shows generic error text when Mark as cooked fails', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    axios.patch = vi.fn().mockRejectedValue(new Error('network'))
+    api.patch = vi.fn().mockRejectedValue(new Error('network'))
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} />)
     await user.click(screen.getByLabelText(/Mark as cooked/i))
@@ -342,7 +342,7 @@ describe('MealCard', () => {
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} />)
     await user.click(screen.getByLabelText(/Mark as cooked/i))
-    expect(axios.patch).toHaveBeenCalled()
+    expect(api.patch).toHaveBeenCalled()
     expect(defaultProps.onUpdated).toHaveBeenCalled()
     expect(defaultProps.onViewRecipe).not.toHaveBeenCalled()
   })
@@ -361,7 +361,7 @@ describe('MealCard', () => {
 
   it('error flash element renders outside the collapsible action zone', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-    axios.patch = vi.fn().mockRejectedValue(new Error('network'))
+    api.patch = vi.fn().mockRejectedValue(new Error('network'))
     const user = userEvent.setup()
     render(<MealCard {...defaultProps} entry={foodItemEntry} />)
     await user.click(screen.getByLabelText(/Mark as cooked/i))
@@ -425,7 +425,7 @@ describe('MealCard error timer behavior', () => {
   })
 
   it('error text auto-clears after 3 seconds', async () => {
-    axios.patch = vi.fn().mockRejectedValue(new Error('network'))
+    api.patch = vi.fn().mockRejectedValue(new Error('network'))
     render(<MealCard {...defaultProps} />)
 
     await act(async () => {
@@ -440,7 +440,7 @@ describe('MealCard error timer behavior', () => {
   })
 
   it('successful retry immediately clears a stale error before the 3s timer fires', async () => {
-    axios.patch = vi.fn()
+    api.patch = vi.fn()
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValueOnce({ data: { ...foodItemEntry, was_cooked: true } })
     render(<MealCard {...defaultProps} />)

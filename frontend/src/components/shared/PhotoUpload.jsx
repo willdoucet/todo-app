@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../../lib/api'
+import { apiUrl } from '../../lib/apiBase'
 
 export default function PhotoUpload({
   currentUrl = null,
@@ -58,7 +57,7 @@ export default function PhotoUpload({
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await axios.post(`${API_BASE}${uploadEndpoint}`, formData, {
+      const response = await api.post(uploadEndpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -68,7 +67,7 @@ export default function PhotoUpload({
 
       // Update preview to server URL and notify parent
       const serverUrl = response.data.url
-      setPreview(`${API_BASE}${serverUrl}`)
+      setPreview(apiUrl(serverUrl))
       onUpload?.(serverUrl)
     } catch (err) {
       console.error('Upload error:', err)
@@ -121,7 +120,7 @@ export default function PhotoUpload({
   }
 
   // Determine the image source (handle both relative and absolute URLs)
-  const imageSrc = preview?.startsWith('http') ? preview : preview ? `${API_BASE}${preview}` : null
+  const imageSrc = preview ? apiUrl(preview) : null
 
   return (
     <div className={className}>

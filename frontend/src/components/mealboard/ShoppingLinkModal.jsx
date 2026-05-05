@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../../lib/api'
 
 /**
  * 2-step modal for linking a shopping list to the mealboard.
@@ -37,7 +35,7 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
   const fetchLists = async () => {
     setLoading(true)
     try {
-      const res = await axios.get(`${API_BASE}/lists`)
+      const res = await api.get(`/lists`)
       setLists(res.data)
     } catch {
       setError('Failed to load lists')
@@ -49,8 +47,8 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
   const handleLinkList = async (listId) => {
     try {
       const [settingsRes, listRes] = await Promise.all([
-        axios.patch(`${API_BASE}/app-settings/`, { mealboard_shopping_list_id: listId }),
-        axios.get(`${API_BASE}/lists/${listId}`),
+        api.patch(`/app-settings/`, { mealboard_shopping_list_id: listId }),
+        api.get(`/lists/${listId}`),
       ])
       setLinkedList(listRes.data)
       setStep(2)
@@ -65,7 +63,7 @@ export default function ShoppingLinkModal({ isOpen, onClose, onLinked }) {
     e.preventDefault()
     if (!newListName.trim()) return
     try {
-      const listRes = await axios.post(`${API_BASE}/lists`, {
+      const listRes = await api.post(`/lists`, {
         name: newListName.trim(),
         color: '#5E9E6B', // Sage default for shopping lists
         icon: 'shopping-cart',

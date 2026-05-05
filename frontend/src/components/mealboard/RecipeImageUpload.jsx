@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../../lib/api'
+import { apiUrl } from '../../lib/apiBase'
 
 /**
  * Recipe image upload sub-component for RecipeFormModal.
@@ -23,7 +22,7 @@ export default function RecipeImageUpload({ imageUrl, onImageChange }) {
     formData.append('file', file)
 
     try {
-      const res = await axios.post(`${API_BASE}/upload/recipe-image`, formData, {
+      const res = await api.post('/upload/recipe-image', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       onImageChange(res.data.url)
@@ -61,7 +60,7 @@ export default function RecipeImageUpload({ imageUrl, onImageChange }) {
         <div>
           <div className="relative aspect-video rounded-lg overflow-hidden border border-card-border dark:border-gray-600">
             <img
-              src={imageUrl.startsWith('http') ? imageUrl : `${API_BASE}${imageUrl}`}
+              src={apiUrl(imageUrl)}
               alt="Recipe preview"
               className="w-full h-full object-cover"
             />

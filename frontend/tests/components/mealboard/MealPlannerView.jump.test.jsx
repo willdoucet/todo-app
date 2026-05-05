@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import axios from 'axios'
+import { api } from '../../../src/lib/api'
 import MealPlannerView from '../../../src/components/mealboard/MealPlannerView'
 
-vi.mock('axios')
+vi.mock('../../../src/lib/api', () => ({ api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() } }))
 
 vi.mock('../../../src/components/mealboard/RecipeDetailDrawer', () => ({
   default: () => null,
@@ -20,7 +20,7 @@ const mockSettingsResponse = {
 const mockEmptyArray = { data: [] }
 
 function mockAxios() {
-  axios.get.mockImplementation((url) => {
+  api.get.mockImplementation((url) => {
     if (url.includes('app-settings')) return Promise.resolve(mockSettingsResponse)
     return Promise.resolve(mockEmptyArray)
   })

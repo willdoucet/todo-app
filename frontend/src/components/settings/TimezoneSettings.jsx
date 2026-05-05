@@ -1,7 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import axios from 'axios'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { api } from '../../lib/api'
 
 export default function TimezoneSettings() {
   const [timezone, setTimezone] = useState('')
@@ -13,8 +11,8 @@ export default function TimezoneSettings() {
 
   useEffect(() => {
     Promise.all([
-      axios.get(`${API_BASE}/app-settings/`),
-      axios.get(`${API_BASE}/app-settings/timezones`),
+      api.get(`/app-settings/`),
+      api.get(`/app-settings/timezones`),
     ])
       .then(([settingsRes, tzRes]) => {
         setTimezone(settingsRes.data.timezone)
@@ -37,7 +35,7 @@ export default function TimezoneSettings() {
     setSaving(true)
     setFeedback(null)
     try {
-      const res = await axios.patch(`${API_BASE}/app-settings/`, { timezone })
+      const res = await api.patch(`/app-settings/`, { timezone })
       setTimezone(res.data.timezone)
       setFeedback({ type: 'success', message: 'Timezone saved. Re-sync calendars to update event times.' })
     } catch (err) {

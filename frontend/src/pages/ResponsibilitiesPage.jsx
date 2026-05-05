@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import axios from 'axios'
+import { api } from '../lib/api'
 import ResponsibilityForm from '../components/responsibilities/ResponsibilityForm'
 import ResponsibilityCard from '../components/responsibilities/ResponsibilityCard'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
@@ -11,8 +11,6 @@ import Sidebar from '../components/layout/Sidebar'
 import ScheduleView from '../components/responsibilities/ScheduleView'
 import usePageTitle from '../hooks/usePageTitle'
 import { EmptyResponsibilitiesState } from '../components/shared/EmptyState'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 export default function ResponsibilitiesPage() {
   // UI state
@@ -57,9 +55,9 @@ export default function ResponsibilitiesPage() {
     setIsLoading(true)
     try {
       const [membersRes, responsibilitiesRes, completionsRes] = await Promise.all([
-        axios.get(`${API_BASE}/family-members`),
-        axios.get(`${API_BASE}/responsibilities`),
-        axios.get(`${API_BASE}/responsibilities/completions?date=${dateString}`),
+        api.get(`/family-members`),
+        api.get(`/responsibilities`),
+        api.get(`/responsibilities/completions?date=${dateString}`),
       ])
       setFamilyMembers(membersRes.data.filter(m => !m.is_system))
       setResponsibilities(responsibilitiesRes.data)
@@ -74,8 +72,8 @@ export default function ResponsibilitiesPage() {
 
   const toggleCompletion = async (responsibilityId, memberId, category) => {
     try {
-      const response = await axios.post(
-        `${API_BASE}/responsibilities/${responsibilityId}/complete?date=${dateString}&family_member_id=${memberId}&category=${category}`
+      const response = await api.post(
+        `/responsibilities/${responsibilityId}/complete?date=${dateString}&family_member_id=${memberId}&category=${category}`
       )
       if (response.data.completed) {
         setCompletions([...completions, response.data.completion])
@@ -115,7 +113,7 @@ export default function ResponsibilitiesPage() {
     try {
       if (editingResponsibility) {
         // Update existing responsibility
-        await axios.patch(`${API_BASE}/responsibilities/${data.id}`, {
+        await api.patch(`/responsibilities/${data.id}`, {
           title: data.title,
           description: data.description,
           categories: data.categories,
@@ -126,7 +124,7 @@ export default function ResponsibilitiesPage() {
         setEditingResponsibility(null)
       } else {
         // Create new responsibility
-        await axios.post(`${API_BASE}/responsibilities`, data)
+        await api.post(`/responsibilities`, data)
       }
       // Refresh data
       await loadData()
@@ -154,7 +152,7 @@ export default function ResponsibilitiesPage() {
     if (!deleteConfirmId) return
 
     try {
-      await axios.delete(`${API_BASE}/responsibilities/${deleteConfirmId}`)
+      await api.delete(`/responsibilities/${deleteConfirmId}`)
       await loadData()
     } catch (err) {
       console.error('Error deleting responsibility:', err)

@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+import { apiUrl } from '../../lib/apiBase'
 
 const sizeClasses = {
   xs: 'w-5 h-5 text-[10px]',
@@ -14,7 +14,7 @@ export default function MemberAvatar({ name, photoUrl, color, size = 'md', class
   const dimensions = sizeClass.split(' ').slice(0, 2).join(' ')
 
   if (photoUrl) {
-    const imageSrc = photoUrl.startsWith('http') ? photoUrl : `${API_BASE}${photoUrl}`
+    const imageSrc = apiUrl(photoUrl)
     return (
       <img
         src={imageSrc}

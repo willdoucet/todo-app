@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
+import { apiUrl } from '../../lib/apiBase'
 import PhotoUpload from '../shared/PhotoUpload'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const CATEGORIES = [
   { value: 'MORNING', label: '🌅 Morning' },
@@ -41,8 +40,8 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
     const loadData = async () => {
       try {
         const [membersRes, iconsRes] = await Promise.all([
-          axios.get(`${API_BASE}/family-members`),
-          axios.get(`${API_BASE}/upload/stock-icons`),
+          api.get(`/family-members`),
+          api.get(`/upload/stock-icons`),
         ])
         
         setFamilyMembers(membersRes.data)
@@ -284,7 +283,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
         {iconUrl && (
           <div className="flex items-center gap-3 mb-3 p-2 bg-warm-beige dark:bg-gray-800 rounded-lg">
             <img
-              src={iconUrl.startsWith('http') ? iconUrl : `${API_BASE}${iconUrl}`}
+              src={apiUrl(iconUrl)}
               alt="Selected icon"
               className="w-10 h-10 rounded object-cover"
             />
@@ -319,7 +318,7 @@ export default function ResponsibilityForm({ initial = null, onSubmit, onCancel 
               title={icon.label}
             >
               <img
-                src={`${API_BASE}${icon.url}`}
+                src={apiUrl(icon.url)}
                 alt={icon.label}
                 className="w-8 h-8 mx-auto object-contain"
               />

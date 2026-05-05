@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import Sidebar from '../layout/Sidebar'
 import Header from '../layout/Header'
 import useCalendarNavigation from './useCalendarNavigation'
@@ -14,8 +14,6 @@ import DayView from './DayView'
 import EventFormModal from './EventFormModal'
 import TaskFormModal from './TaskFormModal'
 import { getWeekDates } from './calendarUtils'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 /**
  * CalendarPage — top-level orchestrator for the calendar dashboard.
@@ -118,7 +116,7 @@ export default function CalendarPage() {
 
   const handleToggleComplete = async (task) => {
     try {
-      await axios.patch(`${API_BASE}/tasks/${task.id}`, {
+      await api.patch(`/tasks/${task.id}`, {
         completed: !task.completed,
       })
       refetch()
