@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests/visual/specs',
+  outputDir: 'test-results/artifacts',
   // Eng 10 — seed runs once per job before any spec starts. Removes the need
   // for per-spec beforeAll blocks.
   globalSetup: './tests/visual/fixtures/global-setup.js',

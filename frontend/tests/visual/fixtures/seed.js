@@ -1,7 +1,13 @@
 // Idempotent visual-test seeding. Runs once per job via Playwright's
-// `globalSetup` (Eng 10). Writes through the real API — no DB-direct access,
-// no auth bypass — because `backend/app/main.py` is unauthenticated in this
-// deployment. If perimeter auth ever lands, revisit the seed layer.
+// `globalSetup` (Eng 10). Writes through the real API — no DB-direct access.
+//
+// M5 PR1 update: every protected route now requires `Authorization:
+// Bearer <jwt>`. The seed flow accepts a JWT minted by globalSetup's
+// login-or-register and threads it through `apiFetch` so every
+// downstream call carries the header. Callers without a token (legacy
+// callers, if any) still work locally on stacks where APP_ENV != test
+// AND the env vars are unset; we leave token optional rather than
+// hard-required so an out-of-tree caller can opt in.
 //
 // Contract (Adversarial review A1):
 //   POST /items/                      — unified item create
@@ -66,14 +72,17 @@ class SeedError extends Error {
 
 // Wraps fetch with a 10s per-call timeout (Eng 7A) and a consistent error
 // shape. Every response body is captured on non-OK so CI failure reports
-// include the reason.
-async function apiFetch(method, path, body = null) {
+// include the reason. `token` (optional) attaches Authorization: Bearer.
+async function apiFetch(method, path, body = null, token = null) {
   const url = `${API_URL}${path}`
+  const headers = {}
+  if (body) headers['Content-Type'] = 'application/json'
+  if (token) headers['Authorization'] = `Bearer ${token}`
   let res
   try {
     res = await fetch(url, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(10_000),
     })
@@ -125,8 +134,11 @@ function isVrtEntry(entry) {
 /**
  * Idempotent seed of the known week. Safe to run repeatedly — prior VRT
  * entries and items are soft-deleted before the canonical set is re-created.
+ *
+ * @param {string} [token] — optional JWT minted by globalSetup. Required
+ *   in M5+ when api-test runs with auth enforcement on; ignored if absent.
  */
-export async function seedKnownWeek() {
+export async function seedKnownWeek(token = null) {
   const { monday, sunday } = currentWeekMonSun()
   const start = formatDateKey(monday)
   const end = formatDateKey(sunday)
@@ -135,23 +147,25 @@ export async function seedKnownWeek() {
   const existingEntries = await apiFetch(
     'GET',
     `/meal-entries/?start_date=${start}&end_date=${end}`,
+    null,
+    token,
   )
   const vrtEntries = existingEntries.filter(isVrtEntry)
   for (const entry of vrtEntries) {
-    await apiFetch('DELETE', `/meal-entries/${entry.id}`)
+    await apiFetch('DELETE', `/meal-entries/${entry.id}`, null, token)
   }
 
   // Step 2 — clean up stale VRT items so names don't compound. `?search=VRT`
   // does a case-insensitive LIKE match against the name column.
-  const existingItems = await apiFetch('GET', '/items/?search=VRT')
+  const existingItems = await apiFetch('GET', '/items/?search=VRT', null, token)
   for (const item of existingItems.filter((it) => it.name.startsWith('VRT '))) {
-    await apiFetch('DELETE', `/items/${item.id}`)
+    await apiFetch('DELETE', `/items/${item.id}`, null, token)
   }
 
   // Step 3 — discover the first slot type. The migration seeds 3 defaults
   // (Breakfast, Lunch, Dinner); we always put the canonical set on the first
   // one so specs have a stable target.
-  const slotTypes = await apiFetch('GET', '/meal-slot-types/')
+  const slotTypes = await apiFetch('GET', '/meal-slot-types/', null, token)
   if (!slotTypes.length) {
     throw new SeedError(
       'SeedError: no meal_slot_types found. Migration may not have run.',
@@ -162,18 +176,23 @@ export async function seedKnownWeek() {
   // Step 4 — create the canonical items and matching meal entries on Monday.
   const createdItems = []
   for (const payload of CANONICAL_ITEMS) {
-    const item = await apiFetch('POST', '/items/', payload)
+    const item = await apiFetch('POST', '/items/', payload, token)
     createdItems.push(item)
   }
 
   for (let i = 0; i < createdItems.length; i++) {
     const item = createdItems[i]
-    await apiFetch('POST', '/meal-entries/', {
-      date: start,
-      meal_slot_type_id: firstSlot.id,
-      item_id: item.id,
-      sort_order: i,
-    })
+    await apiFetch(
+      'POST',
+      '/meal-entries/',
+      {
+        date: start,
+        meal_slot_type_id: firstSlot.id,
+        item_id: item.id,
+        sort_order: i,
+      },
+      token,
+    )
   }
 
   return { weekStart: start, weekEnd: end, slotId: firstSlot.id, items: createdItems }

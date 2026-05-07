@@ -1,13 +1,22 @@
 """Auth-scoped integration test fixtures.
 
-Inherits ``db_session`` and ``client`` from the parent integration
-conftest. Adds:
+Inherits ``db_session`` from the parent integration conftest, and
+overrides ``client`` so auth tests run against an UNauthenticated
+HTTP client. The parent ``client`` fixture pre-attaches a Bearer JWT
+for a per-test ``auth_user`` row that gets inserted on every test
+pulling the parent ``client``; that would break tests like
+"register first user when none exists" — they'd see
+``account_exists: True`` because the auto-injected user is already there.
+
+Adds:
 
 - ``install_auth_test_config`` (autouse) — installs explicit dev-test
   auth secrets via :func:`app.auth.config.configure` so endpoints don't
   need ``JWT_SECRET_KEY`` / ``HOUSEHOLD_ACCESS_KEY`` env vars to run.
   Also swaps the password hasher for a fast-params instance so argon2
   doesn't burn 50ms per hash.
+- ``client`` — overrides the parent fixture to drop the default Bearer
+  header and the ``auth_user`` dependency.
 - ``register_user`` — convenience helper that POSTs /auth/register and
   returns ``(access_token, refresh_cookie_value, response)``.
 
@@ -26,10 +35,13 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from argon2 import PasswordHasher
+from httpx import AsyncClient, ASGITransport
 
 from app.auth import config as auth_config
 from app.auth import models as _auth_models  # noqa: F401  # register tables
 from app.auth import passwords
+from app.database import get_db
+from app.main import app
 
 TEST_HOUSEHOLD_ACCESS_KEY = "dev-access-key-for-integration-tests"
 TEST_JWT_SECRET_KEY = "x" * 64  # 64-char string with no placeholder substring
@@ -49,6 +61,25 @@ def install_auth_test_config():
     yield
     auth_config.reset()
     passwords.set_password_hasher(PasswordHasher())
+
+
+@pytest_asyncio.fixture
+async def client(db_session):
+    """Override the parent `client` fixture: NO default Bearer header,
+    NO `auth_user` dependency. Auth subfolder tests own their auth state
+    end-to-end (register, login, logout, refresh).
+    """
+
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+    app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture

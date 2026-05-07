@@ -18,19 +18,31 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.constants import import_errors as codes
+from app.database import get_db
 
 
 # ---------------------------------------------------------------------------
-# Local async client — does NOT need the postgres container fixture because
-# none of the endpoints under test depend on the DB session.
+# Local async client — M5 PR1: even though these tests mock Celery + Redis,
+# /items/import-from-url is now wrapped by the protected APIRouter, and
+# `get_current_user` runs `validate_bearer` which does a live DB lookup.
+# So the client now needs (a) auth headers and (b) the test DB session
+# injected via dependency_override. We pull both from the integration
+# conftest's `auth_headers` and `db_session` fixtures.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-async def async_client():
+async def async_client(auth_headers, db_session):
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    async with AsyncClient(
+        transport=transport, base_url="http://test", headers=auth_headers
+    ) as c:
         yield c
+    app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------

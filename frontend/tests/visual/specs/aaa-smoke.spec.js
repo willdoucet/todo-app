@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../fixtures/auth-base.js'
 import { waitForMealboardReady } from '../fixtures/geometric.js'
 
 // Eng 8A + Adversarial review A3/A4 — this file's name is prefixed `aaa-` so
@@ -21,7 +21,7 @@ test('mealboard page loads with canonical VRT seed rows and no console errors', 
   // smoke failure (seed inserted 0 cards but local DB had 3 stale ones).
   const vrtCardCount = await page
     .locator('[data-testid="meal-card"]')
-    .filter({ hasText: /^VRT / })
+    .filter({ hasText: 'VRT ' })
     .count()
   expect(
     vrtCardCount,
