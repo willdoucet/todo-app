@@ -1,8 +1,16 @@
 """
 Integration test fixtures with real PostgreSQL database.
 
-These fixtures spin up a real PostgreSQL container using testcontainers,
-create tables, and provide a clean database for each test.
+These fixtures spin up a real PostgreSQL container (via testcontainers
+locally, the GitHub Actions postgres service in CI, or todo_app_test
+inside docker-compose), create schema once per session, and isolate
+each test via per-test transaction rollback.
+
+M5 PR1: every protected route now requires a valid Authorization header
+(`Bearer <jwt>`). The `client` fixture mints a fresh JWT per test and
+attaches it as a default header — so existing tests stay green without
+any test-file edits. An `unauth_client` fixture is provided for tests
+that need to exercise the 401 path explicitly.
 """
 
 import os
@@ -14,7 +22,7 @@ os.environ["UPLOAD_DIR"] = _test_upload_dir
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy import text
 from httpx import AsyncClient, ASGITransport
 
@@ -24,7 +32,40 @@ from app.database import get_db
 
 
 # =============================================================================
-# Database Container & Engine (session-scoped, non-async)
+# Auth Config — autouse session fixture (M5 PR1)
+# =============================================================================
+#
+# Integration tests use ASGITransport(app=app), which does NOT run
+# FastAPI's lifespan, so `_initialize_auth_config` from `main.py` never
+# fires. Without this fixture, the first `tokens.encode_access_token`
+# call (or any `Depends(get_current_user)` evaluation) would raise
+# AuthConfigError("Auth config not initialized…").
+#
+# Mirrors the unit-test pattern at tests/unit/auth/test_dependencies.py.
+#
+# Function-scoped autouse (not session-scoped) because the auth subfolder
+# (tests/integration/auth/) has its own per-test `install_auth_test_config`
+# that calls `auth_config.reset()` at teardown — leaving `_settings=None`
+# for any test that runs afterward. Function scope re-installs before
+# every test so the next test (in any folder, including the auth subfolder
+# itself) always starts with a fresh, configured auth state. Switching
+# this to session scope would brick every integration test ordered
+# after an auth-subfolder test.
+
+@pytest.fixture(autouse=True)
+def install_auth_config():
+    from app.auth import config as auth_config
+
+    auth_config.configure(auth_config.AuthConfig(
+        jwt_secret_key="x" * 64,
+        household_access_key="dev-access-key",
+    ))
+    yield
+    auth_config.reset()
+
+
+# =============================================================================
+# Database Container & Engine (session-scoped)
 # =============================================================================
 
 @pytest.fixture(scope="session")
@@ -60,51 +101,196 @@ def postgres_url():
     return async_url
 
 
+# Session-scoped engine: shared across all integration tests via the
+# session-scoped event loop. Per-test isolation is achieved through
+# transaction rollback inside the `db_session` fixture below.
+#
+# Schema setup is intentionally NOT done here — it lives inside
+# `db_session` so that a per-test, idempotent `create_all` heals the
+# schema if a previous test (e.g. tests/integration/auth/test_refresh.py
+# at L180-182) ran its own `Base.metadata.drop_all` and left the DB
+# table-less. `Base.metadata.create_all` is idempotent
+# (CREATE TABLE IF NOT EXISTS), so paying the cost per-test is cheap
+# and the alternative (rebuilding the test runner's order assumptions)
+# is much riskier.
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def test_engine(postgres_url):
+    engine = create_async_engine(postgres_url, echo=False)
+    yield engine
+    # Final cleanup: drop the schema so a downstream consumer of
+    # `todo_app_test` (e.g. the visual-test profile's api-test container,
+    # which runs `alembic upgrade head` at boot) starts from a known
+    # empty DB. Original conftest achieved this via per-test drop_all;
+    # we do it once at session end instead. Idempotent — drop_all on a
+    # missing table is a no-op.
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+    finally:
+        await engine.dispose()
+
+
 # =============================================================================
-# Per-Test Database Session
+# Per-Test Database Session — transaction rollback isolation (M5 PR1)
 # =============================================================================
+#
+# Schema is verified-and-created idempotently before each test. Per-test
+# data is rolled back via SAVEPOINT-mode transaction.
+#
+# `join_transaction_mode='create_savepoint'` keeps existing
+# `await db_session.commit()` calls transparent — the commit ends the
+# inner SAVEPOINT instead of releasing the outer transaction, so
+# cross-test isolation holds. Without this, a route handler's
+# `await db.commit()` would commit the test's data to the table for
+# real, defeating rollback isolation.
+#
+# INCOMPATIBLE WITH pytest-xdist: the per-test `ALTER SEQUENCE ... RESTART
+# WITH 1` below is non-transactional and globally visible. Parallel workers
+# would race on sequence values and produce duplicate-key errors with no
+# obvious cause. Keep tests serial (default pytest behavior).
 
 @pytest_asyncio.fixture
-async def db_session(postgres_url):
+async def db_session(test_engine):
+    # Idempotent schema verification — heals the schema if a previous
+    # test (e.g. test_refresh.py's manual drop_all) torched it.
+    # Also resets all auto-increment sequences to 1: PostgreSQL
+    # sequences are NOT transactional, so a rolled-back INSERT still
+    # advances the sequence. Without this, tests that hardcode
+    # `assert user.id == 1` start failing once enough prior tests have
+    # auto-inserted users (e.g. via the auth_user fixture).
+    async with test_engine.begin() as setup_conn:
+        await setup_conn.execute(text("CREATE EXTENSION IF NOT EXISTS citext"))
+        await setup_conn.run_sync(Base.metadata.create_all)
+        seq_rows = await setup_conn.execute(
+            text(
+                "SELECT sequence_name FROM information_schema.sequences "
+                "WHERE sequence_schema = 'public'"
+            )
+        )
+        for (seq_name,) in seq_rows.fetchall():
+            await setup_conn.execute(text(f'ALTER SEQUENCE "{seq_name}" RESTART WITH 1'))
+
+    async with test_engine.connect() as conn:
+        outer = await conn.begin()
+        session = AsyncSession(
+            bind=conn,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
+        try:
+            yield session
+        finally:
+            await session.close()
+            await outer.rollback()
+
+
+# =============================================================================
+# Auth User & Headers (M5 PR1)
+# =============================================================================
+#
+# Per-test fixture user. Inserted into the users table inside the test's
+# SAVEPOINT-mode transaction so the FastAPI handler (which shares the
+# session via `dependency_override`) sees it on validate_bearer's live
+# DB lookup. Rolled back at teardown along with everything else the
+# test wrote.
+#
+# The upsert pattern (`ON CONFLICT (email) DO UPDATE`) is defensive —
+# it tolerates a previous test session that crashed mid-run and left a
+# stale `auth-test@local` row behind. Within a clean session, no
+# conflict ever fires.
+
+@pytest_asyncio.fixture
+async def auth_user(db_session):
+    result = await db_session.execute(
+        text(
+            "INSERT INTO users (email, password_hash, session_version) "
+            "VALUES (:email, :hash, :sv) "
+            "ON CONFLICT (email) DO UPDATE "
+            "  SET session_version = EXCLUDED.session_version "
+            "RETURNING id"
+        ),
+        {
+            "email": "auth-test@local",
+            # password_hash is never read on the JWT path; literal
+            # string avoids ~700ms argon2 cost per insert.
+            "hash": "argon2-placeholder-not-validated-on-jwt-path",
+            "sv": 1,
+        },
+    )
+    row = result.fetchone()
+    # Release the SAVEPOINT so the FastAPI handler (which uses the same
+    # AsyncSession via dependency_override) sees the row on its
+    # subsequent SELECT during validate_bearer.
+    await db_session.commit()
+    return {"id": row[0], "email": "auth-test@local", "session_version": 1}
+
+
+@pytest.fixture
+def auth_headers(auth_user):
+    """Mint a fresh access JWT for auth_user; return {'Authorization': 'Bearer <jwt>'}.
+
+    Mints directly via `tokens.encode_access_token` (rather than calling
+    `/auth/login`) to skip the registration/login round-trip per test.
+    The auth dependency itself is exhaustively unit-tested at the JWT
+    layer; integration tests only need a valid Authorization header to
+    exercise downstream behavior.
     """
-    Provide a database session for each test.
+    from app.auth import tokens
 
-    Creates fresh engine and tables for each test for isolation.
-    """
-    # Create fresh engine for this test
-    engine = create_async_engine(postgres_url, echo=False)
-
-    # Create tables. The citext extension is required by users.email (M3
-    # auth tables) — install idempotently before create_all so the
-    # CITEXT column DDL doesn't fail on a fresh test database.
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS citext"))
-        await conn.run_sync(Base.metadata.create_all)
-
-    # Create session
-    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with async_session() as session:
-        yield session
-
-    # Drop all tables (clean slate for next test)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-    # Dispose engine
-    await engine.dispose()
+    token = tokens.encode_access_token(
+        user_id=auth_user["id"],
+        session_version=auth_user["session_version"],
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 # =============================================================================
 # API Client Fixture
 # =============================================================================
+#
+# M5 PR1 deviation from plan: the plan threaded `auth_headers` through
+# every `await client.X(...)` call across 18 test files (~273 call
+# sites). Instead, the `client` fixture installs `auth_headers` as
+# default request headers on the AsyncClient — same outcome (real JWT
+# path through every protected route on the happy path), zero test-file
+# edits, much smaller blast radius. Per-call `headers={...}` kwargs in
+# existing tests still merge cleanly with the default auth header.
+#
+# Tests that need an unauthenticated client (e.g. test_auth_enforcement.py)
+# use the sibling `unauth_client` fixture below.
 
 @pytest_asyncio.fixture
-async def client(db_session):
+async def client(db_session, auth_headers):
     """
     Async HTTP client for testing API endpoints.
 
-    Overrides the database dependency to use our test session.
+    Overrides the database dependency to use our test session and
+    attaches a valid Bearer token as a default header so every
+    M5-protected route returns 200 on the happy path.
+    """
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers=auth_headers,
+    ) as client:
+        yield client
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def unauth_client(db_session):
+    """Async HTTP client without a default Authorization header.
+
+    Used by tests that need to verify 401 behavior on protected routes
+    (e.g. test_auth_enforcement.py).
     """
     async def override_get_db():
         yield db_session

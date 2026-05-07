@@ -693,11 +693,23 @@ Post-refactor, meal entries reference items via a single `item_id` field (the ol
 - Refresh tokens are NOT JWTs — they're opaque `secrets.token_urlsafe(32)` strings. Their identity is the SHA-256 hash row in `refresh_tokens`. Plaintext is never persisted.
 - Access JWTs are HS256 with claims `{sub, iat, exp, session_version}`. 15-min TTL.
 - The `__Host-refresh` cookie is `HttpOnly`, `Secure`, `Path=/`, `SameSite=Lax`, no `Domain` (host-only on `api.<domain>`), 30-day Max-Age.
-- `app/auth/dependencies.py::get_current_user` is shipped + unit-tested but NOT wired into any non-auth route in M3. M5 PR #1 wires it across the API.
+- `app/auth/dependencies.py::get_current_user` is now wired across the API via the M5 PR1 wrapping `protected` APIRouter pattern (see "Wrapping protected APIRouter" below).
+
+#### Wrapping protected APIRouter (M5 PR1)
+
+Auth enforcement uses a single `protected = APIRouter(dependencies=[Depends(get_current_user)])` declared in `app/main.py`. The 14 protected routers (tasks, family_members, responsibilities, uploads.router + uploads.item_icon_router, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries) are included on `protected`. The public surface (`/`, `/healthz`, `/auth/*`, `/uploads/*` StaticFiles mount, `/plumbing-test/*` until M5 PR2) is registered directly on `app` or via the auth router.
+
+ONE place to audit "is this auth-gated?" — grep `app.include_router` in `main.py` to enumerate the public surface. A new router added on `protected` is auth-gated automatically. A new router added on `app` directly is public.
+
+FastAPI's automatic `/docs`, `/redoc`, and `/openapi.json` are disabled (`docs_url=None, redoc_url=None, openapi_url=None`) because they bypass router-level dependencies and would expose the full schema after M5 PR2 removes Cloudflare Access.
+
+Two test artifacts pin the gate from both ends:
+- `tests/unit/test_protected_router_propagation.py` — STRUCTURAL: walks `app.routes`, asserts every non-allowlist `APIRoute` has `get_current_user` in its dep tree, and that `/docs`/`/redoc`/`/openapi.json` are absent.
+- `tests/integration/test_auth_enforcement.py` — BEHAVIORAL: hits real HTTP endpoints, asserts 401 without auth and with malformed Bearer; asserts public root stays 200.
 
 #### Production host gate
 
-A FastAPI middleware in `app/main.py` rejects direct Fly-hostname traffic for any non-`/healthz` path when `APP_ENV=production`. Cloudflare Access + the `/auth/*` WAF rule are load-bearing through M5; without this gate, callers could hit `*.fly.dev` directly and bypass both. Configured via `PUBLIC_API_HOST=api.mealy.dev`. Disabled in dev/test so contributors can use any Host header. Returns `421 Misdirected Request` on rejection.
+A FastAPI middleware in `app/main.py` rejects direct Fly-hostname traffic for any non-`/healthz` path when `APP_ENV=production`. Cloudflare Access + the `/auth/*` WAF rule are load-bearing through M5 PR1's soak window; PR2 removes Cloudflare Access. The host gate stays through PR2 and beyond. Configured via `PUBLIC_API_HOST=api.mealy.dev`. Disabled in dev/test so contributors can use any Host header. Returns `421 Misdirected Request` on rejection.
 
 #### Auth subsystem layout (`app/auth/`)
 

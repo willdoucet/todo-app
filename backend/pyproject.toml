@@ -44,4 +44,12 @@ test = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-v --tb=short"
-asyncio_default_fixture_loop_scope = "function"
+# M5 PR1: integration test conftest uses session-scoped async fixtures
+# (test_engine, auth_user) that share state with function-scoped tests
+# via SQLAlchemy's connection pool. With per-function loop scope, pooled
+# asyncpg connections leak across loops (the same class of bug
+# documented in LESSONS.md "Async DB work from sync contexts"). The
+# pragmatic fix is one event loop for the whole pytest session — the
+# standard pattern for integration suites with shared DB resources.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

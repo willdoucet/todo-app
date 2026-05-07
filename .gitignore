@@ -39,3 +39,13 @@ todo-app-notes/
 
 # Curl cookie jars left over from auth smoke tests (contain refresh-token plaintexts)
 backend/cookies-*.txt
+
+# M5 PR1 — visual-test cached access token (15-min JWT minted by globalSetup
+# for the synthetic visual-test user). Defense in depth: the token is
+# short-lived and scoped to a synthetic test user, but a stray `git add .`
+# from a contributor running visual tests locally would otherwise ship a
+# real (if short-lived) JWT in a commit.
+frontend/tests/visual/.vrt-token
+
+# Playwright test artifacts (HTML reports, traces, screenshots).
+frontend/test-results/

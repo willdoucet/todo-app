@@ -77,7 +77,7 @@ export default function UndoMealCard({ mealName, expiresAt, onUndo }) {
       data-testid="meal-card"
       data-variant="undo"
       className={`
-        group relative w-full overflow-hidden
+        group relative w-full min-w-full max-w-full self-stretch box-border overflow-hidden
         flex flex-col items-center justify-center text-center
         px-2 py-3 min-h-[100px]
         rounded-xl border border-card-border dark:border-gray-700

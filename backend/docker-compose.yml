@@ -171,6 +171,16 @@ services:
       # API call from the visual-test bundle fails CORS and the suite dies
       # on aaa-smoke.spec.js.
       - CORS_ALLOW_ORIGINS=http://localhost:5173,http://localhost:3000,http://frontend-preview:4173
+      # M5 PR1 — auth enforcement is now on across all protected routes.
+      # The visual-test seed flow writes through /items, /meal-entries,
+      # etc., so the api-test container needs valid JWT-signing secrets
+      # AND a household access key. Defaults keep the stack runnable on a
+      # fresh checkout without an .env file; real values from .env (if
+      # present) override via env_file inheritance. Both defaults pass
+      # `app.auth.config.PLACEHOLDER_DENY_LIST` and the 32-char minimum.
+      - APP_ENV=test
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-visual-test-jwt-signing-key-do-not-use-in-prod}
+      - HOUSEHOLD_ACCESS_KEY=${HOUSEHOLD_ACCESS_KEY:-visual-test-household-access-key}
     depends_on:
       db:
         condition: service_healthy
@@ -201,7 +211,7 @@ services:
       api-test:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4173/"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4173/', (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -219,6 +229,11 @@ services:
     environment:
       - PREVIEW_URL=http://frontend-preview:4173
       - API_URL=http://api-test:8000
+      # M5 PR1 — globalSetup.js reads HOUSEHOLD_ACCESS_KEY from the
+      # frontend-visual container's environment to register the synthetic
+      # visual-test user. Default value MUST match api-test's default
+      # exactly so register validates against the right access key.
+      - HOUSEHOLD_ACCESS_KEY=${HOUSEHOLD_ACCESS_KEY:-visual-test-household-access-key}
       # Adversarial review A5: NO bind mount — specs, fixtures, and frontend
       # app code are baked into the images at build time. Rebuild
       # frontend-preview and frontend-visual whenever the frontend working

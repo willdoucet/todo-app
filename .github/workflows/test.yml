@@ -127,10 +127,34 @@ jobs:
             exit 1
           fi
 
+      - name: Verify M5 auth secrets are set
+        # M5 PR1 — fail fast if either auth secret is unset. Without this,
+        # api-test boots but `_initialize_auth_config` silently fails and
+        # every protected route returns 500. The first symptom is an
+        # opaque 500 from the seed layer's first /items POST. Fail-fast
+        # surfaces the real cause.
+        env:
+          CI_JWT_SECRET_KEY: ${{ secrets.CI_JWT_SECRET_KEY }}
+          CI_HOUSEHOLD_ACCESS_KEY: ${{ secrets.CI_HOUSEHOLD_ACCESS_KEY }}
+        run: |
+          if [ -z "$CI_JWT_SECRET_KEY" ]; then
+            echo "::error::CI_JWT_SECRET_KEY repo secret is unset. Generate one with:"
+            echo "  python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            echo "and add it at Settings → Secrets and variables → Actions → New repository secret."
+            exit 1
+          fi
+          if [ -z "$CI_HOUSEHOLD_ACCESS_KEY" ]; then
+            echo "::error::CI_HOUSEHOLD_ACCESS_KEY repo secret is unset. Any non-empty string >0 chars works for tests."
+            echo "and add it at Settings → Secrets and variables → Actions → New repository secret."
+            exit 1
+          fi
+
       - name: Write CI .env for docker-compose
         # The visual-tests job runs the full docker-compose stack, which needs
-        # POSTGRES_* and FERNET_KEY or the api container crashes on startup.
-        # Values are test-only; real secrets go through deploy workflows.
+        # POSTGRES_*, FERNET_KEY, and (M5 PR1) JWT_SECRET_KEY +
+        # HOUSEHOLD_ACCESS_KEY or the api container crashes on startup or
+        # 500s on every protected route. Values are test-only; real secrets
+        # go through deploy workflows.
         working-directory: backend
         run: |
           cat > .env <<EOF
@@ -138,6 +162,8 @@ jobs:
           POSTGRES_PASSWORD=postgres
           POSTGRES_DB=todo_app
           FERNET_KEY=${{ secrets.CI_FERNET_KEY }}
+          JWT_SECRET_KEY=${{ secrets.CI_JWT_SECRET_KEY }}
+          HOUSEHOLD_ACCESS_KEY=${{ secrets.CI_HOUSEHOLD_ACCESS_KEY }}
           EOF
 
       - name: Build and start visual-test stack

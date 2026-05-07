@@ -45,6 +45,13 @@ Services:
 - Celery beat (periodic sync scheduler — 10-min iCloud sync interval)
 - Vite dev server on port 5173
 
+**Required env vars in `backend/.env`** (post-M5):
+- `JWT_SECRET_KEY` — ≥32 chars, no placeholder substrings (see `backend/app/auth/config.py::PLACEHOLDER_DENY_LIST`). Generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+- `HOUSEHOLD_ACCESS_KEY` — any non-empty string. Gates `/auth/register`.
+- `FERNET_KEY` — for iCloud credential encryption. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+
+Without `JWT_SECRET_KEY` and `HOUSEHOLD_ACCESS_KEY`, every protected route returns 500. The api container's startup logs a clear `[M5 auth bootstrap warning]` line on stderr when these are unset and `APP_ENV != production`. See `backend/.env.example` for the full template.
+
 **Multi-target Dockerfile** (`backend/Dockerfile`):
 - `builder` — python:3.12-slim + uv 0.5.24, installs prod deps only, copies app code
 - `dev` (extends builder) — adds test extras (`uv sync --extra test`), keeps uv available, runs with `--reload`

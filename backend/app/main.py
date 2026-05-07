@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Request
+from fastapi import APIRouter, FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -8,7 +8,7 @@ import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
 from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries, plumbing_test
-from app.auth import router as auth_router
+from app.auth import get_current_user, router as auth_router
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 
@@ -25,10 +25,16 @@ def _initialize_auth_config() -> None:
 
     In dev / local docker, try to load; if env vars are missing or
     invalid, leave auth unconfigured. Auth endpoints will surface
-    :class:`AuthConfigError` at call time (other routes work fine), so a
-    contributor who hasn't set ``JWT_SECRET_KEY`` / ``HOUSEHOLD_ACCESS_KEY``
-    can still run the existing app.
+    :class:`AuthConfigError` at call time. After M5 PR1, every
+    protected route also surfaces 500 because the wrapping
+    ``protected`` APIRouter calls :func:`get_current_user`, which
+    decodes a JWT against ``get_settings()``. We log a clear startup
+    warning so a contributor who forgot the new env vars sees the
+    correct diagnosis instead of debugging a generic 500.
     """
+    import logging
+    import sys
+
     from app.auth.config import AuthConfigError, configure, load_from_env
 
     if os.getenv("APP_ENV") == "production":
@@ -37,10 +43,25 @@ def _initialize_auth_config() -> None:
 
     try:
         configure(load_from_env())
-    except AuthConfigError:
-        # Dev: contributor hasn't set auth env vars yet. Auth endpoints
-        # will surface a clear error if hit; other routes are unaffected.
-        pass
+    except AuthConfigError as exc:
+        # M5: previously this was a silent pass. Post-PR1, every protected
+        # route returns 500 (auth_config not initialized) without a clear
+        # signal. Log at WARNING so docker-compose logs and `uv run` both
+        # surface the cause on the first request.
+        logging.getLogger(__name__).warning(
+            "M5 auth bootstrap: auth config not loaded (%s). "
+            "Protected routes will fail until JWT_SECRET_KEY and "
+            "HOUSEHOLD_ACCESS_KEY are set in the environment. "
+            "Auth endpoints (/auth/*) will return AuthConfigError on call.",
+            exc,
+        )
+        # Belt-and-suspenders for non-stderr-buffered runtimes.
+        print(
+            "[M5 auth bootstrap warning] Set JWT_SECRET_KEY and "
+            "HOUSEHOLD_ACCESS_KEY in your .env to enable protected routes.",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 @asynccontextmanager
@@ -49,7 +70,18 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Task & Recipe API", lifespan=lifespan)
+# M5 PR1 — disable FastAPI's automatic /docs, /redoc, /openapi.json. These
+# routes are registered directly by FastAPI(...) and bypass router-level
+# dependencies — the wrapping `protected` APIRouter cannot gate them.
+# After PR2 removes Cloudflare Access, leaving them on would expose the
+# full API schema to the open internet.
+app = FastAPI(
+    title="Task & Recipe API",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 
 def _parse_cors_origins(raw: str | None, app_env: str | None = None) -> list[str]:
@@ -114,25 +146,38 @@ async def production_host_gate(request: Request, call_next):
         )
     return await call_next(request)
 
+# M5 PR1 — wrapping `protected` APIRouter. ONE place to audit "is this
+# auth-gated?". A new router added on `protected` is auth-gated
+# automatically. A new router added on `app` directly is public — grep
+# for `app.include_router` in this file to audit the public surface.
+#
 # Include routers BEFORE mounting StaticFiles so the specific
 # POST /uploads/item-icon route wins over the static mount, which would
 # otherwise intercept all /uploads/* requests and return 405 for non-GET.
-app.include_router(tasks.router)
-app.include_router(family_members.router)
-app.include_router(responsibilities.router)
-app.include_router(uploads.router)
-app.include_router(uploads.item_icon_router)
-app.include_router(lists.router)
-app.include_router(items.router)
-app.include_router(calendar_events.router)
-app.include_router(integrations.router)
-app.include_router(app_settings.router)
-app.include_router(calendars.router)
-app.include_router(sections.router)
-app.include_router(meal_slot_types.router)
-app.include_router(meal_entries.router)
-app.include_router(plumbing_test.router)
+protected = APIRouter(dependencies=[Depends(get_current_user)])
+protected.include_router(tasks.router)
+protected.include_router(family_members.router)
+protected.include_router(responsibilities.router)
+# uploads.router is the legacy /upload/* (singular) protected API surface.
+protected.include_router(uploads.router)
+# uploads.item_icon_router is a distinct router in the same module —
+# POST /uploads/item-icon. Protected. NOT the same as the public
+# StaticFiles mount on /uploads/* below.
+protected.include_router(uploads.item_icon_router)
+protected.include_router(lists.router)
+protected.include_router(items.router)
+protected.include_router(calendar_events.router)
+protected.include_router(integrations.router)
+protected.include_router(app_settings.router)
+protected.include_router(calendars.router)
+protected.include_router(sections.router)
+protected.include_router(meal_slot_types.router)
+protected.include_router(meal_entries.router)
+app.include_router(protected)
+
+# Public surface — registered directly on `app`, NOT on `protected`.
 app.include_router(auth_router)
+app.include_router(plumbing_test.router)  # Removed in M5 PR2.
 
 # Mount static files AFTER routers so that specific router paths (e.g.
 # POST /uploads/item-icon) take precedence over the catch-all static mount.

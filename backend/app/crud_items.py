@@ -308,8 +308,11 @@ _UNDO_KEY_PREFIX = "undo:item:"
 _REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 # redis.asyncio binds connections to the running event loop, so we cache one
-# client per loop. Production runs a single loop forever (one entry); tests
-# create a fresh loop per case (one entry per test).
+# client per loop. Production runs a single loop forever (one entry). Tests
+# also share a single loop per session (M5 PR1 set
+# asyncio_default_test_loop_scope = "session" to match
+# asyncio_default_fixture_loop_scope), so the cache stays at one entry across
+# the whole pytest run.
 _redis_clients: dict[int, redis.Redis] = {}
 
 

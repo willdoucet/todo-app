@@ -1,4 +1,4 @@
-import { test } from '@playwright/test'
+import { test } from '../fixtures/auth-base.js'
 import { expectStableAcrossHover, waitForMealboardReady } from '../fixtures/geometric.js'
 
 // The exact invariants that the shipped hover-jitter fix is meant to
