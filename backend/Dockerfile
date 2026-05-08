@@ -74,5 +74,12 @@ COPY --chown=appuser:appuser ./stock_icons /app/stock_icons_src
 USER appuser
 
 # Default command - run migrations + start server
-# For development you can override with --reload in compose
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# For development you can override with --reload in compose.
+# --proxy-headers + --forwarded-allow-ips='*' make uvicorn trust Fly's
+# X-Forwarded-Proto so request.url.scheme matches the edge scheme
+# (https), not the internal Fly proxy hop (http). Without this, FastAPI
+# trailing-slash redirects produce http:// Location headers that
+# browsers block as Mixed Content. fly.toml's [processes] web entry is
+# the production invocation; this CMD is the fallback for runs that
+# don't use Fly's process group (e.g., direct `docker run`).
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"]
