@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { API_BASE_URL, apiUrl } from './apiBase'
 
 // SC #37: backend-uploaded media survives the API-client migration.
@@ -10,6 +10,71 @@ describe('apiBase', () => {
     it('exposes a non-empty string', () => {
       expect(typeof API_BASE_URL).toBe('string')
       expect(API_BASE_URL.length).toBeGreaterThan(0)
+    })
+  })
+
+  // Protocol-upgrade guard — see apiBase.js _upgradeProtocolIfNeeded for
+  // the rationale. We re-import the module under controlled `window.location`
+  // and `import.meta.env` to exercise both branches.
+  describe('protocol upgrade', () => {
+    let originalLocation
+
+    beforeEach(() => {
+      originalLocation = window.location
+      vi.resetModules()
+    })
+
+    afterEach(() => {
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      })
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    })
+
+    function setProtocol(protocol) {
+      Object.defineProperty(window, 'location', {
+        value: { ...originalLocation, protocol },
+        writable: true,
+        configurable: true,
+      })
+    }
+
+    it('upgrades http:// to https:// when the page is HTTPS', async () => {
+      setProtocol('https:')
+      vi.stubEnv('VITE_API_BASE_URL', 'http://api.mealy.dev')
+      const mod = await import('./apiBase')
+      expect(mod.API_BASE_URL).toBe('https://api.mealy.dev')
+    })
+
+    it('leaves http:// untouched when the page is HTTP (local dev)', async () => {
+      setProtocol('http:')
+      vi.stubEnv('VITE_API_BASE_URL', 'http://api.mealy.dev')
+      const mod = await import('./apiBase')
+      expect(mod.API_BASE_URL).toBe('http://api.mealy.dev')
+    })
+
+    it('exempts http://localhost:8000 even on an HTTPS page', async () => {
+      setProtocol('https:')
+      vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:8000')
+      const mod = await import('./apiBase')
+      expect(mod.API_BASE_URL).toBe('http://localhost:8000')
+    })
+
+    it('exempts http://127.0.0.1 even on an HTTPS page', async () => {
+      setProtocol('https:')
+      vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
+      const mod = await import('./apiBase')
+      expect(mod.API_BASE_URL).toBe('http://127.0.0.1:8000')
+    })
+
+    it('leaves https:// URLs untouched', async () => {
+      setProtocol('https:')
+      vi.stubEnv('VITE_API_BASE_URL', 'https://api.mealy.dev')
+      const mod = await import('./apiBase')
+      expect(mod.API_BASE_URL).toBe('https://api.mealy.dev')
     })
   })
 
