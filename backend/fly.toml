@@ -17,7 +17,13 @@ primary_region = "sjc"
   release_command = "alembic upgrade head"
 
 [processes]
-  web = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  # --proxy-headers + --forwarded-allow-ips='*' make uvicorn trust Fly's
+  # X-Forwarded-Proto / X-Forwarded-For. Without this, FastAPI's
+  # trailing-slash redirects (and any other request.url-derived URLs)
+  # use scheme=http because the Fly proxy ↔ app hop is plain HTTP, even
+  # though the edge is HTTPS — producing http:// Location headers that
+  # browsers block as Mixed Content from an HTTPS frontend.
+  web = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"
   worker = "celery -A app.celery_app worker --loglevel=info --concurrency=2"
   # Beat must be exactly one process — multiple beat instances would fire
   # the iCloud sync schedule N times every 10 min and corrupt task state.
