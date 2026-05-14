@@ -27,8 +27,8 @@ from app.main import app
 from fastapi.routing import APIRoute
 from starlette.routing import Mount
 
-# Public APIRoute prefixes (auth + plumbing-test until PR2).
-PUBLIC_PREFIXES = ("/auth/", "/plumbing-test")
+# Public APIRoute prefixes (auth-portal endpoints only after PR2).
+PUBLIC_PREFIXES = ("/auth/",)
 # Public APIRoute exact paths (root sanity + healthz).
 PUBLIC_EXACT = {"/", "/healthz"}
 # The only public StaticFiles mount. /uploads is gated in M7.
