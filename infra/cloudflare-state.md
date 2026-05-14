@@ -1,14 +1,18 @@
 # Cloudflare State (mealy.dev / api.mealy.dev)
 
-Canonical intent file for all Cloudflare dashboard state during M2-M5. The
+Canonical intent file for all Cloudflare dashboard state during M2-M7. The
 dashboard config itself is not in git (real drift detection via API or
 Terraform is M8 runbook scope, tracked in `.claude/IMPLEMENTATION_PLAN.md`).
 This file is the diff-able intent — update in the same commit that changes
 the dashboard. Slice 7 manually reconciles file vs. live dashboard.
 
-The bypass-application section is removed in M5 PR #2 when the
-`/plumbing-test*` endpoints come down. Rest of file persists past M2 and
-feeds into the M8 runbook drift-detection work.
+After M5 PR2 (2026-05-08), the `/plumbing-test*` backend endpoints are
+gone but the Application 2 Bypass policy is intentionally left in place —
+its path selectors now match a 404, which is harmless. The CF Access edge
+gate (Application 1) stays load-bearing for `/uploads/*` until M7 replaces
+the StaticFiles mount with R2 + auth-proxied uploads (Cursor implementation
+review constraint, 2026-05-07). The Bypass Application is removed in M7
+alongside the broader CF Access teardown.
 
 Last verified: 2026-05-01 by willdoucet
 Cloudflare account ID: f7f2bff79b487f5d1552a1c5eebd3992
@@ -42,7 +46,7 @@ Policy: "Operator allowlist"
   - Action: Allow
   - Include → Emails: willdoucet@gmail.com
 
-## Access — Application 2: Plumbing-test bypass (M2-M5 only; removed in M5 PR #2)
+## Access — Application 2: Plumbing-test bypass (M2-M7; inert after M5 PR2; removed in M7)
 
 Cloudflare Access doesn't support path-based bypass policies inside a
 single Application — Policy "Include" selectors are identity-based only
@@ -62,9 +66,16 @@ Policy: "Bypass plumbing-test"
 
 Reason for bypass: cross-origin XHR from `mealy.dev` to
 `api.mealy.dev/plumbing-test` cannot complete an OAuth-style Access
-redirect. Slice 5's split-origin cookie verification depends on these two
-paths reaching Fly directly. Removed alongside the `/plumbing-test*`
-endpoints in M5 PR #2.
+redirect. Slice 5's split-origin cookie verification depended on these two
+paths reaching Fly directly.
+
+**Status after M5 PR2 (2026-05-08):** the backend `/plumbing-test*` routes
+are deleted; both path selectors now match a 404 path. The Bypass
+Application is therefore inert (no information leak — bypass on a
+non-existent route just lets the 404 through faster). It is intentionally
+left live until M7 to keep this file's intent in sync with the dashboard
+without a separate ops touch. Removed in M7 alongside the broader CF
+Access teardown that follows the `/uploads/*` → R2 migration.
 
 ## WAF — Rate limiting rules
 

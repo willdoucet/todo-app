@@ -697,11 +697,11 @@ Post-refactor, meal entries reference items via a single `item_id` field (the ol
 
 #### Wrapping protected APIRouter (M5 PR1)
 
-Auth enforcement uses a single `protected = APIRouter(dependencies=[Depends(get_current_user)])` declared in `app/main.py`. The 14 protected routers (tasks, family_members, responsibilities, uploads.router + uploads.item_icon_router, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries) are included on `protected`. The public surface (`/`, `/healthz`, `/auth/*`, `/uploads/*` StaticFiles mount, `/plumbing-test/*` until M5 PR2) is registered directly on `app` or via the auth router.
+Auth enforcement uses a single `protected = APIRouter(dependencies=[Depends(get_current_user)])` declared in `app/main.py`. The 14 protected routers (tasks, family_members, responsibilities, uploads.router + uploads.item_icon_router, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries) are included on `protected`. The public surface (`/`, `/healthz`, `/auth/*`, `/uploads/*` StaticFiles mount) is registered directly on `app` or via the auth router. The `/uploads/*` mount has no app-layer auth dependency; Cloudflare Access on `api.mealy.dev` is the backstop until M7 replaces the mount with R2 + auth-proxied uploads.
 
 ONE place to audit "is this auth-gated?" — grep `app.include_router` in `main.py` to enumerate the public surface. A new router added on `protected` is auth-gated automatically. A new router added on `app` directly is public.
 
-FastAPI's automatic `/docs`, `/redoc`, and `/openapi.json` are disabled (`docs_url=None, redoc_url=None, openapi_url=None`) because they bypass router-level dependencies and would expose the full schema after M5 PR2 removes Cloudflare Access.
+FastAPI's automatic `/docs`, `/redoc`, and `/openapi.json` are disabled (`docs_url=None, redoc_url=None, openapi_url=None`) because they bypass router-level dependencies — the wrapping `protected` APIRouter cannot gate them. Disabling them is the structural defense; Cloudflare Access on `api.mealy.dev` is the additional edge backstop until M7 closes that loop.
 
 Two test artifacts pin the gate from both ends:
 - `tests/unit/test_protected_router_propagation.py` — STRUCTURAL: walks `app.routes`, asserts every non-allowlist `APIRoute` has `get_current_user` in its dep tree, and that `/docs`/`/redoc`/`/openapi.json` are absent.

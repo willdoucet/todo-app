@@ -23,10 +23,8 @@
 
 ```
 frontend/src/
-├── main.jsx              # React entry point; createRoot(<StrictMode><AppEntry/></StrictMode>)
-├── AppEntry.jsx          # VITE_M2_SHELL env-gate; binds router, picks PlumbingShell vs RouterProvider
+├── main.jsx              # React entry point; binds router via setRouter(), renders <RouterProvider/> directly
 ├── RootLayout.jsx        # Data-router root layout; mounts QueryClient/DarkMode/Toast/UndoToast providers + <Outlet/>
-├── PlumbingShell.jsx     # M2-only placeholder; deleted in M5 PR #2 alongside the env gate
 ├── index.css             # Global styles, utilities, and theme tokens
 │
 ├── lib/
@@ -375,7 +373,7 @@ Cross-cutting UI components, helpers, and providers used across multiple feature
 ## 10. Key Patterns
 
 - **Stack:** Vite 7, React 19, React Router 7 (data router), Tailwind 4, Axios, Headless UI, TanStack Query, Vitest, Testing Library, and MSW.
-- **Routing:** `main.jsx` renders `<AppEntry/>` which gates between `<PlumbingShell/>` (M2) and `<RouterProvider/>`; `lib/router.jsx` defines `createBrowserRouter` with `<RootLayout/>` as the layout and a pathless protected layout (loader = `rootAuthLoader`); `MealboardPage.jsx` owns nested `/mealboard/*` routes.
+- **Routing:** `main.jsx` calls `setRouter(router)` for the auth-redirect helper and renders `<RouterProvider/>` directly; `lib/router.jsx` defines `createBrowserRouter` with `<RootLayout/>` as the layout and a pathless protected layout (loader = `rootAuthLoader`); `MealboardPage.jsx` owns nested `/mealboard/*` routes.
 - **Root providers:** `DarkModeProvider`, `ToastProvider`, `UndoToastProvider`, and `QueryClientProvider` mount inside `RootLayout` so they wrap both `/auth` and protected routes; `HydrateFallback`/`BootErrorScreen` use inline localStorage reads since they may render before RootLayout's children mount.
 - **HTTP/data fetching:** Single shared axios instance in `lib/api.js` (with request/response interceptors for Bearer injection + single-flight refresh on 401). `lib/apiBase.js` is the only place that reads `VITE_API_BASE_URL`. TanStack Query hosts the `/auth/*` surface (status query + login/register/logout mutations); the existing 28 imperative callers keep their current shape and route through `api` (TanStack Query migration of those callers is deferred to Phase 3.1).
 - **Auth state:** Access token lives in `lib/auth/tokenStore.js` (module-scope, in-memory only — never `localStorage`). React subscribes via `useSyncExternalStore` in `useAuth()`; axios reads the token directly. Single-flight refresh in `lib/auth/refresh.js`; one-shot redirect to `/auth` via `lib/auth/redirect.js` shared by axios + Query.
