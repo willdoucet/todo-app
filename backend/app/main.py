@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
-from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries, plumbing_test
+from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries
 from app.auth import get_current_user, router as auth_router
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
@@ -177,7 +177,6 @@ app.include_router(protected)
 
 # Public surface — registered directly on `app`, NOT on `protected`.
 app.include_router(auth_router)
-app.include_router(plumbing_test.router)  # Removed in M5 PR2.
 
 # Mount static files AFTER routers so that specific router paths (e.g.
 # POST /uploads/item-icon) take precedence over the catch-all static mount.

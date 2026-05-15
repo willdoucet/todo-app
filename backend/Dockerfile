@@ -31,6 +31,13 @@ COPY ./app ./app
 COPY ./alembic ./alembic
 COPY ./alembic.ini ./alembic.ini
 
+# Stock icons live in builder so both `dev` (FROM builder) and `prod`
+# (COPY --from=builder below) inherit them. The compose api entrypoint
+# copies these into the uploads volume at first start. Previously this
+# lived only in the prod stage, so the dev image was missing
+# /app/stock_icons_src and api restart-looped on `cp: cannot stat`.
+COPY ./stock_icons /app/stock_icons_src
+
 # Install the project itself (editable not needed in prod, but useful)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
@@ -68,8 +75,9 @@ RUN useradd --create-home --shell /bin/bash appuser
 # Create uploads directory with proper permissions
 RUN mkdir -p /app/uploads && chown appuser:appuser /app/uploads
 
-# Copy stock icons to a staging location (will be copied to uploads volume at startup)
-COPY --chown=appuser:appuser ./stock_icons /app/stock_icons_src
+# Pull stock_icons_src from the builder stage (single source of truth so
+# `dev` has it too). Chowned to appuser since prod runs as non-root.
+COPY --from=builder --chown=appuser:appuser /app/stock_icons_src /app/stock_icons_src
 
 USER appuser
 

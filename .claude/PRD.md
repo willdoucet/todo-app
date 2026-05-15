@@ -445,7 +445,7 @@ Categories: Produce, Protein, Dairy, Pantry, Frozen, Bakery, Beverages, Other
 | Refresh | `POST /auth/refresh` against the refresh cookie returns a fresh access token and rotates the refresh cookie. 60-second grace window on rotation handles parallel in-flight refreshes. |
 | Logout | Revokes the refresh token. Requires the access token in `Authorization: Bearer` (cookie-only logout is rejected as CSRF). |
 | Password Recovery | No self-service password reset in v1. Operator rotates the shared password via CLI (`fly ssh console`) — the rotation also invalidates all outstanding refresh tokens AND any still-unexpired access JWTs via a server-side token/session version check. |
-| Route Protection | Unauthenticated users on `/`, `/lists`, `/responsibilities`, `/settings`, `/mealboard/*` are redirected to `/auth?return_to=<path>`. Only `/healthz` and `/auth/*` remain public. |
+| Route Protection | Unauthenticated users on `/`, `/lists`, `/responsibilities`, `/settings`, `/mealboard/*` are redirected to `/auth?return_to=<path>`. Public application routes (no FastAPI auth dependency): `/healthz`, the root `GET /` sanity message, and `/auth/*` (login/register/refresh/logout/status). The `/uploads/*` `StaticFiles` mount has no app-layer auth dependency; Cloudflare Access on `api.mealy.dev` is the backstop preventing open-internet reads of uploaded item images until M7 replaces the mount with R2 + auth-proxied uploads (Cursor implementation review, 2026-05-07). FastAPI auto-docs (`/docs`, `/redoc`, `/openapi.json`) are disabled, not allowlisted. |
 
 #### What this explicitly does NOT include in v1
 
