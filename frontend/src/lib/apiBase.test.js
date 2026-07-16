@@ -78,6 +78,43 @@ describe('apiBase', () => {
     })
   })
 
+  // M6 hardening — a production build with VITE_API_BASE_URL unset must fail
+  // loud at module load rather than silently falling back to localhost:8000.
+  // See apiBase.js. Dev/vitest (import.meta.env.PROD === false) keeps the
+  // localhost fallback. These exercise the branch M6 added.
+  describe('production build guard', () => {
+    beforeEach(() => {
+      vi.resetModules()
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    })
+
+    it('throws when VITE_API_BASE_URL is unset in a production build', async () => {
+      vi.stubEnv('PROD', true)
+      vi.stubEnv('VITE_API_BASE_URL', '')
+      await expect(import('./apiBase')).rejects.toThrow(
+        /VITE_API_BASE_URL is required in production/
+      )
+    })
+
+    it('does not throw in a production build when VITE_API_BASE_URL is set', async () => {
+      vi.stubEnv('PROD', true)
+      vi.stubEnv('VITE_API_BASE_URL', 'https://api.mealy.dev')
+      const mod = await import('./apiBase')
+      expect(mod.API_BASE_URL).toBe('https://api.mealy.dev')
+    })
+
+    it('falls back to localhost in dev (non-prod) when unset', async () => {
+      // vitest's default import.meta.env.PROD is false — exercise the dev path
+      vi.stubEnv('VITE_API_BASE_URL', '')
+      const mod = await import('./apiBase')
+      expect(mod.API_BASE_URL).toBe('http://localhost:8000')
+    })
+  })
+
   describe('apiUrl', () => {
     it('prefixes relative paths with API_BASE_URL', () => {
       expect(apiUrl('/uploads/abc.png')).toBe(`${API_BASE_URL}/uploads/abc.png`)
