@@ -544,3 +544,39 @@ class Section(Base):
     tasks = relationship("Task", back_populates="section")
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+
+class Asset(Base):
+    """Object-storage manifest (M7). One row per stored upload object.
+
+    ``key`` is the logical path (``item-icons/{uuid}.png``) — simultaneously
+    the storage object key, this table's PK, and the tail of the public
+    ``/uploads/{key}`` URL. ``content_type`` is authoritative for the PR2 read
+    proxy (LocalDiskBackend stores no content-type).
+
+    Lifecycle of ``referenced``:
+
+        upload endpoint      →  INSERT (referenced=false)
+        entity adopts key    →  referenced = true
+        false & created_at aged (>24h) → abandoned-upload sweep target
+
+    Invariant (M7 eng review A1): each managed key is adopted by AT MOST ONE
+    entity column — ``referenced`` is a boolean, not a refcount. Replace/delete
+    hooks delete the object unconditionally, so a key shared by two entities
+    would be erased under the survivor. Stock icons (``stock_icons/*``) are
+    bundled + unmanaged and have NO assets row (they are never uploaded).
+    """
+    __tablename__ = "assets"
+
+    key = Column(Text, primary_key=True)
+    content_type = Column(Text, nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    referenced = Column(Boolean, nullable=False, server_default=text("false"))
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        # Powers the abandoned-upload sweep's
+        # `WHERE referenced = false AND created_at < now() - interval '24h'`
+        # as a cheap index scan rather than a table scan (M7 eng review, perf).
+        Index("ix_assets_referenced_created_at", "referenced", "created_at"),
+    )

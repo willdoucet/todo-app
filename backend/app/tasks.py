@@ -33,6 +33,21 @@ def health_check():
     return {"status": "ok"}
 
 
+@celery_app.task(name="app.tasks.sweep_abandoned_uploads")
+def sweep_abandoned_uploads():
+    """Periodic (hourly): delete upload objects never adopted within 24h —
+    the abandoned-upload backstop (uploaded, then tab closed before save).
+    Referenced objects are cleaned by the entity hooks, not here."""
+    from .services.asset_lifecycle import sweep_abandoned_uploads as _sweep
+
+    async def _run():
+        async with AsyncSessionLocal() as db:
+            return await _sweep(db)
+
+    count = run_async(_run())
+    return {"deleted": count}
+
+
 @celery_app.task(name="app.tasks.sync_all_icloud_integrations")
 def sync_all_icloud_integrations():
     """Periodic task (every 10 min): sync all active iCloud integrations."""

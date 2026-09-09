@@ -138,6 +138,7 @@ Build note: the `Dockerfile` builder stage installs `libxml2-dev`, `libxslt-dev`
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `python-multipart` | >=0.0.22 | File upload handling |
+| `boto3` | >=1.35 | S3-compatible client for Cloudflare R2 object storage (M7). `R2Backend` selected via `STORAGE_BACKEND=r2`; default `local` keeps dev/test on disk. |
 | `tzdata` | >=2024.1 | IANA timezone database (required for `zoneinfo` on slim Docker images) |
 
 ### Development
@@ -156,6 +157,7 @@ Build note: the `Dockerfile` builder stage installs `libxml2-dev`, `libxslt-dev`
 | `httpx` | >=0.27 | Async HTTP client for tests |
 | `factory-boy` | >=3.3 | Test data factories |
 | `testcontainers[postgres]` | >=4.0 | Containerized test databases |
+| `moto[s3]` | >=5.0 | In-process S3 mock (`@mock_aws`) for `R2Backend` tests — keeps the docker-compose test stack R2-free (M7) |
 
 ---
 
@@ -235,6 +237,8 @@ TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app_test
 UPLOAD_DIR=/app/uploads
 REDIS_URL=redis://redis:6379/0
 FERNET_KEY=<base64-encoded-fernet-key>   # For encrypting stored iCloud passwords
+STORAGE_BACKEND=local                    # local | r2 (unknown values raise; r2 is PR2)
+SQLALCHEMY_ECHO=false                    # true opts into SQL logging; default off
 ```
 
 **Frontend (.env.local)**

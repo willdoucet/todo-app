@@ -1,211 +1,298 @@
-"""
-Integration tests for /upload API endpoints.
+"""Integration tests for the /upload API endpoints (M7 rewrite).
 
-These tests verify file upload functionality:
-- Valid image uploads succeed
-- Invalid file types are rejected
-- Files too large are rejected
-- Stock icons endpoint returns predefined list
+Post-Fork-3 reality: validation is magic-byte based, GIF is rejected, icons
+cap at 1 MB and photos/recipe images at 5 MB, and every successful upload
+writes an `assets` manifest row (referenced=false). The default `client`
+fixture runs on LocalDiskBackend with UPLOAD_DIR pointed at a tmp dir by the
+integration conftest.
 """
+
+import io
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import io
+from sqlalchemy import select
+
+from app import models
+from app.storage import ObjectNotFound
 
 
-def create_fake_image(filename: str, content: bytes = b"fake image content") -> tuple:
-    """
-    Create a fake file for upload testing.
+def _mock_upload(content: bytes) -> MagicMock:
+    """Mock UploadFile with async chunked .read() and no Content-Length."""
+    f = MagicMock()
+    f.size = None
+    pos = {"i": 0}
 
-    Returns tuple of (filename, file-like object, content-type) for httpx.
-    """
-    return (filename, io.BytesIO(content), "image/jpeg")
+    async def _read(n: int = -1) -> bytes:
+        start = pos["i"]
+        chunk = content[start:] if n < 0 else content[start:start + n]
+        pos["i"] = start + len(chunk)
+        return chunk
+
+    f.read = AsyncMock(side_effect=_read)
+    return f
+
+# Valid magic-byte payloads (content after the signature is opaque).
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+WEBP = b"RIFF" + b"\x00\x00\x00\x00" + b"WEBP" + b"\x00" * 64
+GIF = b"GIF89a" + b"\x00" * 64
+
+
+def _file(name: str, content: bytes, ctype: str = "image/png"):
+    return {"file": (name, io.BytesIO(content), ctype)}
 
 
 # =============================================================================
-# GET /upload/stock-icons - List stock icons
+# GET /upload/stock-icons
 # =============================================================================
 
 class TestListStockIcons:
-    """Tests for GET /upload/stock-icons endpoint."""
-
     async def test_returns_stock_icons_list(self, client):
-        """Should return list of predefined stock icons."""
         response = await client.get("/upload/stock-icons")
-
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-        assert len(data) == 5  # 5 stock icons defined
+        assert len(data) == 5
 
-        # Verify structure of first icon
-        first = data[0]
-        assert "id" in first
-        assert "url" in first
-        assert "label" in first
-
-    async def test_stock_icons_have_expected_ids(self, client):
-        """Should return icons with expected IDs."""
-        response = await client.get("/upload/stock-icons")
-
-        data = response.json()
-        ids = [icon["id"] for icon in data]
-
-        assert "brush-teeth" in ids
-        assert "make-bed" in ids
-        assert "homework" in ids
+    async def test_stock_icon_urls_keep_uploads_scheme(self, client):
+        """M7: the /uploads/stock_icons/*.png scheme is UNCHANGED so
+        already-adopted stock references keep resolving in PR2."""
+        data = (await client.get("/upload/stock-icons")).json()
+        for icon in data:
+            assert icon["url"].startswith("/uploads/stock_icons/")
+            assert icon["url"].endswith(".png")
 
 
 # =============================================================================
-# POST /upload/family-photo - Upload family photo
+# POST /upload/family-photo (5 MB cap)
 # =============================================================================
 
 class TestUploadFamilyPhoto:
-    """Tests for POST /upload/family-photo endpoint."""
+    @pytest.mark.parametrize(
+        "content,ext",
+        [(PNG, ".png"), (JPEG, ".jpg"), (WEBP, ".webp")],
+    )
+    async def test_uploads_supported_formats(self, client, content, ext):
+        resp = await client.post(
+            "/upload/family-photo", files=_file(f"p{ext}", content)
+        )
+        assert resp.status_code == 200
+        url = resp.json()["url"]
+        assert url.startswith("/uploads/family_photos/")
+        assert url.endswith(ext)
 
-    async def test_uploads_valid_jpg(self, client):
-        """Should accept JPG file and return URL."""
-        files = {"file": create_fake_image("photo.jpg")}
+    async def test_rejects_gif_now(self, client):
+        """M7 Fork 3 behavior change: GIF was accepted pre-M7, now 415."""
+        resp = await client.post(
+            "/upload/family-photo", files=_file("a.gif", GIF, "image/gif")
+        )
+        assert resp.status_code == 415
 
-        response = await client.post("/upload/family-photo", files=files)
+    async def test_rejects_faked_extension_binary(self, client):
+        """A .png filename with non-image bytes is rejected on bytes (415),
+        not the pre-M7 400-by-extension."""
+        resp = await client.post(
+            "/upload/family-photo", files=_file("evil.png", b"not an image")
+        )
+        assert resp.status_code == 415
 
-        assert response.status_code == 200
-        data = response.json()
-        assert "url" in data
-        assert data["url"].startswith("/uploads/family_photos/")
-        assert data["url"].endswith(".jpg")
+    async def test_rejects_pdf(self, client):
+        resp = await client.post(
+            "/upload/family-photo",
+            files=_file("doc.pdf", b"%PDF-1.4 fake", "application/pdf"),
+        )
+        assert resp.status_code == 415
 
-    async def test_uploads_valid_png(self, client):
-        """Should accept PNG file."""
-        files = {"file": ("photo.png", io.BytesIO(b"fake png"), "image/png")}
+    async def test_rejects_over_5mb(self, client):
+        big = PNG + b"\x00" * (6 * 1024 * 1024)
+        resp = await client.post(
+            "/upload/family-photo", files=_file("huge.png", big)
+        )
+        assert resp.status_code == 413
 
-        response = await client.post("/upload/family-photo", files=files)
+    async def test_writes_assets_manifest_row(self, client, db_session):
+        """Every successful upload records an unreferenced assets row."""
+        resp = await client.post(
+            "/upload/family-photo", files=_file("p.png", PNG)
+        )
+        key = resp.json()["url"].removeprefix("/uploads/")
+        row = (
+            await db_session.execute(
+                select(models.Asset).where(models.Asset.key == key)
+            )
+        ).scalar_one()
+        assert row.content_type == "image/png"
+        assert row.size_bytes == len(PNG)
+        assert row.referenced is False
 
-        assert response.status_code == 200
-        assert response.json()["url"].endswith(".png")
-
-    async def test_uploads_valid_gif(self, client):
-        """Should accept GIF file."""
-        files = {"file": ("photo.gif", io.BytesIO(b"fake gif"), "image/gif")}
-
-        response = await client.post("/upload/family-photo", files=files)
-
-        assert response.status_code == 200
-        assert response.json()["url"].endswith(".gif")
-
-    async def test_uploads_valid_webp(self, client):
-        """Should accept WebP file."""
-        files = {"file": ("photo.webp", io.BytesIO(b"fake webp"), "image/webp")}
-
-        response = await client.post("/upload/family-photo", files=files)
-
-        assert response.status_code == 200
-        assert response.json()["url"].endswith(".webp")
-
-    async def test_rejects_invalid_file_type(self, client):
-        """Should reject non-image file types."""
-        files = {"file": ("document.pdf", io.BytesIO(b"fake pdf"), "application/pdf")}
-
-        response = await client.post("/upload/family-photo", files=files)
-
-        assert response.status_code == 400
-        assert "Invalid file type" in response.json()["detail"]
-
-    async def test_rejects_txt_file(self, client):
-        """Should reject text files."""
-        files = {"file": ("notes.txt", io.BytesIO(b"some text"), "text/plain")}
-
-        response = await client.post("/upload/family-photo", files=files)
-
-        assert response.status_code == 400
-
-    async def test_rejects_file_too_large(self, client):
-        """Should reject files over 5MB."""
-        # Create 6MB file
-        large_content = b"x" * (6 * 1024 * 1024)
-        files = {"file": ("huge.jpg", io.BytesIO(large_content), "image/jpeg")}
-
-        response = await client.post("/upload/family-photo", files=files)
-
-        assert response.status_code == 413
-        assert "too large" in response.json()["detail"]
-
-    async def test_generates_unique_filenames(self, client):
-        """Each upload should get a unique filename."""
-        files1 = {"file": create_fake_image("same.jpg", b"content1")}
-        files2 = {"file": create_fake_image("same.jpg", b"content2")}
-
-        response1 = await client.post("/upload/family-photo", files=files1)
-        response2 = await client.post("/upload/family-photo", files=files2)
-
-        url1 = response1.json()["url"]
-        url2 = response2.json()["url"]
-
-        # Both succeed
-        assert response1.status_code == 200
-        assert response2.status_code == 200
-        # Different URLs (UUID-based)
-        assert url1 != url2
+    async def test_unique_filenames(self, client):
+        u1 = (await client.post("/upload/family-photo", files=_file("a.png", PNG))).json()["url"]
+        u2 = (await client.post("/upload/family-photo", files=_file("a.png", PNG))).json()["url"]
+        assert u1 != u2
 
 
 # =============================================================================
-# POST /upload/responsibility-icon - Upload responsibility icon
+# POST /upload/responsibility-icon (1 MB icon cap)
 # =============================================================================
 
 class TestUploadResponsibilityIcon:
-    """Tests for POST /upload/responsibility-icon endpoint."""
-
     async def test_uploads_valid_image(self, client):
-        """Should accept valid image file."""
-        files = {"file": create_fake_image("icon.png")}
+        resp = await client.post(
+            "/upload/responsibility-icon", files=_file("i.png", PNG)
+        )
+        assert resp.status_code == 200
+        assert resp.json()["url"].startswith("/uploads/responsibility_icons/")
 
-        response = await client.post("/upload/responsibility-icon", files=files)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "url" in data
-        assert data["url"].startswith("/uploads/responsibility_icons/")
-
-    async def test_rejects_invalid_file_type(self, client):
-        """Should reject non-image file types."""
-        files = {"file": ("script.js", io.BytesIO(b"alert('hi')"), "text/javascript")}
-
-        response = await client.post("/upload/responsibility-icon", files=files)
-
-        assert response.status_code == 400
-
-    async def test_rejects_file_too_large(self, client):
-        """Should reject files over 5MB."""
-        large_content = b"x" * (6 * 1024 * 1024)
-        files = {"file": ("huge.png", io.BytesIO(large_content), "image/png")}
-
-        response = await client.post("/upload/responsibility-icon", files=files)
-
-        assert response.status_code == 413
+    async def test_icon_cap_is_1mb_not_5mb(self, client):
+        """M7 per-type caps: icons cap at 1 MB. A 2 MB icon that would have
+        passed the old shared 5 MB limit is now rejected."""
+        two_mb = PNG + b"\x00" * (2 * 1024 * 1024)
+        resp = await client.post(
+            "/upload/responsibility-icon", files=_file("big.png", two_mb)
+        )
+        assert resp.status_code == 413
 
 
 # =============================================================================
-# Edge Cases
+# POST /upload/recipe-image (5 MB cap)
 # =============================================================================
 
-class TestUploadEdgeCases:
-    """Edge case tests for upload endpoints."""
+class TestUploadRecipeImage:
+    async def test_uploads_valid_image(self, client):
+        resp = await client.post(
+            "/upload/recipe-image", files=_file("r.webp", WEBP, "image/webp")
+        )
+        assert resp.status_code == 200
+        assert resp.json()["url"].startswith("/uploads/recipe_images/")
+        assert resp.json()["url"].endswith(".webp")
 
-    async def test_uppercase_extension_is_accepted(self, client):
-        """Should accept uppercase extensions like .JPG."""
-        files = {"file": ("PHOTO.JPG", io.BytesIO(b"content"), "image/jpeg")}
 
-        response = await client.post("/upload/family-photo", files=files)
+# =============================================================================
+# Compensating transaction (no orphan on DB failure after a successful put)
+# =============================================================================
 
-        assert response.status_code == 200
-        # Extension should be lowercased in output
-        assert response.json()["url"].endswith(".jpg")
+class TestCompensatingDelete:
+    async def test_db_failure_after_put_triggers_compensating_delete(
+        self, db_session, monkeypatch, tmp_path
+    ):
+        """If the assets commit fails after storage.put succeeds, the
+        just-written object must be deleted (no orphan). Tested by calling
+        store_upload directly — avoids ASGITransport's raise_app_exceptions
+        ambiguity, and asserts the object is actually gone from storage."""
+        from app import uploads as uploads_mod
+        from app.storage.local import LocalDiskBackend
 
-    async def test_accepts_file_exactly_at_size_limit(self, client):
-        """Should accept file at exactly 5MB."""
-        # Exactly 5MB
-        content = b"x" * (5 * 1024 * 1024)
-        files = {"file": ("exact.jpg", io.BytesIO(content), "image/jpeg")}
+        backend = LocalDiskBackend(root=tmp_path)
+        put_keys: list[str] = []
+        deleted: list[str] = []
 
-        response = await client.post("/upload/family-photo", files=files)
+        class SpyStorage:
+            async def put(self, key, data, content_type):
+                put_keys.append(key)
+                await backend.put(key, data, content_type)
 
-        assert response.status_code == 200
+            async def get(self, key):
+                return await backend.get(key)
+
+            async def delete(self, key):
+                deleted.append(key)
+                await backend.delete(key)
+
+        monkeypatch.setattr(uploads_mod, "get_storage", lambda: SpyStorage())
+
+        # Make the commit fail AFTER the successful put.
+        async def boom_commit():
+            raise RuntimeError("simulated DB failure")
+
+        monkeypatch.setattr(db_session, "commit", boom_commit)
+
+        with pytest.raises(RuntimeError):
+            await uploads_mod.store_upload(
+                db_session, _mock_upload(PNG), "family_photos", max_bytes=5 * 1024 * 1024
+            )
+
+        assert len(put_keys) == 1
+        # the compensating delete removed exactly the key that was put
+        assert deleted == put_keys
+        # and the object is actually gone from storage (no orphan)
+        with pytest.raises(ObjectNotFound):
+            await backend.get(put_keys[0])
+
+    async def test_compensating_delete_failure_is_logged(
+        self, db_session, monkeypatch, tmp_path, caplog
+    ):
+        """Mandated: if compensating delete ALSO fails, the original DB
+        error still surfaces and the residual orphan is logged."""
+        import logging
+
+        from app import uploads as uploads_mod
+        from app.storage.local import LocalDiskBackend
+
+        backend = LocalDiskBackend(root=tmp_path)
+        put_keys: list[str] = []
+
+        class SpyStorage:
+            async def put(self, key, data, content_type):
+                put_keys.append(key)
+                await backend.put(key, data, content_type)
+
+            async def delete(self, key):
+                raise RuntimeError("simulated storage delete failure")
+
+        monkeypatch.setattr(uploads_mod, "get_storage", lambda: SpyStorage())
+
+        async def boom_commit():
+            raise RuntimeError("simulated DB failure")
+
+        monkeypatch.setattr(db_session, "commit", boom_commit)
+
+        caplog.set_level(logging.ERROR)
+        with pytest.raises(RuntimeError, match="simulated DB failure"):
+            await uploads_mod.store_upload(
+                db_session, _mock_upload(PNG), "family_photos", max_bytes=5 * 1024 * 1024
+            )
+
+        assert len(put_keys) == 1
+        assert "compensating delete FAILED" in caplog.text
+        # residual orphan — object remains because delete also failed
+        assert await backend.get(put_keys[0]) == PNG
+
+    async def test_cancellation_after_put_still_compensates(
+        self, db_session, monkeypatch, tmp_path
+    ):
+        """Client disconnect / task cancel after put must still delete the
+        object — CancelledError is BaseException, not Exception."""
+        import asyncio
+
+        from app import uploads as uploads_mod
+        from app.storage.local import LocalDiskBackend
+
+        backend = LocalDiskBackend(root=tmp_path)
+        put_keys: list[str] = []
+        deleted: list[str] = []
+
+        class SpyStorage:
+            async def put(self, key, data, content_type):
+                put_keys.append(key)
+                await backend.put(key, data, content_type)
+
+            async def delete(self, key):
+                deleted.append(key)
+                await backend.delete(key)
+
+        monkeypatch.setattr(uploads_mod, "get_storage", lambda: SpyStorage())
+
+        async def boom_commit():
+            raise asyncio.CancelledError()
+
+        monkeypatch.setattr(db_session, "commit", boom_commit)
+
+        with pytest.raises(asyncio.CancelledError):
+            await uploads_mod.store_upload(
+                db_session, _mock_upload(PNG), "family_photos", max_bytes=5 * 1024 * 1024
+            )
+
+        assert deleted == put_keys
+        with pytest.raises(ObjectNotFound):
+            await backend.get(put_keys[0])

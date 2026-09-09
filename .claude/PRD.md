@@ -397,7 +397,7 @@ Categories: Produce, Protein, Dairy, Pantry, Frozen, Bakery, Beverages, Other
 |---------|-------------|---------------------|
 | System "Everyone" Member | Pre-created, non-deletable member for shared tasks | Always exists, cannot edit/delete |
 | Create Member | Add family member with name and optional photo | Member appears in assignment dropdowns |
-| Upload Photo | Upload profile photo (JPEG, PNG, GIF, WebP) | Photo displayed as avatar, max 5MB |
+| Upload Photo | Upload profile photo (JPEG, PNG, WebP) | Photo displayed as avatar, max 5MB; GIF rejected as of M7 |
 | Edit Member | Change name or photo | Changes reflected everywhere member displayed |
 | Delete Member | Remove family member | See deletion rules below |
 
@@ -1018,7 +1018,7 @@ class CalendarEventSource:
 | All titles/names | Non-empty, max length enforced |
 | Dates | Valid date format required |
 | Foreign keys | Must reference existing records |
-| File uploads | Type (jpg/png/gif/webp), size (5MB max) |
+| File uploads | Type (jpg/png/webp — GIF rejected as of M7), size (icons 1MB, photos 5MB) |
 | URLs | Valid URL format |
 
 ---
