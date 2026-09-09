@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meal Card Option D (v3) — Text-only, no thumbnail</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --warm-cream: #FAF7F2; --warm-beige: #F5F0E8; --warm-sand: #EBE5DA;
+    --card-bg: #FFFDFB; --card-border: #E8E2D9;
+    --terracotta-50: #FEF3F0; --terracotta-100: #FCE4DE; --terracotta-200: #FAC9BD;
+    --terracotta-500: #D97452; --terracotta-600: #C4613F;
+    --peach-100: #FFE8DF;
+    --sage-50: #F4F7F4; --sage-100: #E5EDE6; --sage-200: #C8DBC9; --sage-500: #6B9A70; --sage-600: #588D5E;
+    --text-primary: #3D3833; --text-secondary: #6B645A; --text-muted: #9A9287;
+  }
+  body { background: var(--warm-cream); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text-primary); margin: 0; }
+  .bg-warm-cream { background: var(--warm-cream); } .bg-warm-beige { background: var(--warm-beige); }
+  .bg-warm-sand { background: var(--warm-sand); } .bg-card-bg { background: var(--card-bg); }
+  .border-card-border { border-color: var(--card-border); }
+  .bg-terracotta-50 { background: var(--terracotta-50); } .bg-terracotta-100 { background: var(--terracotta-100); }
+  .text-terracotta-600 { color: var(--terracotta-600); }
+  .bg-peach-100 { background: var(--peach-100); }
+  .bg-sage-50 { background: var(--sage-50); } .bg-sage-100 { background: var(--sage-100); }
+  .text-sage-500 { color: var(--sage-500); } .text-sage-600 { color: var(--sage-600); } .border-sage-200 { border-color: var(--sage-200); }
+  .text-text-primary { color: var(--text-primary); } .text-text-secondary { color: var(--text-secondary); } .text-text-muted { color: var(--text-muted); }
+  .card-actions { opacity: 0; transition: opacity 150ms ease-in-out; }
+  .meal-card:hover .card-actions,
+  .meal-card:focus-within .card-actions { opacity: 1; }
+  .demo-hover .card-actions { opacity: 1; }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="flex h-screen">
+  <nav class="w-16 bg-warm-sand border-r border-card-border flex flex-col items-center py-4 gap-2">
+    <div class="w-10 h-10 rounded-xl bg-peach-100 flex items-center justify-center text-terracotta-600">📅</div>
+    <div class="w-10 h-10 rounded-xl text-text-muted flex items-center justify-center">📋</div>
+    <div class="w-10 h-10 rounded-xl text-text-muted flex items-center justify-center">🍽</div>
+    <div class="w-10 h-10 rounded-xl text-text-muted flex items-center justify-center">⚙</div>
+  </nav>
+  <main class="flex-1 p-6 overflow-y-auto">
+    <header class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold">Mealboard</h1>
+      <div class="flex gap-2 items-center text-sm text-text-secondary">
+        <button class="px-2 py-1 hover:bg-warm-beige rounded">‹</button>
+        <span class="font-medium">Apr 4–10, 2026</span>
+        <button class="px-2 py-1 hover:bg-warm-beige rounded">›</button>
+      </div>
+    </header>
+
+    <!-- Swimlane: 3 slots × 4 days, text-only cards at 120px tall -->
+    <div class="grid grid-cols-[100px_repeat(4,1fr)] gap-2">
+      <div></div>
+      <div class="text-sm font-medium text-center">Mon 4</div>
+      <div class="text-sm font-medium text-center">Tue 5<br><span class="text-xs text-text-muted">⏲ 45m</span></div>
+      <div class="text-sm font-medium text-center">Wed 6<br><span class="text-xs text-text-muted">⏲ 20m</span></div>
+      <div class="text-sm font-medium text-center">Thu 7<br><span class="text-xs text-text-muted">⏲ 60m</span></div>
+
+      <!-- Breakfast -->
+      <div class="text-sm font-medium text-text-secondary flex items-center">Breakfast</div>
+      <div class="meal-card h-[120px] bg-card-bg rounded-lg border border-card-border p-3 flex flex-col hover:shadow-md transition-all relative cursor-pointer">
+        <div class="flex-1 flex flex-col justify-center items-center min-w-0 text-center">
+          <div class="font-medium text-lg leading-tight text-text-primary">Oatmeal with berries</div>
+          <div class="text-xs text-text-muted mt-1">⏲ 10m · 2 servings</div>
+        </div>
+        <!-- Hover-reveal action icons — view has border, check/X have no border -->
+        <div class="card-actions absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <button class="w-8 h-8 rounded-full bg-warm-sand hover:bg-warm-beige border border-card-border text-text-secondary flex items-center justify-center text-sm" aria-label="View recipe">📖</button>
+          <button class="w-8 h-8 rounded-full bg-sage-50 hover:bg-sage-100 text-sage-600 flex items-center justify-center text-sm font-semibold" aria-label="Mark cooked">✓</button>
+          <button class="w-8 h-8 rounded-full bg-terracotta-50 hover:bg-terracotta-100 text-terracotta-600 flex items-center justify-center text-sm font-semibold" aria-label="Delete">✕</button>
+        </div>
+      </div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+
+      <!-- Lunch -->
+      <div class="text-sm font-medium text-text-secondary flex items-center">Lunch</div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+      <!-- Food item with hover demonstrated -->
+      <div class="meal-card demo-hover h-[120px] bg-card-bg rounded-lg border border-card-border p-3 flex flex-col hover:shadow-md transition-all relative cursor-pointer">
+        <div class="flex-1 flex flex-col justify-center items-center min-w-0 text-center">
+          <div class="font-medium text-lg leading-tight text-text-primary">Banana</div>
+          <div class="text-xs text-text-muted mt-1">snack</div>
+        </div>
+        <div class="card-actions absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <button class="w-8 h-8 rounded-full bg-sage-50 hover:bg-sage-100 text-sage-600 flex items-center justify-center text-sm font-semibold" aria-label="Mark cooked">✓</button>
+          <button class="w-8 h-8 rounded-full bg-terracotta-50 hover:bg-terracotta-100 text-terracotta-600 flex items-center justify-center text-sm font-semibold" aria-label="Delete">✕</button>
+        </div>
+      </div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+
+      <!-- Dinner -->
+      <div class="text-sm font-medium text-text-secondary flex items-center">Dinner</div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+      <div class="meal-card h-[120px] bg-card-bg rounded-lg border border-card-border p-3 flex flex-col hover:shadow-md transition-all relative cursor-pointer">
+        <div class="flex-1 flex flex-col justify-center items-center min-w-0 text-center">
+          <!-- Non-default participants LEFT, ABOVE title -->
+          <div class="flex -space-x-1 mb-1.5">
+            <div class="w-5 h-5 rounded-full bg-[#D4695A] border-2 border-card-bg text-white text-[9px] flex items-center justify-center">S</div>
+            <div class="w-5 h-5 rounded-full bg-[#5A80B0] border-2 border-card-bg text-white text-[9px] flex items-center justify-center">W</div>
+          </div>
+          <div class="font-medium text-lg leading-tight text-text-primary">Spaghetti Bolognese</div>
+          <div class="text-xs text-text-muted mt-1">⏲ 45m · 4 servings</div>
+        </div>
+        <div class="card-actions absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <button class="w-8 h-8 rounded-full bg-warm-sand hover:bg-warm-beige border border-card-border text-text-secondary flex items-center justify-center text-sm" aria-label="View recipe">📖</button>
+          <button class="w-8 h-8 rounded-full bg-sage-50 hover:bg-sage-100 text-sage-600 flex items-center justify-center text-sm font-semibold" aria-label="Mark cooked">✓</button>
+          <button class="w-8 h-8 rounded-full bg-terracotta-50 hover:bg-terracotta-100 text-terracotta-600 flex items-center justify-center text-sm font-semibold" aria-label="Delete">✕</button>
+        </div>
+      </div>
+      <!-- Cooked variant -->
+      <div class="meal-card h-[120px] bg-sage-50 rounded-lg border border-sage-200 p-3 flex flex-col relative cursor-pointer">
+        <div class="flex-1 flex flex-col justify-center items-center min-w-0 text-center">
+          <div class="font-medium text-lg leading-tight text-text-primary">Tacos</div>
+          <div class="text-xs text-text-muted mt-1">⏲ 20m · 4 servings</div>
+          <div class="mt-1 inline-flex items-center gap-1 text-xs text-sage-500 font-medium"><span>✓</span>Cooked</div>
+        </div>
+        <div class="card-actions absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <button class="w-8 h-8 rounded-full bg-warm-sand hover:bg-warm-beige border border-card-border text-text-secondary flex items-center justify-center text-sm" aria-label="View recipe">📖</button>
+          <button class="w-8 h-8 rounded-full bg-terracotta-50 hover:bg-terracotta-100 text-terracotta-600 flex items-center justify-center text-sm font-semibold" aria-label="Delete">✕</button>
+        </div>
+      </div>
+      <div class="h-[120px] bg-warm-beige/40 rounded-lg border border-dashed border-card-border flex items-center justify-center text-text-muted hover:bg-warm-beige/70 cursor-pointer text-xl">+</div>
+    </div>
+  </main>
+</div>
+
+<div class="fixed bottom-4 left-20 bg-card-bg px-3 py-2 rounded-lg shadow-lg text-xs font-medium text-text-primary border border-card-border max-w-[480px]">
+  <strong>Option D v3:</strong> Text-only meal cards · 120px tall · no thumbnail/emoji · hover icons w-8 (check/✕ borderless, view keeps border) · banana card demos hover state
+</div>
+</body>
+</html>

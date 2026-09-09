@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.agents/bin/workflow-state\" --json 2>/dev/null || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(.agents/bin/*)",
+      "Bash(*/.agents/bin/*)"
+    ]
+  }
+}

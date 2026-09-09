@@ -1,0 +1,78 @@
+{
+  "branch": null,
+  "created_at": "2026-09-09T22:10:05Z",
+  "implementation_status": "not-started",
+  "key": "epic:v1-productionization",
+  "kind": "epic",
+  "milestones": [
+    {
+      "branch": "prod-contract-freeze",
+      "id": "M1",
+      "size": "plan",
+      "status": "not-started",
+      "title": "Contract freeze: doc alignment, branch protection, squash-merge"
+    },
+    {
+      "branch": "prod-deploy-skeleton",
+      "id": "M2",
+      "size": "plan",
+      "status": "not-started",
+      "title": "Deploy skeleton: Fly, Upstash, R2, Vercel, DNS, healthz, edge gate, plumbing test"
+    },
+    {
+      "branch": "prod-auth-backend-foundation",
+      "id": "M3",
+      "size": "plan",
+      "status": "not-started",
+      "title": "Auth backend foundation: models, argon2, register/login/refresh/logout/status"
+    },
+    {
+      "branch": "prod-auth-frontend-session",
+      "id": "M4",
+      "size": "plan",
+      "status": "not-started",
+      "title": "Auth frontend session: centralized API client, /auth portal, in-memory token, boot refresh"
+    },
+    {
+      "branch": "prod-auth-enforcement",
+      "id": "M5",
+      "size": "plan",
+      "status": "not-started",
+      "title": "Auth enforcement: protected router, route protection, remove plumbing test"
+    },
+    {
+      "branch": "prod-config-health",
+      "completed": "2026-05-18",
+      "id": "M6",
+      "pr": "#38",
+      "reason": "M4's API-client centralization and M2's env-driven CORS made this empty by design; the one hardening (apiBase production-build guard) shipped in #38 on prod-config-health",
+      "size": "quickfix",
+      "status": "subsumed",
+      "title": "Config health: residual localhost cleanup"
+    },
+    {
+      "branch": "prod-r2-storage",
+      "id": "M7",
+      "size": "plan",
+      "status": "not-started",
+      "title": "R2 storage: storage abstraction, proxied uploads, private reads, remove StaticFiles mount"
+    },
+    {
+      "branch": "prod-launch-release",
+      "id": "M8",
+      "size": "plan",
+      "status": "not-started",
+      "title": "Launch release: manual runbook, smoke and rollback checklists, password-rotation CLI, backup-restore drill"
+    }
+  ],
+  "note_path": null,
+  "plan_kind": "epic",
+  "plan_mode": "epic",
+  "plan_path": ".agents/plans/epics/v1-productionization/v1-productionization-epic-20260421-182714.md",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "v1-productionization",
+  "updated_at": "2026-09-09T22:10:06Z",
+  "workflow_status": "planning"
+}

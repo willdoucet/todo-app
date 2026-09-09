@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BootErrorScreen — Option B (chromeless full-page, no card)</title>
+<style>
+  :root {
+    --warm-cream:#FAF7F2; --warm-sand:#EBE5DA;
+    --card-bg:#FFFDFB; --card-border:#E8E2D9;
+    --terracotta-100:#FCE4DE; --terracotta-500:#D97452; --terracotta-600:#C4613F; --terracotta-700:#A34E32;
+    --text-primary:#3D3833; --text-secondary:#6B645A; --text-muted:#9A9287;
+  }
+  html.dark {
+    --warm-cream:#111827; --card-bg:#1F2937; --card-border:#374151;
+    --terracotta-100:#9a3412; --terracotta-500:#3B82F6; --terracotta-600:#2563EB; --terracotta-700:#fcd5c4;
+    --text-primary:#F3F4F6; --text-secondary:#9CA3AF; --text-muted:#6B7280;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; min-height:100vh; background:var(--warm-cream); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:var(--text-primary); display:flex; align-items:center; justify-content:center; padding:32px 16px; transition:background .2s}
+  .stack{max-width:480px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px}
+  .icon-large{color:var(--terracotta-500)}
+  .headline{margin:0; font-size:1.5rem; font-weight:600; color:var(--text-primary); line-height:1.25; max-width:380px}
+  .body{margin:0; font-size:.95rem; color:var(--text-secondary); line-height:1.55; max-width:420px}
+  .retry{margin-top:8px; display:inline-flex; align-items:center; gap:8px; padding:10px 20px; background:var(--terracotta-500); color:#fff; border:none; border-radius:8px; font-size:.95rem; font-weight:500; cursor:pointer; font-family:inherit; transition:background-color .2s}
+  .retry:hover{background:var(--terracotta-600)}
+  .toolbar{position:fixed; bottom:16px; right:16px; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; padding:8px; box-shadow:0 4px 12px rgba(0,0,0,.08); font-size:.75rem}
+  .toolbar button{background:var(--warm-sand); color:var(--text-secondary); border:none; padding:6px 10px; border-radius:6px; font-size:.75rem; cursor:pointer; font-family:inherit}
+</style>
+</head>
+<body>
+
+<div class="stack" role="alert" aria-label="Server unreachable">
+  <div class="icon-large" aria-hidden="true">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M2 8.5C5 5.5 8.5 4 12 4s7 1.5 10 4.5"/>
+      <path d="M5 12c2-2 4.5-3 7-3s5 1 7 3"/>
+      <path d="M8.5 15.5C9.5 14.5 10.7 14 12 14s2.5.5 3.5 1.5"/>
+      <line x1="12" y1="19" x2="12.01" y2="19"/>
+      <line x1="2" y1="2" x2="22" y2="22"/>
+    </svg>
+  </div>
+  <h1 class="headline">We can&rsquo;t reach our server right now</h1>
+  <p class="body">Check your internet, then try again. If this keeps happening, the server may be down.</p>
+  <button class="retry" type="button">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    Try again
+  </button>
+</div>
+
+<div class="toolbar"><button onclick="document.documentElement.classList.toggle('dark')">Toggle dark</button></div>
+
+</body>
+</html>

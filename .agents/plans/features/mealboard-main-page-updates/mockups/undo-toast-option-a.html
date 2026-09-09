@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>UndoToast — Option A (horizontal pill)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --warm-cream: #FAF7F2; --warm-beige: #F5F0E8; --warm-sand: #EBE5DA;
+    --card-bg: #FFFDFB; --card-border: #E8E2D9;
+    --terracotta-500: #D97452; --terracotta-600: #C4613F;
+    --sage-500: #6B9A70;
+    --text-primary: #3D3833; --text-secondary: #6B645A; --text-muted: #9A9287;
+  }
+  body { background: var(--warm-cream); font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text-primary); }
+  .toast { background: var(--text-primary); color: white; }
+</style>
+</head>
+<body>
+  <!-- Page chrome: Recipes view as the page "behind" the toast -->
+  <div class="flex min-h-screen">
+    <aside class="w-16 border-r border-[var(--card-border)] flex flex-col items-center py-4 gap-3">
+      <div class="w-10 h-10 rounded-xl bg-[#FCE4DE] flex items-center justify-center"><span class="text-xl">🍽</span></div>
+    </aside>
+    <main class="flex-1 max-w-5xl mx-auto px-6 py-6 opacity-80">
+      <div class="mb-5">
+        <h1 class="text-2xl font-bold">Recipes</h1>
+        <p class="text-sm text-[var(--text-secondary)] mt-0.5">12 recipes</p>
+      </div>
+      <div class="grid grid-cols-4 gap-4">
+        <div class="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] aspect-[4/3] flex items-end p-3">
+          <p class="text-sm font-medium">Pasta primavera</p>
+        </div>
+        <div class="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] aspect-[4/3] flex items-end p-3">
+          <p class="text-sm font-medium">Sheet-pan chicken</p>
+        </div>
+        <div class="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] aspect-[4/3] flex items-end p-3">
+          <p class="text-sm font-medium">Roasted vegetables</p>
+        </div>
+        <div class="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] aspect-[4/3] flex items-end p-3">
+          <p class="text-sm font-medium">Thai basil stir fry</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- OPTION A: horizontal pill at bottom-center, compact -->
+  <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-md w-auto shadow-xl rounded-xl px-4 py-3 flex items-center gap-3 toast">
+    <!-- Icon with +N badge -->
+    <div class="relative flex-shrink-0">
+      <div class="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center text-lg">🍅</div>
+    </div>
+    <!-- Label -->
+    <span class="text-sm font-medium whitespace-nowrap">Recipe deleted</span>
+    <!-- Countdown ring -->
+    <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 16 16">
+      <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.2)" stroke-width="2" fill="none" />
+      <circle cx="8" cy="8" r="6" stroke="white" stroke-width="2" fill="none" stroke-dasharray="37.7" stroke-dashoffset="10" transform="rotate(-90 8 8)" />
+    </svg>
+    <!-- Action -->
+    <button class="px-3 py-1 rounded-md bg-[var(--terracotta-500)] hover:bg-[var(--terracotta-600)] text-white text-sm font-medium">Undo</button>
+    <!-- Dismiss -->
+    <button class="p-1 text-white/70 hover:text-white" aria-label="Dismiss">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- Spec note -->
+  <div class="fixed top-6 right-6 max-w-sm bg-white border border-[var(--card-border)] rounded-xl p-4 shadow-sm">
+    <p class="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold mb-2">Option A — horizontal pill</p>
+    <p class="text-sm text-[var(--text-secondary)]">Single horizontal row: icon · label · ring · Undo · dismiss. Smallest footprint. Keeps the user's attention focused on the action. Countdown ring is a small inline marker, not a separate progress bar. Works cleanly in both single and merged (+N) states without changing height.</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""Print the workflow context as shell-exportable lines.
+
+Usage:
+    eval "$(.agents/bin/ctx)"          # sets REPO_ROOT, BRANCH, SAFE_BRANCH, BASE_BRANCH, ON_BASE,
+                                       # DOCS_DIR, PLANS_DIR, STATE_DIR, VAULT_DIR, PLAN_DIR,
+                                       # PLAN_FILE, SUMMARY_FILE, TEST_ARTIFACT, HARNESS, TIMESTAMP
+    .agents/bin/ctx --json             # same values as JSON
+
+Every skill sources this once at the start instead of re-deriving branch and
+plan paths with inline shell. One implementation, no drift.
+"""
+
+from __future__ import annotations
+
+import shlex
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _lib  # noqa: E402
+
+
+def main() -> int:
+    ctx = _lib.context()
+    if "--json" in sys.argv[1:]:
+        return _lib.print_json(ctx)
+    for key, value in ctx.items():
+        print(f"export {key}={shlex.quote(str(value))}")
+    return 0
+
+
+if __name__ == "__main__":
+    _lib.run_main(main)

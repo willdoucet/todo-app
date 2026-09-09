@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Food Items Tab — Final (Grid + List Toggle)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FFF9F2;
+    --beige: #F8F0E5;
+    --sand: #EDE3D5;
+    --card-bg: #FFFFFF;
+    --card-border: #EDE5DC;
+    --terracotta-50: #FFF5F0;
+    --terracotta-100: #FCE4DE;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --peach-100: #FFE8DF;
+    --sage-50: #F4F7F4;
+    --sage-100: #E5EDE6;
+    --sage-500: #6B9A70;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #A09788;
+
+    --cat-fruit: #F5A623;
+    --cat-fruit-bg: #FFF8E7;
+    --cat-fruit-text: #7A5100;
+    --cat-dairy: #5B8DEF;
+    --cat-dairy-bg: #EDF3FF;
+    --cat-dairy-text: #1E4FAA;
+    --cat-grain: #C4A46A;
+    --cat-grain-bg: #FDF6E8;
+    --cat-grain-text: #6B5520;
+    --cat-protein: #E06B9F;
+    --cat-protein-bg: #FFF0F6;
+    --cat-protein-text: #8A2952;
+    --cat-vegetable: #6B9A70;
+    --cat-vegetable-bg: #EDF7EE;
+    --cat-vegetable-text: #2D5E32;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--cream);
+    background-image:
+      radial-gradient(circle at 15% 85%, rgba(245,166,35,0.07) 0%, transparent 45%),
+      radial-gradient(circle at 85% 15%, rgba(232,146,124,0.07) 0%, transparent 45%),
+      radial-gradient(circle at 50% 50%, rgba(167,139,219,0.05) 0%, transparent 55%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .page-wrapper {
+    margin-left: 304px;
+    padding: 24px 28px;
+    min-height: 100vh;
+  }
+
+  /* ─── APP SIDEBAR ─── */
+  .app-sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; width: 80px;
+    background: var(--sand); border-right: 1px solid var(--card-border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 0; gap: 6px; z-index: 30;
+  }
+  .sb-btn {
+    width: 56px; height: 56px; border: none; background: transparent;
+    border-radius: 14px; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; color: var(--text-secondary); transition: all 0.2s;
+    position: relative;
+  }
+  .sb-btn svg { width: 24px; height: 24px; stroke-width: 1.8; }
+  .sb-btn:hover { color: var(--terracotta-600); background: rgba(255,232,223,0.4); }
+  .sb-btn.active { background: var(--peach-100); color: var(--terracotta-600); box-shadow: 0 2px 8px rgba(217,116,82,0.15); }
+  .sb-btn .sb-tooltip {
+    position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
+    background: var(--text-primary); color: var(--cream); font-size: 12px; font-weight: 600;
+    padding: 5px 10px; border-radius: 8px; white-space: nowrap; opacity: 0;
+    pointer-events: none; transition: opacity 0.15s; z-index: 40;
+  }
+  .sb-btn:hover .sb-tooltip { opacity: 1; }
+  .sb-spacer { flex: 1; }
+
+  /* ─── MEALBOARD NAV ─── */
+  .mb-nav {
+    position: fixed; left: 80px; top: 0; bottom: 0; width: 224px;
+    background: rgba(237,227,213,0.5); border-right: 1px solid var(--card-border);
+    display: flex; flex-direction: column; z-index: 20;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .mb-nav-header { padding: 28px 24px 20px; border-bottom: 1px solid var(--card-border); }
+  .mb-nav-header h2 { font-size: 20px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.3px; }
+  .mb-nav-items { padding: 12px 0; display: flex; flex-direction: column; gap: 2px; }
+  .mb-item {
+    display: flex; align-items: center; gap: 11px; margin: 0 12px;
+    padding: 12px 16px; border-radius: 14px; border: none; background: transparent;
+    cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600;
+    color: var(--text-secondary); transition: all 0.15s; text-align: left;
+    width: calc(100% - 24px);
+  }
+  .mb-item svg { width: 20px; height: 20px; flex-shrink: 0; stroke-width: 1.8; }
+  .mb-item:hover { background: var(--beige); color: var(--terracotta-600); }
+  .mb-item.active { background: var(--peach-100); color: var(--terracotta-600); box-shadow: 0 1px 4px rgba(217,116,82,0.1); }
+
+  /* ─── HEADER ─── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;
+  }
+  .header-left h1 {
+    font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C, var(--cat-fruit));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .header-left .subtitle { font-size: 14px; color: var(--text-muted); font-weight: 500; }
+
+  /* ─── TAB TOGGLE ─── */
+  .tab-toggle {
+    display: inline-flex; background: var(--card-bg); border: 1.5px solid var(--card-border);
+    border-radius: 14px; padding: 4px; gap: 2px; margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  }
+  .tab-toggle button {
+    font-family: inherit; font-size: 14px; font-weight: 700; border: none;
+    padding: 9px 20px; border-radius: 11px; cursor: pointer; transition: all 0.2s;
+    background: transparent; color: var(--text-muted);
+  }
+  .tab-toggle button.active {
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C);
+    color: white; box-shadow: 0 2px 8px rgba(217,116,82,0.25);
+  }
+  .tab-toggle button:not(.active):hover { color: var(--text-primary); background: var(--beige); }
+
+  /* ─── TOOLBAR ─── */
+  .toolbar {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+  }
+  .search-box {
+    display: flex; align-items: center; gap: 8px; background: var(--card-bg);
+    border: 1.5px solid var(--card-border); border-radius: 12px; padding: 9px 14px;
+    flex: 1; max-width: 320px; transition: border-color 0.2s;
+  }
+  .search-box:focus-within { border-color: var(--terracotta-500); }
+  .search-box svg { width: 18px; height: 18px; color: var(--text-muted); flex-shrink: 0; stroke-width: 2; }
+  .search-box input {
+    border: none; outline: none; background: transparent; font-family: inherit;
+    font-size: 14px; font-weight: 500; color: var(--text-primary); width: 100%;
+  }
+  .search-box input::placeholder { color: var(--text-muted); }
+
+  /* ─── VIEW TOGGLE ─── */
+  .view-toggle {
+    display: inline-flex; background: var(--card-bg); border: 1.5px solid var(--card-border);
+    border-radius: 10px; padding: 3px; gap: 2px;
+  }
+  .view-toggle button {
+    width: 34px; height: 34px; border: none; background: transparent;
+    border-radius: 8px; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; color: var(--text-muted); transition: all 0.2s;
+  }
+  .view-toggle button svg { width: 18px; height: 18px; stroke-width: 2; }
+  .view-toggle button:hover { color: var(--text-secondary); background: var(--beige); }
+  .view-toggle button.active { background: var(--terracotta-500); color: white; }
+
+  .cat-filters { display: flex; gap: 6px; }
+  .cat-pill {
+    font-family: inherit; font-size: 12px; font-weight: 700; border: 1.5px solid var(--card-border);
+    padding: 7px 14px; border-radius: 20px; cursor: pointer; transition: all 0.2s;
+    background: var(--card-bg); color: var(--text-secondary);
+  }
+  .cat-pill:hover { border-color: var(--terracotta-100); background: var(--terracotta-50); }
+  .cat-pill.active { background: var(--terracotta-500); color: white; border-color: var(--terracotta-500); }
+
+  .btn-create {
+    font-family: inherit; font-size: 14px; font-weight: 700; border: none;
+    padding: 10px 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s;
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C);
+    color: white; box-shadow: 0 2px 8px rgba(217,116,82,0.25); margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-create:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(217,116,82,0.35); }
+  .btn-create svg { width: 16px; height: 16px; stroke-width: 2.5; }
+
+  /* ─── ITEM COUNT ─── */
+  .item-count {
+    font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 14px;
+  }
+  .item-count strong { color: var(--text-secondary); }
+
+  /* ═══════════════════════════════════════════
+     GRID VIEW (from Option A)
+     ═══════════════════════════════════════════ */
+  .food-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+  }
+
+  .food-card {
+    background: var(--card-bg);
+    border: 1.5px solid var(--card-border);
+    border-radius: 16px;
+    padding: 16px 12px 14px;
+    text-align: center;
+    cursor: default;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .food-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    border-color: var(--terracotta-100);
+  }
+  .food-card .food-emoji {
+    font-size: 36px; line-height: 1; margin-bottom: 8px; display: block;
+  }
+  .food-card .food-name {
+    font-size: 13px; font-weight: 700; color: var(--text-primary);
+    margin-bottom: 6px; line-height: 1.2;
+  }
+  .food-card .food-dot {
+    width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+  }
+  .food-dot.fruit     { background: var(--cat-fruit); }
+  .food-dot.dairy     { background: var(--cat-dairy); }
+  .food-dot.grain     { background: var(--cat-grain); }
+  .food-dot.protein   { background: var(--cat-protein); }
+  .food-dot.vegetable { background: var(--cat-vegetable); }
+
+  .food-card .fav-btn {
+    position: absolute; top: 8px; right: 8px; background: none; border: none;
+    cursor: pointer; font-size: 14px; opacity: 0; transition: opacity 0.15s;
+    color: var(--text-muted);
+  }
+  .food-card:hover .fav-btn { opacity: 1; }
+  .food-card .fav-btn.is-fav { opacity: 1; color: var(--terracotta-500); }
+
+  .food-card .card-actions {
+    position: absolute; bottom: 6px; right: 6px; display: flex; gap: 2px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .food-card:hover .card-actions { opacity: 1; }
+  .card-actions button {
+    width: 24px; height: 24px; border: none; background: var(--beige);
+    border-radius: 8px; cursor: pointer; font-size: 11px; color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+  }
+  .card-actions button:hover { background: var(--terracotta-100); color: var(--terracotta-600); }
+
+  .create-form {
+    background: var(--card-bg); border: 2px dashed var(--card-border); border-radius: 16px;
+    padding: 16px 12px 14px; text-align: center; cursor: pointer; transition: all 0.2s;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; min-height: 120px; color: var(--text-muted);
+  }
+  .create-form:hover { border-color: var(--terracotta-500); color: var(--terracotta-500); background: var(--terracotta-50); }
+  .create-form .plus-icon { font-size: 28px; font-weight: 300; line-height: 1; }
+  .create-form .plus-label { font-size: 12px; font-weight: 700; }
+
+  /* ═══════════════════════════════════════════
+     LIST VIEW (from Option B)
+     ═══════════════════════════════════════════ */
+  .food-list {
+    background: var(--card-bg);
+    border: 1.5px solid var(--card-border);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+  }
+
+  .food-list-header {
+    display: grid;
+    grid-template-columns: 52px 1fr 120px 80px 60px;
+    padding: 10px 16px;
+    background: var(--beige);
+    border-bottom: 1.5px solid var(--card-border);
+    font-size: 11px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--text-muted); align-items: center;
+  }
+
+  .food-row {
+    display: grid;
+    grid-template-columns: 52px 1fr 120px 80px 60px;
+    padding: 12px 16px; align-items: center;
+    border-bottom: 1px solid rgba(237,229,220,0.6);
+    transition: background 0.15s; position: relative;
+  }
+  .food-row:last-child { border-bottom: none; }
+  .food-row:hover { background: var(--terracotta-50); }
+
+  .food-row .row-emoji { font-size: 28px; line-height: 1; text-align: center; }
+  .food-row .row-name { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+
+  .cat-badge {
+    display: inline-flex; align-items: center; padding: 3px 10px;
+    border-radius: 8px; font-size: 11px; font-weight: 700;
+    text-transform: capitalize; width: fit-content;
+  }
+  .cat-badge.fruit     { background: var(--cat-fruit-bg);     color: var(--cat-fruit-text); }
+  .cat-badge.dairy     { background: var(--cat-dairy-bg);     color: var(--cat-dairy-text); }
+  .cat-badge.grain     { background: var(--cat-grain-bg);     color: var(--cat-grain-text); }
+  .cat-badge.protein   { background: var(--cat-protein-bg);   color: var(--cat-protein-text); }
+  .cat-badge.vegetable { background: var(--cat-vegetable-bg); color: var(--cat-vegetable-text); }
+
+  .fav-toggle {
+    background: none; border: none; cursor: pointer; font-size: 18px;
+    color: var(--text-muted); transition: all 0.15s; text-align: center;
+  }
+  .fav-toggle:hover { color: var(--terracotta-500); transform: scale(1.15); }
+  .fav-toggle.is-fav { color: var(--terracotta-500); }
+
+  .row-actions {
+    display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; justify-content: center;
+  }
+  .food-row:hover .row-actions { opacity: 1; }
+  .row-actions button {
+    width: 28px; height: 28px; border: none; background: var(--beige);
+    border-radius: 8px; cursor: pointer; font-size: 12px; color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+  }
+  .row-actions button:hover { background: var(--terracotta-100); color: var(--terracotta-600); }
+
+  .add-row {
+    display: grid; grid-template-columns: 52px 1fr 120px auto;
+    padding: 10px 16px; align-items: center; gap: 8px;
+    border-top: 2px dashed var(--card-border); background: rgba(255,245,240,0.3);
+  }
+  .add-row .add-emoji-input {
+    width: 40px; height: 40px; border: 1.5px dashed var(--card-border);
+    border-radius: 10px; background: var(--card-bg); font-size: 20px;
+    text-align: center; font-family: inherit; outline: none; cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .add-row .add-emoji-input:focus { border-color: var(--terracotta-500); }
+  .add-row .add-name-input {
+    border: 1.5px solid var(--card-border); border-radius: 10px; padding: 8px 12px;
+    font-family: inherit; font-size: 14px; font-weight: 600; background: var(--card-bg);
+    color: var(--text-primary); outline: none; width: 100%; transition: border-color 0.2s;
+  }
+  .add-row .add-name-input:focus { border-color: var(--terracotta-500); }
+  .add-row .add-name-input::placeholder { color: var(--text-muted); font-weight: 500; }
+  .add-row select {
+    border: 1.5px solid var(--card-border); border-radius: 10px; padding: 8px 10px;
+    font-family: inherit; font-size: 12px; font-weight: 700; background: var(--card-bg);
+    color: var(--text-secondary); outline: none; cursor: pointer; appearance: auto;
+  }
+  .add-row .add-btn {
+    font-family: inherit; font-size: 13px; font-weight: 700; border: none;
+    padding: 8px 16px; border-radius: 10px; cursor: pointer;
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C);
+    color: white; transition: all 0.2s;
+  }
+  .add-row .add-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(217,116,82,0.3); }
+
+  /* ─── VISIBILITY ─── */
+  .view-hidden { display: none; }
+
+  /* ─── CONCEPT BADGE ─── */
+  .concept-badge {
+    position: fixed; bottom: 16px; right: 16px;
+    background: var(--text-primary); color: var(--cream);
+    font-size: 11px; font-weight: 700; padding: 6px 14px;
+    border-radius: 20px; z-index: 50; letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── APP SIDEBAR ─── -->
+<aside class="app-sidebar">
+  <button class="sb-btn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg><span class="sb-tooltip">Home</span></button>
+  <button class="sb-btn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><span class="sb-tooltip">Lists</span></button>
+  <button class="sb-btn active"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span class="sb-tooltip">Mealboard</span></button>
+  <div class="sb-spacer"></div>
+  <button class="sb-btn"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span class="sb-tooltip">Settings</span></button>
+</aside>
+
+<!-- ─── MEALBOARD NAV ─── -->
+<nav class="mb-nav">
+  <div class="mb-nav-header"><h2>Mealboard</h2></div>
+  <div class="mb-nav-items">
+    <button class="mb-item"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>Meal Planner</button>
+    <button class="mb-item active"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Recipes</button>
+    <button class="mb-item"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>Shopping</button>
+  </div>
+</nav>
+
+<div class="page-wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>Recipes</h1>
+      <div class="subtitle">Your family's food library</div>
+    </div>
+  </div>
+
+  <!-- TAB TOGGLE -->
+  <div class="tab-toggle">
+    <button>Recipes</button>
+    <button class="active">Food Items</button>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-box">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      <input type="text" placeholder="Search food items...">
+    </div>
+
+    <!-- VIEW TOGGLE: grid / list -->
+    <div class="view-toggle">
+      <button id="btn-grid" class="active" title="Grid view">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+      </button>
+      <button id="btn-list" title="List view">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
+
+    <div class="cat-filters">
+      <button class="cat-pill active">All</button>
+      <button class="cat-pill">Fruit</button>
+      <button class="cat-pill">Dairy</button>
+      <button class="cat-pill">Grain</button>
+      <button class="cat-pill">Protein</button>
+      <button class="cat-pill">Vegetable</button>
+    </div>
+    <button class="btn-create"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg> Add Item</button>
+  </div>
+
+  <div class="item-count">Showing <strong>12</strong> food items</div>
+
+  <!-- ═══════════════════════════════════════════
+       GRID VIEW (default, visible)
+       ═══════════════════════════════════════════ -->
+  <div id="grid-view" class="food-grid">
+    <div class="food-card">
+      <button class="fav-btn is-fav">&#9829;</button>
+      <span class="food-emoji">&#x1F34C;</span>
+      <div class="food-name">Banana</div>
+      <span class="food-dot fruit"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1F95B;</span>
+      <div class="food-name">Yogurt</div>
+      <span class="food-dot dairy"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn is-fav">&#9829;</button>
+      <span class="food-emoji">&#x1F34E;</span>
+      <div class="food-name">Apple Slices</div>
+      <span class="food-dot fruit"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1F9C0;</span>
+      <div class="food-name">Cheese</div>
+      <span class="food-dot dairy"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1F95A;</span>
+      <div class="food-name">Hard-Boiled Egg</div>
+      <span class="food-dot protein"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn is-fav">&#9829;</button>
+      <span class="food-emoji">&#x1F36A;</span>
+      <div class="food-name">Graham Crackers</div>
+      <span class="food-dot grain"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1FAD0;</span>
+      <div class="food-name">Blueberries</div>
+      <span class="food-dot fruit"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1F951;</span>
+      <div class="food-name">Avocado</div>
+      <span class="food-dot vegetable"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn is-fav">&#9829;</button>
+      <span class="food-emoji">&#x1F35E;</span>
+      <div class="food-name">Toast</div>
+      <span class="food-dot grain"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1F955;</span>
+      <div class="food-name">Carrot Sticks</div>
+      <span class="food-dot vegetable"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1F95B;</span>
+      <div class="food-name">Milk</div>
+      <span class="food-dot dairy"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-card">
+      <button class="fav-btn">&#9825;</button>
+      <span class="food-emoji">&#x1F357;</span>
+      <div class="food-name">Chicken Strips</div>
+      <span class="food-dot protein"></span>
+      <div class="card-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="create-form">
+      <div class="plus-icon">+</div>
+      <div class="plus-label">Add Food Item</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       LIST VIEW (hidden by default)
+       ═══════════════════════════════════════════ -->
+  <div id="list-view" class="food-list view-hidden">
+    <div class="food-list-header">
+      <span></span>
+      <span>Name</span>
+      <span>Category</span>
+      <span style="text-align:center">Fav</span>
+      <span></span>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F34C;</span>
+      <span class="row-name">Banana</span>
+      <span class="cat-badge fruit">fruit</span>
+      <button class="fav-toggle is-fav">&#9829;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F95B;</span>
+      <span class="row-name">Yogurt</span>
+      <span class="cat-badge dairy">dairy</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F34E;</span>
+      <span class="row-name">Apple Slices</span>
+      <span class="cat-badge fruit">fruit</span>
+      <button class="fav-toggle is-fav">&#9829;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F9C0;</span>
+      <span class="row-name">Cheese</span>
+      <span class="cat-badge dairy">dairy</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F95A;</span>
+      <span class="row-name">Hard-Boiled Egg</span>
+      <span class="cat-badge protein">protein</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F36A;</span>
+      <span class="row-name">Graham Crackers</span>
+      <span class="cat-badge grain">grain</span>
+      <button class="fav-toggle is-fav">&#9829;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1FAD0;</span>
+      <span class="row-name">Blueberries</span>
+      <span class="cat-badge fruit">fruit</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F951;</span>
+      <span class="row-name">Avocado</span>
+      <span class="cat-badge vegetable">vegetable</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F35E;</span>
+      <span class="row-name">Toast</span>
+      <span class="cat-badge grain">grain</span>
+      <button class="fav-toggle is-fav">&#9829;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F955;</span>
+      <span class="row-name">Carrot Sticks</span>
+      <span class="cat-badge vegetable">vegetable</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F95B;</span>
+      <span class="row-name">Milk</span>
+      <span class="cat-badge dairy">dairy</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="food-row">
+      <span class="row-emoji">&#x1F357;</span>
+      <span class="row-name">Chicken Strips</span>
+      <span class="cat-badge protein">protein</span>
+      <button class="fav-toggle">&#9825;</button>
+      <div class="row-actions"><button>&#9998;</button><button>&#215;</button></div>
+    </div>
+    <div class="add-row">
+      <input class="add-emoji-input" type="text" placeholder="&#x1F60B;" maxlength="2">
+      <input class="add-name-input" type="text" placeholder="New food item name...">
+      <select>
+        <option value="">Category...</option>
+        <option>Fruit</option>
+        <option>Dairy</option>
+        <option>Grain</option>
+        <option>Protein</option>
+        <option>Vegetable</option>
+      </select>
+      <button class="add-btn">Add</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="concept-badge">Food Items — Final</div>
+
+<script>
+  var btnGrid = document.getElementById('btn-grid');
+  var btnList = document.getElementById('btn-list');
+  var gridView = document.getElementById('grid-view');
+  var listView = document.getElementById('list-view');
+
+  btnGrid.addEventListener('click', function () {
+    gridView.classList.remove('view-hidden');
+    listView.classList.add('view-hidden');
+    btnGrid.classList.add('active');
+    btnList.classList.remove('active');
+  });
+
+  btnList.addEventListener('click', function () {
+    listView.classList.remove('view-hidden');
+    gridView.classList.add('view-hidden');
+    btnList.classList.add('active');
+    btnGrid.classList.remove('active');
+  });
+</script>
+
+</body>
+</html>

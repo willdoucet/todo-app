@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Food Item Card Redesign v2 — Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwindcss.config = {
+      theme: {
+        extend: {
+          colors: {
+            'warm-sand': '#F5EDE3',
+            'warm-beige': '#E8DFD4',
+            'card-bg': '#FFFFFF',
+            'card-border': '#E2DDD7',
+            'text-primary': '#3D3833',
+            'text-secondary': '#6B6560',
+            'text-muted': '#9B9590',
+            'terracotta-500': '#C4704B',
+            'terracotta-600': '#B0603F',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body { background: #FAF7F4; font-family: system-ui, -apple-system, sans-serif; }
+    .dark body, body.dark { background: #1f2937; }
+  </style>
+</head>
+<body class="p-8">
+  <h1 class="text-xl font-bold text-text-primary mb-2">Food Item Card Redesign v2</h1>
+  <p class="text-sm text-text-muted mb-6">
+    Changes: left-aligned full-width grid, auto-fit columns, taller cards, larger icons,
+    right-side category stripe (replaces dot). Resize the browser to see responsive column count.
+  </p>
+
+  <!-- Grid: auto-fit with 280px min — adjusts column count per viewport -->
+  <div class="grid gap-3" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+
+    <!-- Card 1: Banana (fruit) -->
+    <div class="relative flex items-center gap-3 px-4 py-4 rounded-xl border border-card-border bg-card-bg hover:bg-warm-beige hover:border-terracotta-500/30 hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden">
+      <span class="text-3xl flex-shrink-0 leading-none">🍌</span>
+      <span class="flex-1 text-sm font-medium text-text-primary truncate">Banana</span>
+      <!-- Heart -->
+      <button class="flex-shrink-0 p-0.5 rounded hover:bg-black/5">
+        <svg class="w-4 h-4 text-terracotta-500" fill="currentColor" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+        </svg>
+      </button>
+      <!-- Category stripe — right edge, full card height -->
+      <div class="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-amber-300"></div>
+    </div>
+
+    <!-- Card 2: Chicken (protein) -->
+    <div class="relative flex items-center gap-3 px-4 py-4 rounded-xl border border-card-border bg-card-bg hover:bg-warm-beige hover:border-terracotta-500/30 hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden">
+      <span class="text-3xl flex-shrink-0 leading-none">🍗</span>
+      <span class="flex-1 text-sm font-medium text-text-primary truncate">Chicken Thighs</span>
+      <button class="flex-shrink-0 p-0.5 rounded hover:bg-black/5">
+        <svg class="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+        </svg>
+      </button>
+      <div class="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-red-300"></div>
+    </div>
+
+    <!-- Card 3: Yogurt (dairy) -->
+    <div class="relative flex items-center gap-3 px-4 py-4 rounded-xl border border-card-border bg-card-bg hover:bg-warm-beige hover:border-terracotta-500/30 hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden">
+      <span class="text-3xl flex-shrink-0 leading-none">🥛</span>
+      <span class="flex-1 text-sm font-medium text-text-primary truncate">Yogurt</span>
+      <button class="flex-shrink-0 p-0.5 rounded hover:bg-black/5">
+        <svg class="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+        </svg>
+      </button>
+      <div class="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-blue-300"></div>
+    </div>
+
+    <!-- Card 4: Broccoli (vegetable) -->
+    <div class="relative flex items-center gap-3 px-4 py-4 rounded-xl border border-card-border bg-card-bg hover:bg-warm-beige hover:border-terracotta-500/30 hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden">
+      <span class="text-3xl flex-shrink-0 leading-none">🥦</span>
+      <span class="flex-1 text-sm font-medium text-text-primary truncate">Broccoli</span>
+      <button class="flex-shrink-0 p-0.5 rounded hover:bg-black/5">
+        <svg class="w-4 h-4 text-terracotta-500" fill="currentColor" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+        </svg>
+      </button>
+      <div class="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-green-300"></div>
+    </div>
+
+    <!-- Card 5: Sourdough Bread (grain) — long name test -->
+    <div class="relative flex items-center gap-3 px-4 py-4 rounded-xl border border-card-border bg-card-bg hover:bg-warm-beige hover:border-terracotta-500/30 hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden">
+      <span class="text-3xl flex-shrink-0 leading-none">🍞</span>
+      <span class="flex-1 text-sm font-medium text-text-primary truncate">Sourdough Bread Loaf</span>
+      <button class="flex-shrink-0 p-0.5 rounded hover:bg-black/5">
+        <svg class="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+        </svg>
+      </button>
+      <div class="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-amber-100"></div>
+    </div>
+
+    <!-- Card 6: Crackers (Other) — no emoji, uses placeholder -->
+    <div class="relative flex items-center gap-3 px-4 py-4 rounded-xl border border-card-border bg-card-bg hover:bg-warm-beige hover:border-terracotta-500/30 hover:shadow-sm transition-all text-left cursor-pointer overflow-hidden">
+      <span class="text-3xl flex-shrink-0 leading-none">🍽</span>
+      <span class="flex-1 text-sm font-medium text-text-primary truncate">Crackers</span>
+      <button class="flex-shrink-0 p-0.5 rounded hover:bg-black/5">
+        <svg class="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+        </svg>
+      </button>
+      <div class="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-xl bg-warm-sand"></div>
+    </div>
+
+  </div>
+
+  <div class="mt-8 text-xs text-text-muted">
+    <p><strong>Specs:</strong></p>
+    <ul class="list-disc ml-5 mt-1 space-y-0.5">
+      <li>Grid: <code>repeat(auto-fit, minmax(280px, 1fr))</code> — 3 cols at 1300px, 4+ at 1600px, 2 at 800px, 1 at mobile</li>
+      <li>Card padding: <code>px-4 py-4</code> (was px-3 py-2.5)</li>
+      <li>Icon size: <code>text-3xl</code> (~30px, was text-2xl ~24px)</li>
+      <li>Category indicator: <code>w-1.5</code> stripe on right edge, full height, matches card's <code>rounded-r-xl</code></li>
+      <li>No <code>max-w-5xl mx-auto</code> — grid fills container width</li>
+      <li>Card height: ~56px (was ~48px) — taller due to increased padding</li>
+    </ul>
+  </div>
+</body>
+</html>

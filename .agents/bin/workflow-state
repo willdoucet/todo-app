@@ -1,0 +1,587 @@
+#!/usr/bin/env python3
+"""Workflow status: the SessionStart banner plus next-step, dashboard, history and epic views.
+
+Usage:
+    workflow-state                      plain-text banner (fail-silent: any error -> exit 0, no output)
+    workflow-state --json               banner wrapped in the Claude Code SessionStart envelope (fail-silent)
+    workflow-state --next [--json]      the single next step for this branch
+    workflow-state --dashboard [--json] review readiness table + verdict for this branch's plan
+    workflow-state --history [N] [--json]  last N completions across the registry (default 10)
+    workflow-state --epics [--json]     every epic with derived milestone progress
+
+Inputs: plan frontmatter, the plan's registry entry, the review log (latest entry per
+skill logged against THIS plan file), the summary file's step boxes, and epic progress
+derived by _lib.epic_progress. Nothing here is project-specific; branches, paths and
+skill names come from config, git and the log.
+
+Registry fields read (written by obsidian-workflow): key, kind, title, branch, plan,
+commit, implementation_status, completed, parent_epic, milestone, updated_at.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _lib  # noqa: E402
+
+OK_STATUSES = {"clean", "cleared", "done", "pass"}
+FIX_IN_PLACE = {"plan-adversarial-review", "qa", "design-review"}
+KNOWN_STATUSES = {
+    "not-started",
+    "implementing",
+    "ready-for-review",
+    "shipped",
+    "abandoned",
+    "blocked",
+    "needs-context",
+}
+STUCK_STATUSES = ("ready-for-review", "implementing")
+
+# (dashboard label, banner label, skill)
+REVIEW_TIERS = [
+    ("CEO", "CEO", "plan-ceo-review"),
+    ("Eng", "Eng", "plan-eng-review"),
+    ("Adversarial", "Adv", "plan-adversarial-review"),
+    ("Design", "Design", "plan-design-review"),
+    ("Impl review", "Impl", "review-implementation"),
+    ("QA", "QA", "qa"),
+    ("Design audit", "Audit", "design-review"),
+    ("Final", "Final", "final-review"),
+    ("Ship", "Ship", "ship"),
+]
+
+HARNESS_NOTE = "skill invocation syntax depends on the harness (/name or $name)"
+
+
+# --------------------------------------------------------------------------
+# State gathering
+# --------------------------------------------------------------------------
+
+
+def review_ok(reviews: dict, skill: str) -> bool:
+    entry = reviews.get(skill)
+    if not entry:
+        return False
+    status = str(entry.get("status", "")).lower()
+    return status in OK_STATUSES or (skill in FIX_IN_PLACE and status == "issues_found")
+
+
+def summary_progress(plan: Path) -> tuple[int, int] | None:
+    summary = _lib.summary_path_for(plan)
+    if not summary.is_file():
+        return None
+    text = _lib.read_text(summary)
+    done = len(re.findall(r"\[(?:✓|x|X)\]", text))
+    pending = len(re.findall(r"\[ \]", text))
+    failed = len(re.findall(r"\[✗\]", text))
+    total = done + pending + failed
+    return (done, total) if total else None
+
+
+def find_current_plan(root: Path, cfg: dict, branch: str) -> tuple[Path | None, str | None]:
+    """The feature plan for this branch, else the epic whose branch this is."""
+    plan = _lib.latest_plan(root, cfg, branch)
+    if plan:
+        return plan, "plan"
+    epic = _lib.latest_epic(root, cfg, _lib.safe_branch(branch))
+    if epic:
+        return epic, "epic"
+    for candidate in _lib.all_epics(root, cfg):
+        if _lib.read_frontmatter(candidate).get("branch") == branch:
+            return candidate, "epic"
+    return None, None
+
+
+def infer_status(fm: dict, entry: dict | None) -> str:
+    for value in (
+        fm.get("implementation_status"),
+        (entry or {}).get("implementation_status"),
+        fm.get("workflow_status"),
+    ):
+        if isinstance(value, str) and value in KNOWN_STATUSES:
+            return value
+    return "not-started"
+
+
+def stuck_entries(root: Path, cfg: dict, branch: str | None) -> list[dict]:
+    out = []
+    for key, entry in _lib.registry_all(root, cfg).items():
+        if key.startswith("epic:"):
+            continue
+        status = entry.get("implementation_status")
+        if status in STUCK_STATUSES and entry.get("branch") != branch:
+            out.append({"key": key, "branch": entry.get("branch") or "?", "status": status})
+    return sorted(out, key=lambda e: (e["branch"], e["key"]))
+
+
+def gather(root: Path, cfg: dict) -> dict:
+    branch = _lib.current_branch(root)
+    base = _lib.base_branch(root, cfg)
+    st: dict = {
+        "root": root,
+        "cfg": cfg,
+        "branch": branch,
+        "base": base,
+        "on_base": branch == base,
+        "plan": None,
+        "plan_kind": None,
+        "fm": {},
+        "entry": None,
+        "reviews": {},
+        "progress": None,
+        "status": "not-started",
+        "epic_slug": None,
+        "epic": None,
+        "milestone": None,
+        "stuck": stuck_entries(root, cfg, branch),
+    }
+    if not branch:
+        return st
+    plan, found_as = find_current_plan(root, cfg, branch)
+    if not plan:
+        return st
+    fm = _lib.read_frontmatter(plan)
+    plan_kind = fm.get("plan_kind") or ("epic" if found_as == "epic" else "feature")
+    st.update(plan=plan, plan_kind=plan_kind, fm=fm)
+    st["reviews"] = _lib.reviews_for_plan(root, cfg, plan.name)
+    if plan_kind == "epic":
+        if plan.parent.parent == _lib.epics_dir(root, cfg):
+            slug = _lib.epic_slug_from_path(plan)
+        else:
+            slug = fm.get("slug") or _lib.safe_branch(branch)
+        st["epic_slug"] = slug
+        st["entry"] = _lib.registry_get(root, cfg, _lib.epic_key(slug))
+        st["epic"] = _lib.epic_progress(root, cfg, slug)
+    else:
+        key = fm.get("registry_key") or _lib.plan_key(branch)
+        st["entry"] = _lib.registry_get(root, cfg, key)
+        st["progress"] = summary_progress(plan)
+        if fm.get("parent_epic"):
+            st["epic_slug"] = str(fm["parent_epic"])
+            st["milestone"] = str(fm.get("milestone") or "") or None
+            st["epic"] = _lib.epic_progress(root, cfg, st["epic_slug"])
+    st["status"] = infer_status(fm, st["entry"])
+    return st
+
+
+# --------------------------------------------------------------------------
+# Decision function
+# --------------------------------------------------------------------------
+
+
+def nxt(skill: str | None, args: str | None, required: bool, reason: str) -> dict:
+    return {"skill": skill, "args": args, "required": required, "reason": reason}
+
+
+def opt(skill: str, reason: str) -> dict:
+    return {"skill": skill, "reason": reason}
+
+
+def epic_summary(ep: dict, milestone: str | None = None) -> dict:
+    index = None
+    if milestone:
+        ids = [m["id"] for m in ep["milestones"]]
+        index = ids.index(milestone) + 1 if milestone in ids else None
+    nm = ep.get("next")
+    return {
+        "slug": ep["slug"],
+        "title": ep["title"],
+        "epic_file": ep.get("epic_file"),
+        "milestone": milestone,
+        "index": index,
+        "total": ep["total"],
+        "shipped": ep["shipped"],
+        "subsumed": ep["subsumed"],
+        "in_progress": ep["in_progress"],
+        "done": ep["done"],
+        "next": {"id": nm["id"], "title": nm["title"], "size": nm["size"], "status": nm["status"]} if nm else None,
+    }
+
+
+def milestone_next(ep: dict, ms: dict) -> dict:
+    label = f"{ms['id']}" + (f" {ms['title']}" if ms.get("title") else "")
+    if ms["status"] in _lib.MILESTONE_ACTIVE_STATUSES:
+        where = f" on branch {ms['branch']}" if ms.get("branch") else ""
+        return nxt(None, None, True, f"{label} is {ms['status']}{where} — switch to it and continue")
+    skill = "/quickfix" if ms.get("size") == "quickfix" else "/office-hours"
+    args = f"{ep['epic_file']}#{ms['id']}" if ep.get("epic_file") else ms["id"]
+    return nxt(skill, args, True, f"next milestone of {ep['slug']}: {label}")
+
+
+def active_epics(root: Path, cfg: dict) -> list[dict]:
+    out = []
+    for slug in _lib.all_epic_slugs(root, cfg):
+        ep = _lib.epic_progress(root, cfg, slug)
+        if ep["status"] in ("shipped", "abandoned") or ep["done"]:
+            continue
+        out.append(ep)
+    return out
+
+
+def decide(st: dict) -> dict:
+    reviews = st["reviews"]
+    fm = st["fm"]
+
+    def ok(skill: str) -> bool:
+        return review_ok(reviews, skill)
+
+    if st["plan"] is None:
+        docs = _lib.docs_dir(st["root"], st["cfg"])
+        if not (docs / "PRD.md").exists() and not (docs / "IMPLEMENTATION_PLAN.md").exists():
+            return {
+                "stage": "UNINITIALIZED",
+                "next": nxt("/init-project", None, True, "no documentation set yet — interview, stack, docs"),
+                "optional": [],
+            }
+        if st["on_base"]:
+            for ep in active_epics(st["root"], st["cfg"]):
+                if ep["next"]:
+                    return {
+                        "stage": "IDLE",
+                        "next": milestone_next(ep, ep["next"]),
+                        "optional": [],
+                        "epic": epic_summary(ep),
+                    }
+            return {
+                "stage": "IDLE",
+                "next": nxt("/office-hours", None, True, "on the base branch with no active epic — start a feature"),
+                "optional": [opt("/quickfix", "small, self-contained change")],
+            }
+        return {
+            "stage": "IDLE",
+            "next": nxt("/office-hours", None, True, "no plan on this branch — draft one"),
+            "optional": [opt("/quickfix", "small, self-contained change")],
+        }
+
+    if st["plan_kind"] == "epic":
+        ep = st["epic"]
+        result = {"stage": "EPIC", "optional": [], "epic": epic_summary(ep)}
+        if ep["done"]:
+            result["stage"] = "EPIC (complete)"
+            result["next"] = nxt(None, None, False, "all milestones shipped or subsumed — close the epic")
+        elif not ok("plan-ceo-review"):
+            result["next"] = nxt("/plan-ceo-review", None, True, "epic needs a CEO review before its milestones start")
+        elif ep["next"]:
+            result["next"] = milestone_next(ep, ep["next"])
+        else:
+            result["next"] = nxt("/office-hours", None, True, "epic has no milestones yet — define them")
+        return result
+
+    status = st["status"]
+    result: dict = {"stage": "PLANNING", "optional": []}
+    if st["epic"]:
+        result["epic"] = epic_summary(st["epic"], st["milestone"])
+
+    if status == "shipped":
+        result["stage"] = "SHIPPED"
+        result["next"] = nxt(None, None, False, "merge the PR")
+    elif status == "abandoned":
+        result["stage"] = "ABANDONED"
+        result["next"] = nxt("/office-hours", None, True, "plan abandoned — supersede it with a new plan")
+    elif status in ("blocked", "needs-context"):
+        result["stage"] = "BLOCKED" if status == "blocked" else "BLOCKED (needs-context)"
+        reason = fm.get("reason")
+        why = "resolve the blocker first" + (f": {reason}" if reason else "")
+        result["next"] = nxt("/execute-plan", None, True, why)
+    elif status == "implementing":
+        progress = st["progress"]
+        result["stage"] = f"IMPLEMENTING ({progress[0]}/{progress[1]} steps)" if progress else "IMPLEMENTING"
+        result["next"] = nxt("/execute-plan", None, True, "continue implementation")
+    elif status == "ready-for-review":
+        result["stage"] = "READY FOR REVIEW"
+        if not ok("review-implementation"):
+            result["next"] = nxt("/review-implementation", None, True, "pre-landing review")
+        elif not ok("final-review"):
+            result["next"] = nxt("/final-review", None, True, "shipping gate")
+            if _lib.truthy(fm.get("ui_scope")):
+                if not reviews.get("qa"):
+                    result["optional"].append(opt("/qa", "ui_scope is set and QA has not run"))
+                if not reviews.get("design-review"):
+                    result["optional"].append(opt("/design-review", "ui_scope is set and the design audit has not run"))
+        else:
+            result["next"] = nxt("/ship", None, True, "implementation and final reviews are clean")
+    else:
+        risk_tags = fm.get("risk_tags")
+        if isinstance(risk_tags, str):
+            risk_tags = [t.strip() for t in risk_tags.split(",") if t.strip()]
+        if not ok("plan-eng-review"):
+            result["next"] = nxt("/plan-eng-review", None, True, "shipping gate")
+            if not ok("plan-ceo-review"):
+                result["optional"].append(opt("/plan-ceo-review", "scope review before the gate"))
+        else:
+            # Eng review is clean. Adversarial review is suggested from here on, before any
+            # further gate, whenever the plan carries risk tags.
+            if risk_tags and not ok("plan-adversarial-review"):
+                result["optional"].append(opt("/plan-adversarial-review", f"risk tags: {','.join(map(str, risk_tags))}"))
+            if _lib.truthy(fm.get("ui_scope")) and not ok("plan-design-review"):
+                result["next"] = nxt("/plan-design-review", None, True, "ui_scope is set")
+            else:
+                result["next"] = nxt("/execute-plan", None, True, "plan is cleared for implementation")
+                if not ok("plan-ceo-review"):
+                    result["optional"].append(opt("/plan-ceo-review", "not yet run"))
+    return result
+
+
+# --------------------------------------------------------------------------
+# Rendering
+# --------------------------------------------------------------------------
+
+
+def fmt_next(decision: dict) -> list[str]:
+    n = decision["next"]
+    if n["skill"]:
+        head = n["skill"] + (f" {n['args']}" if n.get("args") else "")
+        kind = "required" if n["required"] else "optional"
+        lines = [f"Next:    {head} — {kind} ({n['reason']})"]
+    else:
+        lines = [f"Next:    {n['reason']}"]
+    for o in decision.get("optional", []):
+        lines.append(f"Optional: {o['skill']} — {o['reason']}")
+    return lines
+
+
+def fmt_reviews(reviews: dict) -> str:
+    parts = []
+    for _label, short, skill in REVIEW_TIERS:
+        if skill not in reviews:
+            mark = "—"
+        elif review_ok(reviews, skill):
+            mark = "✓"
+        else:
+            mark = "!"
+        parts.append(f"{short} {mark}")
+    return "  ".join(parts)
+
+
+def fmt_epic_line(ep_summary: dict) -> str:
+    parts = []
+    if ep_summary.get("milestone"):
+        pos = f"{ep_summary['milestone']}"
+        if ep_summary.get("index"):
+            pos += f" of {ep_summary['total']}"
+        parts.append(pos)
+    else:
+        parts.append(f"{ep_summary['total']} milestones")
+    detail = f"{ep_summary['shipped']} shipped"
+    if ep_summary["subsumed"]:
+        detail += f", {ep_summary['subsumed']} subsumed"
+    return f"{ep_summary['slug']} — {' '.join(parts)} ({detail})"
+
+
+def fmt_epic_row(ep: dict) -> str:
+    counts = [f"{ep['shipped']} shipped"]
+    if ep["subsumed"]:
+        counts.append(f"{ep['subsumed']} subsumed")
+    if ep["in_progress"]:
+        counts.append(f"{ep['in_progress']} in progress")
+    done = ep["shipped"] + ep["subsumed"]
+    line = f"{ep['slug']}  {done}/{ep['total']} done ({', '.join(counts)})"
+    nm = ep.get("next")
+    if nm:
+        where = f" — {nm['status']}" + (f" on {nm['branch']}" if nm.get("branch") else "") if nm["status"] != "not-started" else ""
+        line += f"  next: {nm['id']} ({nm['size']}) {nm['title']}{where}".rstrip()
+    elif ep["done"]:
+        line += "  complete"
+    else:
+        line += "  no milestones"
+    return line
+
+
+def banner_lines(st: dict, decision: dict) -> list[str]:
+    lines = ["━━━ Workflow Status ━━━", f"Branch:  {st['branch']}"]
+    plan = st["plan"]
+    lines.append(f"Plan:    {plan.name if plan else 'none'}")
+    if plan and decision.get("epic"):
+        lines.append(f"Epic:    {fmt_epic_line(decision['epic'])}")
+    stage = decision["stage"]
+    if st["on_base"] and not plan:
+        stage += " — on base branch"
+    lines.append(f"Stage:   {stage}")
+    if plan:
+        lines.append(f"Reviews: {fmt_reviews(st['reviews'])}")
+    if st["on_base"]:
+        for ep in active_epics(st["root"], st["cfg"]):
+            lines.append(f"Epic:    {fmt_epic_row(ep)}")
+        if st["stuck"]:
+            items = ", ".join(f"{e['branch']} ({e['status']})" for e in st["stuck"])
+            lines.append(f"Warn:    {len(st['stuck'])} plan(s) stuck on other branches: {items}")
+    lines.extend(fmt_next(decision))
+    lines.append(f"Note:    {HARNESS_NOTE}")
+    return lines
+
+
+def dashboard(st: dict) -> dict:
+    plan = st["plan"]
+    if not plan:
+        return {"plan": None, "rows": [], "verdict": "NO PLAN", "missing": [], "missing_to_ship": []}
+    reviews = st["reviews"]
+    rows = []
+    for label, _short, skill in REVIEW_TIERS:
+        entry = reviews.get(skill)
+        rows.append(
+            {
+                "label": label,
+                "skill": skill,
+                "status": entry.get("status") if entry else None,
+                "ok": review_ok(reviews, skill),
+                "when": (entry.get("ts") or "")[:10] if entry else None,
+                "extra": _lib.review_extra(entry) if entry else {},
+            }
+        )
+    ui = _lib.truthy(st["fm"].get("ui_scope"))
+    impl_gate = ["plan-eng-review"] + (["plan-design-review"] if ui else [])
+    ship_gate = ["review-implementation", "final-review"]
+    missing = [s for s in impl_gate if not review_ok(reviews, s)]
+    missing_to_ship = [s for s in ship_gate if not review_ok(reviews, s)]
+    if not missing_to_ship:
+        verdict = "CLEARED TO SHIP"
+    elif not missing:
+        verdict = "CLEARED FOR IMPLEMENTATION"
+    else:
+        verdict = "NOT CLEARED"
+    return {
+        "plan": plan.name,
+        "ui_scope": ui,
+        "rows": rows,
+        "verdict": verdict,
+        "missing": missing,
+        "missing_to_ship": missing_to_ship,
+    }
+
+
+def fmt_extra(extra: dict) -> str:
+    return ",".join(f"{k}={v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)}" for k, v in sorted(extra.items()))
+
+
+def dashboard_lines(d: dict) -> list[str]:
+    if not d["plan"]:
+        return ["no plan on this branch"]
+    lines = [f"Plan: {d['plan']}", f"{'Review':<13}| {'Status':<14}| {'When':<11}| Extra"]
+    for r in d["rows"]:
+        status = "—" if r["status"] is None else f"{r['status']} {'✓' if r['ok'] else '!'}"
+        lines.append(f"{r['label']:<13}| {status:<14}| {r['when'] or '':<11}| {fmt_extra(r['extra'])}")
+    verdict = f"Verdict: {d['verdict']}"
+    if d["verdict"] == "NOT CLEARED":
+        verdict += f" — missing: {', '.join(d['missing'])}"
+    lines.append(verdict)
+    if d["verdict"] == "CLEARED FOR IMPLEMENTATION":
+        lines.append(f"To ship: {', '.join(d['missing_to_ship'])}")
+    return lines
+
+
+def history(root: Path, cfg: dict, limit: int) -> list[dict]:
+    rows = []
+    for key, entry in _lib.registry_all(root, cfg).items():
+        status = entry.get("implementation_status") or entry.get("status")
+        completed = entry.get("completed")
+        if status != "shipped" and not completed:
+            continue
+        kind = entry.get("kind") or (key.split(":", 1)[0] if ":" in key else "feature")
+        if kind == "plan":
+            kind = "feature"
+        if kind == "feature" and entry.get("parent_epic"):
+            kind = "milestone"
+        rows.append(
+            {
+                "date": str(completed or (entry.get("updated_at") or ""))[:10],
+                "kind": kind,
+                "key": key,
+                "title": entry.get("title") or "",
+                "branch": entry.get("branch") or "",
+                "ref": entry.get("plan") or entry.get("commit") or "",
+                "updated_at": entry.get("updated_at") or "",
+            }
+        )
+    rows.sort(key=lambda r: (r["date"], r["updated_at"]), reverse=True)
+    return rows[:limit]
+
+
+def history_lines(rows: list[dict]) -> list[str]:
+    if not rows:
+        return ["(no completions recorded)"]
+    out = []
+    for r in rows:
+        title = f" — {r['title']}" if r["title"] else ""
+        out.append(f"{r['date']}  {r['kind']:<10} {r['key']}{title}  [{r['branch']}]  {r['ref']}")
+    return out
+
+
+# --------------------------------------------------------------------------
+# Entry point
+# --------------------------------------------------------------------------
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(prog="workflow-state", add_help=True)
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--next", action="store_true")
+    mode.add_argument("--dashboard", action="store_true")
+    mode.add_argument("--history", nargs="?", type=int, const=10, default=None, metavar="N")
+    mode.add_argument("--epics", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    return ap.parse_args(argv)
+
+
+def main() -> int:
+    args = parse_args(sys.argv[1:])
+    explicit = args.next or args.dashboard or args.history is not None or args.epics
+
+    if not explicit:
+        # Banner: fail silent, this runs on every session start.
+        try:
+            root = _lib.repo_root()
+            cfg = _lib.load_config(root)
+            st = gather(root, cfg)
+            if not st["branch"]:
+                return 0
+            text = "\n".join(banner_lines(st, decide(st)))
+            if args.json:
+                sys.stdout.write(
+                    json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}})
+                )
+            else:
+                print(text)
+        except Exception:  # noqa: BLE001 - intentional: never break a session start
+            pass
+        return 0
+
+    root = _lib.repo_root()
+    cfg = _lib.load_config(root)
+
+    if args.epics:
+        epics = [_lib.epic_progress(root, cfg, slug) for slug in _lib.all_epic_slugs(root, cfg)]
+        if args.json:
+            return _lib.print_json(epics)
+        print("\n".join(fmt_epic_row(ep) for ep in epics) if epics else "(no epics)")
+        return 0
+
+    if args.history is not None:
+        rows = history(root, cfg, args.history)
+        if args.json:
+            return _lib.print_json(rows)
+        print("\n".join(history_lines(rows)))
+        return 0
+
+    st = gather(root, cfg)
+    if args.dashboard:
+        d = dashboard(st)
+        if args.json:
+            return _lib.print_json(d)
+        print("\n".join(dashboard_lines(d)))
+        return 0
+
+    decision = decide(st)
+    if args.json:
+        return _lib.print_json(decision)
+    lines = [f"Stage:   {decision['stage']}"] + fmt_next(decision) + [f"Note:    {HARNESS_NOTE}"]
+    print("\n".join(lines))
+    return 0
+
+
+if __name__ == "__main__":
+    _lib.run_main(main)

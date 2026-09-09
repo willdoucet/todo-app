@@ -1,0 +1,1600 @@
+#!/usr/bin/env python3
+"""Obsidian workflow helper.
+
+Parses task notes in the vault, keeps notes human-readable (managed state lives
+in the registry and plan frontmatter, never in the note), generates and
+validates block IDs, and manages registry entries for note tasks, freeform
+plans, quickfixes, and epics.
+
+Every command prints one JSON object. Exit codes: 0 ok, 1 validation failure,
+2 not found / not configured.
+
+Paths: note paths and refs are accepted vault-relative, repo-relative, or
+absolute and are always printed and stored vault-relative
+(`Mealboard/Todo List.md#^block-id`). Plan paths are stored repo-relative.
+
+Usage: obsidian-workflow <subcommand> [options]  (see --help)
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import unicodedata
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _lib  # noqa: E402
+
+TASK_RE = re.compile(r"^(?P<indent>\s*)-\s\[(?P<checked>[ xX])\]\s+(?P<text>.*\S.*?)\s*$")
+HEADING_RE = re.compile(r"^(?P<indent>\s{0,3})(?P<hashes>#{1,6})\s+(?P<title>.*\S)\s*$")
+BLOCK_ID_RE = re.compile(r"^(?P<indent>\s*)\^(?P<block_id>[A-Za-z0-9][A-Za-z0-9_-]*)\s*$")
+META_RE = re.compile(r"^(?P<indent>\s*)(?P<key>[A-Za-z0-9_-]+)::\s*(?P<value>.*?)\s*$")
+FENCE_OPEN_RE = re.compile(r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+
+# Keys the workflow owns. They live in the registry / plan frontmatter and are
+# stripped from notes on every write so notes stay human-readable.
+MANAGED_MULTI_KEYS = {"review_status"}
+MANAGED_SINGLE_KEYS = {"status", "workflow_status", "implementation_status", "plan", "completed", "reason"}
+MANAGED_NOTE_KEYS = MANAGED_SINGLE_KEYS | MANAGED_MULTI_KEYS
+
+COMPLETED_SECTION_TITLE = "Completed"
+COMPLETED_SECTION_HEADING = "## Completed"
+HEADING_SEPARATOR = " / "
+DEFAULT_CHILD_INDENT = "  "
+MAX_ID_ATTEMPTS = 1000
+RESERVED_REASON = "used-in-workflow"
+
+KINDS = ("note-task", "note-batch", "plan", "quickfix", "epic")
+PLAN_MODE_FOR_KIND = {
+    "note-task": "single-task",
+    "note-batch": "batch-note",
+    "plan": "feature",
+    "quickfix": "quickfix",
+    "epic": "epic",
+}
+MILESTONE_SIZES = ("plan", "quickfix")
+MILESTONE_KEYS = ("id", "title", "size", "status", "branch", "plan_path", "shipped", "pr", "reason")
+SOURCE_TASK_KEYS = ("task_id", "note_ref", "heading", "task_text")
+PLAN_KINDS = ("feature", "epic")
+KEY_PREFIX_RE = re.compile(r"^(plan|quickfix|epic):")
+
+STOPWORDS = {
+    "a", "about", "above", "add", "again", "all", "an", "and", "are", "as", "at", "be", "because",
+    "between", "broken", "by", "can", "change", "connected", "current", "currently", "different",
+    "do", "does", "entirely", "example", "feel", "for", "from", "get", "give", "how", "i",
+    "implemented", "improve", "in", "instead", "into", "is", "it", "its", "just", "like", "loads",
+    "make", "more", "need", "of", "on", "or", "page", "really", "right", "short", "should", "snappy",
+    "so", "sort", "strange", "that", "the", "there", "they", "this", "to", "too", "use", "very",
+    "want", "we", "where", "with", "work",
+}
+
+
+# --------------------------------------------------------------------------
+# Context: repo root + config, with the _lib calls every command needs bound
+# --------------------------------------------------------------------------
+
+
+class Ctx:
+    def __init__(self, root: Path, cfg: dict) -> None:
+        self.root = root
+        self.cfg = cfg
+        self.vault = _lib.vault_dir(root, cfg).resolve()
+
+    @classmethod
+    def load(cls, start: Path | None = None) -> "Ctx":
+        root = _lib.repo_root(start)
+        return cls(root, _lib.load_config(root))
+
+    # -- notes -------------------------------------------------------------
+    def resolve_note(self, given: str) -> Path:
+        return _lib.resolve_note_path(self.root, self.cfg, given)
+
+    def note_rel(self, path: Path) -> str:
+        return _lib.vault_relpath(self.root, self.cfg, path)
+
+    def note_rel_lenient(self, given: str) -> str:
+        """Vault-relative path for a note that may no longer exist on disk."""
+        try:
+            return self.note_rel(self.resolve_note(given))
+        except _lib.FrameworkError:
+            pass
+        given_path = Path(given).expanduser()
+        if given_path.is_absolute():
+            return self.note_rel(given_path)
+        posix = given_path.as_posix()
+        vault_prefix = _lib.repo_relpath(self.root, self.vault) + "/"
+        return posix[len(vault_prefix):] if posix.startswith(vault_prefix) else posix
+
+    def tasks(self, note_path: Path) -> list["ParsedTask"]:
+        return parse_tasks(note_path, self.note_rel(note_path))
+
+    def vault_notes(self) -> list[Path]:
+        if not self.vault.is_dir():
+            raise _lib.FrameworkError(f"vault not found: {self.vault}", code=2, vault_path=self.cfg["vault_path"])
+        return sorted(path for path in self.vault.rglob("*.md") if path.is_file())
+
+    def id_base(self, note_rel: str, heading: str | None, task_text: str) -> str:
+        return build_task_id_base(note_rel, heading, task_text, exclude={self.vault.name.lower()})
+
+    # -- repo paths --------------------------------------------------------
+    def repo_path(self, given: str | Path) -> Path:
+        path = Path(given).expanduser()
+        return (path if path.is_absolute() else self.root / path).resolve()
+
+    def repo_rel(self, given: str | Path) -> str:
+        return _lib.repo_relpath(self.root, self.repo_path(given))
+
+    def plan_file(self, given: str) -> Path:
+        """An existing, non-summary plan file."""
+        plan = self.repo_path(given)
+        if not plan.is_file():
+            raise _lib.FrameworkError(f"plan not found: {given}", code=2, tried=str(plan))
+        self.reject_summary(plan)
+        return plan
+
+    def reject_summary(self, plan: Path) -> None:
+        if _lib.is_summary(plan):
+            sibling = plan.with_name(plan.name[: -len("-summary.md")] + ".md")
+            raise _lib.FrameworkError(
+                "summary files carry no workflow metadata; use the plan file",
+                code=2,
+                summary_path=self.repo_rel(plan),
+                plan_path=self.repo_rel(sibling),
+                plan_exists=sibling.exists(),
+            )
+
+    # -- registry ----------------------------------------------------------
+    def entry(self, key: str) -> dict | None:
+        return _lib.registry_get(self.root, self.cfg, key)
+
+    def put_entry(self, key: str, entry: dict) -> dict:
+        return _lib.registry_put(self.root, self.cfg, key, entry)
+
+    def entries(self) -> dict[str, dict]:
+        return _lib.registry_all(self.root, self.cfg)
+
+    def reservation(self, task_id: str) -> dict | None:
+        return _lib.task_id_get(self.root, self.cfg, task_id)
+
+    def reserve(self, task_id: str, note_ref: str, state: str) -> dict:
+        record = self.reservation(task_id) or {}
+        record.setdefault("first_note_ref", note_ref)
+        record.update({"current_note_ref": note_ref, "state": state, "reserved_reason": RESERVED_REASON})
+        return _lib.task_id_put(self.root, self.cfg, task_id, record)
+
+
+# --------------------------------------------------------------------------
+# Argument and ref parsing
+# --------------------------------------------------------------------------
+
+
+def parse_key_value(pairs: list[str]) -> dict[str, str]:
+    data: dict[str, str] = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        key = key.strip()
+        if not sep or not key:
+            raise _lib.FrameworkError(f"Expected KEY=VALUE, got: {pair}")
+        data[key] = value
+    return data
+
+
+def parse_append_pairs(pairs: list[str]) -> dict[str, list[str]]:
+    data: dict[str, list[str]] = {}
+    for pair in pairs:
+        key, value = next(iter(parse_key_value([pair]).items()))
+        data.setdefault(key, []).append(value)
+    return data
+
+
+def scalar_fields(pairs: list[str] | None) -> dict[str, Any]:
+    return {key: _lib.parse_scalar(value) for key, value in parse_key_value(pairs or []).items()}
+
+
+def scalar_appends(pairs: list[str] | None) -> dict[str, list[Any]]:
+    return {key: [_lib.parse_scalar(v) for v in values] for key, values in parse_append_pairs(pairs or []).items()}
+
+
+def split_note_ref(note_ref: str) -> tuple[str, str | None]:
+    """NOTE, NOTE#^id, or NOTE#batch -> (note path, task id or None)."""
+    if note_ref.endswith("#batch"):
+        return note_ref[: -len("#batch")], None
+    if "#^" not in note_ref:
+        return note_ref, None
+    path_str, block_ref = note_ref.split("#^", 1)
+    block_ref = block_ref.strip()
+    if not block_ref:
+        raise _lib.FrameworkError("Note ref ends with '#^' but no block ID was provided")
+    return path_str, block_ref
+
+
+def normalize_key(ctx: Ctx, key: str) -> str:
+    """Registry key with any note portion made vault-relative. Non-note keys pass through."""
+    if "#" not in key:
+        return key
+    path_part, fragment = key.rsplit("#", 1)
+    return f"{ctx.note_rel_lenient(path_part)}#{fragment}"
+
+
+def kind_for_key(key: str) -> str:
+    """Registry kind implied by a key's shape: plan:/quickfix:/epic: prefix, #batch, else note-task."""
+    prefix = KEY_PREFIX_RE.match(key)
+    if prefix:
+        return prefix.group(1)
+    return "note-batch" if key.endswith("#batch") else "note-task"
+
+
+def parse_json_arg(flag: str, raw: str) -> Any:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise _lib.FrameworkError(f"Invalid JSON for {flag}: {exc.msg}")
+
+
+def parse_task_ids_json(raw: str | None) -> list[str] | None:
+    """--task-ids-json: a JSON list of strings or of objects with a task_id."""
+    if raw is None:
+        return None
+    value = parse_json_arg("--task-ids-json", raw)
+    if not isinstance(value, list):
+        raise _lib.FrameworkError("--task-ids-json must be a JSON list")
+    task_ids: list[str] = []
+    for item in value:
+        task_id = item.get("task_id") if isinstance(item, dict) else item
+        if not isinstance(task_id, str) or not task_id:
+            raise _lib.FrameworkError("--task-ids-json items must be strings or objects with a task_id", item=item)
+        task_ids.append(task_id)
+    return task_ids
+
+
+def parse_source_tasks_json(ctx: Ctx, raw: str, note_rel: str) -> list[dict[str, Any]]:
+    """--source-tasks-json: list of {task_id, note_ref?, heading?, task_text?}; refs normalized."""
+    value = parse_json_arg("--source-tasks-json", raw)
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise _lib.FrameworkError("--source-tasks-json must be a JSON list of objects")
+    source_tasks: list[dict[str, Any]] = []
+    for item in value:
+        task_id = item.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            raise _lib.FrameworkError("--source-tasks-json items need a task_id string", item=item)
+        task = {key: item.get(key) for key in SOURCE_TASK_KEYS}
+        task["note_ref"] = normalize_key(ctx, task["note_ref"]) if task["note_ref"] else _lib.note_key(note_rel, task_id)
+        source_tasks.append(task)
+    return source_tasks
+
+
+def parse_milestones_json(ctx: Ctx, raw: str) -> list[dict[str, Any]]:
+    value = parse_json_arg("--milestones-json", raw)
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise _lib.FrameworkError("--milestones-json must be a JSON list of objects")
+    milestones: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in value:
+        milestone = {key: item[key] for key in MILESTONE_KEYS if key in item}
+        milestone_id = str(milestone.get("id", "")).strip()
+        if not milestone_id or not isinstance(milestone.get("title"), str) or not milestone["title"].strip():
+            raise _lib.FrameworkError("each milestone needs an id and a title", item=item)
+        if milestone.get("size") not in MILESTONE_SIZES:
+            raise _lib.FrameworkError(f"milestone size must be one of {', '.join(MILESTONE_SIZES)}", item=item)
+        if milestone_id in seen:
+            raise _lib.FrameworkError(f"duplicate milestone id: {milestone_id}")
+        seen.add(milestone_id)
+        milestone["id"] = milestone_id
+        if milestone.get("plan_path"):
+            milestone["plan_path"] = ctx.repo_rel(milestone["plan_path"])
+        milestones.append(milestone)
+    return milestones
+
+
+# --------------------------------------------------------------------------
+# Note parsing
+# --------------------------------------------------------------------------
+
+
+@dataclass
+class ParsedTask:
+    task_text: str
+    checked: bool
+    indent: int
+    start_line: int
+    end_line: int
+    heading: str | None
+    task_id: str | None
+    note_path: str  # vault-relative
+    metadata: dict[str, list[str]]
+
+    @property
+    def note_ref(self) -> str | None:
+        return _lib.note_key(self.note_path, self.task_id) if self.task_id else None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "task_text": self.task_text,
+            "checked": self.checked,
+            "indent": self.indent,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
+            "heading": self.heading,
+            "task_id": self.task_id,
+            "note_path": self.note_path,
+            "note_ref": self.note_ref,
+            "metadata": self.metadata,
+        }
+
+
+def batch_source_task_json(task: ParsedTask) -> dict[str, Any]:
+    return {
+        "task_id": task.task_id,
+        "note_ref": task.note_ref,
+        "note_path": task.note_path,
+        "heading": task.heading,
+        "task_text": task.task_text,
+        "line": task.start_line,
+        "checked": task.checked,
+        "metadata": task.metadata,
+    }
+
+
+def jsonify(value: Any) -> Any:
+    if isinstance(value, ParsedTask):
+        return value.to_json()
+    if isinstance(value, list):
+        return [jsonify(item) for item in value]
+    return value
+
+
+def strip_fenced_code_blocks(lines: list[str]) -> list[str]:
+    """Blank every line of each fenced code block (fences included), preserving line count.
+
+    An unterminated fence blanks to end-of-file, matching CommonMark.
+    """
+    out: list[str] = list(lines)
+    i = 0
+    n = len(out)
+    while i < n:
+        match = FENCE_OPEN_RE.match(out[i])
+        if not match:
+            i += 1
+            continue
+        fence = match.group("fence")
+        fence_char = fence[0]
+        if fence_char == "`" and "`" in match.group("info"):
+            i += 1
+            continue
+        out[i] = ""
+        i += 1
+        close_re = re.compile(rf"^ {{0,3}}{re.escape(fence_char)}{{{len(fence)},}}\s*$")
+        while i < n:
+            closing = close_re.match(out[i])
+            out[i] = ""
+            i += 1
+            if closing:
+                break
+    return out
+
+
+def leading_whitespace(line: str) -> str:
+    return line[: len(line) - len(line.lstrip())]
+
+
+def is_top_level_heading(line: str) -> bool:
+    match = HEADING_RE.match(line)
+    return bool(match and len(match.group("indent")) == 0)
+
+
+def parse_tasks(note_path: Path, note_rel: str) -> list[ParsedTask]:
+    lines = strip_fenced_code_blocks(_lib.read_text(note_path).splitlines())
+    tasks: list[ParsedTask] = []
+    headings: list[tuple[int, str]] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        heading_match = HEADING_RE.match(line)
+        if heading_match and len(heading_match.group("indent")) == 0:
+            level = len(heading_match.group("hashes"))
+            headings = [entry for entry in headings if entry[0] < level]
+            headings.append((level, heading_match.group("title").strip()))
+            i += 1
+            continue
+
+        task_match = TASK_RE.match(line)
+        if not task_match:
+            i += 1
+            continue
+
+        indent = len(task_match.group("indent"))
+        end_idx = i + 1
+        while end_idx < len(lines):
+            next_line = lines[end_idx]
+            if HEADING_RE.match(next_line):
+                break
+            next_task = TASK_RE.match(next_line)
+            if next_task and len(next_task.group("indent")) <= indent:
+                break
+            if next_line.strip() and len(leading_whitespace(next_line)) <= indent:
+                break
+            end_idx += 1
+
+        block_id: str | None = None
+        metadata: dict[str, list[str]] = {}
+        for inner_line in lines[i + 1 : end_idx]:
+            block_match = BLOCK_ID_RE.match(inner_line)
+            if block_match and block_id is None:
+                block_id = block_match.group("block_id")
+                continue
+            meta_match = META_RE.match(inner_line)
+            if meta_match:
+                metadata.setdefault(meta_match.group("key"), []).append(meta_match.group("value"))
+
+        tasks.append(
+            ParsedTask(
+                task_text=task_match.group("text").strip(),
+                checked=task_match.group("checked").lower() == "x",
+                indent=indent,
+                start_line=i + 1,
+                end_line=end_idx,
+                heading=HEADING_SEPARATOR.join(title for _, title in headings) or None,
+                task_id=block_id,
+                note_path=note_rel,
+                metadata=metadata,
+            )
+        )
+        i = end_idx
+
+    return tasks
+
+
+def unchecked_tasks(tasks: list[ParsedTask]) -> list[ParsedTask]:
+    return [task for task in tasks if not task.checked]
+
+
+def find_task_by_line(tasks: list[ParsedTask], line_number: int) -> ParsedTask | None:
+    for task in tasks:
+        if task.start_line == line_number or task.start_line < line_number < task.end_line:
+            return task
+    return None
+
+
+def select_task(tasks: list[ParsedTask], task_id: str | None) -> tuple[str, dict[str, Any]]:
+    if task_id:
+        matches = [task for task in tasks if task.task_id == task_id]
+        if len(matches) > 1:
+            return "duplicate_task_id", {"task_id": task_id, "candidates": matches}
+        if matches:
+            return "ok", {"task": matches[0]}
+        return "not_found", {"requested_task_id": task_id}
+
+    unchecked = unchecked_tasks(tasks)
+    if not unchecked:
+        return "no_unchecked_tasks", {"tasks": tasks}
+    if len(unchecked) > 1:
+        return "needs_selection", {"candidates": unchecked}
+    return "ok", {"task": unchecked[0]}
+
+
+def parse_tasks_for_note(note_path: Path, note_rel: str) -> dict[str, Any]:
+    tasks = parse_tasks(note_path, note_rel)
+    unchecked = unchecked_tasks(tasks)
+    if not unchecked:
+        return {"status": "no_unchecked_tasks", "note_path": note_rel, "tasks": jsonify(tasks)}
+    return {
+        "status": "ok",
+        "note_path": note_rel,
+        "note_ref": _lib.note_key(note_rel, None),
+        "task_count": len(unchecked),
+        "task_ids": [task.task_id for task in unchecked if task.task_id],
+        "tasks": [batch_source_task_json(task) for task in unchecked],
+    }
+
+
+# --------------------------------------------------------------------------
+# Completed section and indentation
+# --------------------------------------------------------------------------
+
+
+def is_completed_title(title: str) -> bool:
+    return title.strip().lower() == COMPLETED_SECTION_TITLE.lower()
+
+
+def under_completed(heading: str | None) -> bool:
+    """True when any breadcrumb segment of the task's heading is the Completed section."""
+    return any(is_completed_title(segment) for segment in (heading or "").split(HEADING_SEPARATOR))
+
+
+def is_completed_heading(line: str) -> bool:
+    match = HEADING_RE.match(line)
+    return bool(match and len(match.group("indent")) == 0 and is_completed_title(match.group("title")))
+
+
+def find_completed_section_range(lines: list[str]) -> tuple[int, int] | None:
+    start_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if is_completed_heading(line):
+            start_idx = idx
+            continue
+        if start_idx is not None and is_top_level_heading(line):
+            return start_idx, idx
+    if start_idx is None:
+        return None
+    return start_idx, len(lines)
+
+
+def archive_task_block(lines: list[str], block_start: int, block_lines: list[str]) -> list[str]:
+    remaining = lines[:block_start] + lines[block_start + len(block_lines) :]
+    completed_range = find_completed_section_range(remaining)
+    if completed_range is None:
+        while remaining and remaining[-1] == "":
+            remaining.pop()
+        if remaining:
+            remaining.append("")
+        remaining.append(COMPLETED_SECTION_HEADING)
+        remaining.extend(block_lines)
+        return remaining
+
+    section_start, section_end = completed_range
+    insertion_idx = section_end
+    while insertion_idx > section_start + 1 and remaining[insertion_idx - 1] == "":
+        insertion_idx -= 1
+
+    block_to_insert = list(block_lines)
+    if insertion_idx > section_start + 1 and remaining[insertion_idx - 1] != "":
+        block_to_insert = [""] + block_to_insert
+
+    return remaining[:insertion_idx] + block_to_insert + remaining[insertion_idx:]
+
+
+def child_indent_for(block_lines: list[str]) -> str:
+    """Indent for new child lines: copy the first existing child's, else task indent + two spaces."""
+    for line in block_lines[1:]:
+        if line.strip():
+            return leading_whitespace(line)
+    return leading_whitespace(block_lines[0]) + DEFAULT_CHILD_INDENT
+
+
+def write_note(note_path: Path, lines: list[str]) -> None:
+    note_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# --------------------------------------------------------------------------
+# Task ID generation
+# --------------------------------------------------------------------------
+
+
+def slug_words(text: str) -> list[str]:
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    return re.findall(r"[a-z0-9]+", ascii_text.lower())
+
+
+def unique_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
+def context_prefix_tokens(note_path: str, heading: str | None, exclude: set[str] = frozenset()) -> list[str]:
+    """Tokens from the note's parent folder (ignoring the vault dir itself), else from the heading."""
+    parent = Path(note_path).parent.name
+    tokens: list[str] = []
+    if parent and parent.lower() not in exclude | {"."}:
+        tokens.extend(slug_words(parent))
+    if not tokens and heading:
+        tokens.extend(slug_words(heading))
+    return unique_preserve_order(tokens[:2])
+
+
+def derive_suffix_tokens(task_text: str, context_tokens: list[str], heading: str | None) -> list[str]:
+    tokens = slug_words(task_text)
+    context_set = set(context_tokens) | set(slug_words(heading or ""))
+    filtered = unique_preserve_order(
+        [t for t in tokens if t not in STOPWORDS and t not in context_set and not t.isdigit()]
+    )
+    if len(filtered) >= 2:
+        return filtered[:2]
+    fallback = unique_preserve_order([t for t in tokens if t not in STOPWORDS and not t.isdigit()])
+    return fallback[:2] or ["task"]
+
+
+def build_task_id_base(note_path: str, heading: str | None, task_text: str, exclude: set[str] = frozenset()) -> str:
+    prefix = context_prefix_tokens(note_path, heading, exclude)
+    suffix = derive_suffix_tokens(task_text, prefix, heading)
+    if prefix:
+        suffix = [token for token in suffix if token not in prefix]
+    parts = unique_preserve_order(prefix[:1] + suffix[:2]) or ["task"]
+    return "-".join(parts)[:80].strip("-") or "task"
+
+
+# --------------------------------------------------------------------------
+# Vault scan and task ID validation
+# --------------------------------------------------------------------------
+
+
+def collect_task_id_records(ctx: Ctx) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for note_path in ctx.vault_notes():
+        for task in ctx.tasks(note_path):
+            if not task.task_id:
+                continue
+            status_values = task.metadata.get("status", [])
+            records.append(
+                {
+                    "task_id": task.task_id,
+                    "note_path": task.note_path,
+                    "note_ref": task.note_ref,
+                    "checked": task.checked,
+                    "start_line": task.start_line,
+                    "end_line": task.end_line,
+                    "heading": task.heading,
+                    "status": status_values[-1] if status_values else None,
+                }
+            )
+    return records
+
+
+def duplicate_issue(task_id: str, items: list[dict[str, Any]]) -> dict[str, Any]:
+    if len({item["note_path"] for item in items}) == 1:
+        return {
+            "error": "Duplicate task ID in note",
+            "task_id": task_id,
+            "note_path": items[0]["note_path"],
+            "locations": [item["start_line"] for item in items],
+            "recommendation": "Rename one of the duplicate task IDs before continuing.",
+        }
+    return {
+        "error": "Duplicate task ID across notes",
+        "task_id": task_id,
+        "locations": [item["note_ref"] for item in items if item["note_ref"]],
+        "recommendation": "Create a new unique task ID for the newer task.",
+    }
+
+
+def duplicate_issues_for_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_task_id: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        by_task_id.setdefault(record["task_id"], []).append(record)
+    return [duplicate_issue(task_id, items) for task_id, items in by_task_id.items() if len(items) > 1]
+
+
+def validation_error(issue: dict[str, Any], code: int = 1) -> _lib.FrameworkError:
+    extra = {key: value for key, value in issue.items() if key != "error"}
+    return _lib.FrameworkError(issue["error"], code=code, **extra)
+
+
+def validate_task_id_candidate(ctx: Ctx, task_id: str, note_ref: str | None, *, minting: bool = False) -> dict | None:
+    """Return an issue dict when `task_id` may not be used by `note_ref`, else None.
+
+    `note_ref` is the task claiming the id. With `minting=True` the id is being
+    generated for `note_ref`, so any existing use in the vault is a conflict,
+    while a reservation held by that same ref is fine.
+    """
+    records = [record for record in collect_task_id_records(ctx) if record["task_id"] == task_id]
+    claimant = None if minting else note_ref
+
+    if claimant:
+        same = [record for record in records if record["note_ref"] == claimant]
+        foreign = [record for record in records if record["note_ref"] != claimant]
+        if len(same) > 1:
+            return duplicate_issue(task_id, same)
+        if foreign:
+            return duplicate_issue(task_id, foreign)
+    elif records:
+        return duplicate_issue(task_id, records)
+
+    reserved = ctx.reservation(task_id)
+    if reserved:
+        allowed_refs = {reserved.get("first_note_ref"), reserved.get("current_note_ref")}
+        if note_ref is None or note_ref not in allowed_refs:
+            return {
+                "error": "Task ID is already reserved",
+                "task_id": task_id,
+                "existing_note_ref": reserved.get("current_note_ref") or reserved.get("first_note_ref"),
+                "existing_state": reserved.get("state"),
+                "recommendation": f"Create a new task ID, such as {task_id}-v2.",
+            }
+    return None
+
+
+def generate_task_id(
+    ctx: Ctx, note_rel: str, heading: str | None, task_text: str, *, note_ref: str | None = None, minting: bool = False
+) -> tuple[str, str]:
+    """(task_id, base): first of base, base-v2, base-v3, ... that validates. Capped at MAX_ID_ATTEMPTS."""
+    base = ctx.id_base(note_rel, heading, task_text)
+    for attempt in range(1, MAX_ID_ATTEMPTS + 1):
+        candidate = base if attempt == 1 else f"{base}-v{attempt}"
+        ref = _lib.note_key(note_rel, candidate) if minting else note_ref
+        if validate_task_id_candidate(ctx, candidate, ref, minting=minting) is None:
+            return candidate, base
+    raise _lib.FrameworkError(
+        "Could not generate a unique task ID",
+        note_path=note_rel,
+        base_task_id=base,
+        recommendation="Choose a more specific task description and try again.",
+    )
+
+
+# --------------------------------------------------------------------------
+# Block ID insertion and ensure-task-id
+# --------------------------------------------------------------------------
+
+
+def insert_task_id(note_path: Path, task: ParsedTask, new_task_id: str, note_rel: str) -> ParsedTask:
+    lines = _lib.read_text(note_path).splitlines()
+    block_lines = lines[task.start_line - 1 : task.end_line]
+    lines.insert(task.start_line, f"{child_indent_for(block_lines)}^{new_task_id}")
+    write_note(note_path, lines)
+    matches = [candidate for candidate in parse_tasks(note_path, note_rel) if candidate.task_id == new_task_id]
+    if len(matches) != 1:
+        raise _lib.FrameworkError(f"Inserted task ID '^{new_task_id}' could not be resolved uniquely", note_path=note_rel)
+    return matches[0]
+
+
+def unresolved_task(note_rel: str) -> _lib.FrameworkError:
+    return _lib.FrameworkError(
+        "Selected task could not be resolved", note_path=note_rel, recommendation="Re-run task selection and try again."
+    )
+
+
+def select_single_task(tasks: list[ParsedTask], note_rel: str, task_id: str | None, line: int | None) -> ParsedTask:
+    """Pick the task addressed by an explicit id, a line number, or the only unchecked task."""
+    if task_id:
+        matches = [task for task in tasks if task.task_id == task_id]
+        if len(matches) > 1:
+            raise _lib.FrameworkError(
+                "Duplicate task ID in note",
+                task_id=task_id,
+                note_path=note_rel,
+                locations=[task.start_line for task in matches],
+                recommendation="Rename one of the duplicate task IDs before continuing.",
+            )
+        if not matches:
+            raise unresolved_task(note_rel)
+        return matches[0]
+    if line is not None:
+        selected = find_task_by_line(tasks, line)
+        if selected is None:
+            raise unresolved_task(note_rel)
+        return selected
+    status, payload = select_task(tasks, None)
+    if status == "needs_selection":
+        raise _lib.FrameworkError(
+            "Task selection is ambiguous",
+            note_path=note_rel,
+            candidates=[{"line": task.start_line, "task_text": task.task_text} for task in payload["candidates"]],
+            recommendation="Select a single task explicitly before generating a block ID.",
+        )
+    if status != "ok":
+        raise unresolved_task(note_rel)
+    return payload["task"]
+
+
+def ensure_task_id_for_task(ctx: Ctx, note_path: Path, task: ParsedTask) -> tuple[ParsedTask, str | None]:
+    """(task with a validated id, base id when one was minted). Raises on validation failure."""
+    if task.task_id:
+        issue = validate_task_id_candidate(ctx, task.task_id, task.note_ref)
+        if issue:
+            raise validation_error(issue)
+        return task, None
+    task_id, base = generate_task_id(ctx, task.note_path, task.heading, task.task_text, minting=True)
+    return insert_task_id(note_path, task, task_id, task.note_path), base
+
+
+def ensure_task_id_for_target(ctx: Ctx, target: str, line: int | None) -> dict[str, Any]:
+    note_str, ref_task_id = split_note_ref(target)
+    note_path = ctx.resolve_note(note_str)
+    note_rel = ctx.note_rel(note_path)
+    selected = select_single_task(parse_tasks(note_path, note_rel), note_rel, ref_task_id, line)
+    task, base = ensure_task_id_for_task(ctx, note_path, selected)
+    payload = {
+        "status": "ok",
+        "created": base is not None,
+        "task_id": task.task_id,
+        "note_path": note_rel,
+        "note_ref": task.note_ref,
+        "line": task.start_line,
+        "task_text": task.task_text,
+        "heading": task.heading,
+    }
+    if base is not None:
+        payload["base_task_id"] = base
+    return payload
+
+
+def ensure_task_ids_for_note(ctx: Ctx, note_path: Path) -> dict[str, Any]:
+    """Give every unchecked task in the note a block ID and reserve each as `planning`."""
+    note_rel = ctx.note_rel(note_path)
+    selected = unchecked_tasks(parse_tasks(note_path, note_rel))
+    if not selected:
+        raise unresolved_task(note_rel)
+
+    ensured: list[dict[str, Any]] = []
+    created_count = 0
+    for expected_line in sorted((task.start_line for task in selected), reverse=True):
+        refreshed = find_task_by_line(parse_tasks(note_path, note_rel), expected_line)
+        if refreshed is None or refreshed.checked:
+            raise unresolved_task(note_rel)
+        task, base = ensure_task_id_for_task(ctx, note_path, refreshed)
+        created_count += base is not None
+        ensured.append(batch_source_task_json(task))
+        ctx.reserve(task.task_id, task.note_ref, "planning")
+
+    ensured.sort(key=lambda task: int(task["line"]))
+    return {
+        "status": "ok",
+        "note_path": note_rel,
+        "note_ref": _lib.note_key(note_rel, None),
+        "task_count": len(ensured),
+        "created_count": created_count,
+        "task_ids": [task["task_id"] for task in ensured],
+        "tasks": ensured,
+    }
+
+
+# --------------------------------------------------------------------------
+# Note updates (scrub managed keys, check/uncheck, archive to Completed)
+# --------------------------------------------------------------------------
+
+
+def update_note_file(
+    note_path: Path,
+    task_id: str,
+    note_rel: str,
+    *,
+    set_fields: dict[str, Any],
+    append_fields: dict[str, list[Any]],
+    check: bool | None,
+) -> ParsedTask:
+    matches = [task for task in parse_tasks(note_path, note_rel) if task.task_id == task_id]
+    if not matches:
+        raise _lib.FrameworkError(f"Task ID '^{task_id}' not found in {note_rel}", note_path=note_rel)
+    if len(matches) > 1:
+        raise _lib.FrameworkError(f"Duplicate task ID in note: ^{task_id}", note_path=note_rel)
+    target = matches[0]
+
+    lines = _lib.read_text(note_path).splitlines()
+    start = target.start_line - 1
+    end = target.end_line
+    block_lines = lines[start:end]
+    task_match = TASK_RE.match(block_lines[0])
+    if task_match is None:
+        raise _lib.FrameworkError(f"Task line at {target.start_line} is malformed", note_path=note_rel)
+
+    writable_set = {key: value for key, value in set_fields.items() if key not in MANAGED_NOTE_KEYS}
+    writable_append = {key: values for key, values in append_fields.items() if key not in MANAGED_NOTE_KEYS}
+    rewritten_keys = set(writable_set) | set(writable_append) | MANAGED_NOTE_KEYS
+
+    existing_append: dict[str, list[str]] = {}
+    insert_idx: int | None = None
+    kept_lines: list[str] = [block_lines[0]]
+    for line in block_lines[1:]:
+        block_match = BLOCK_ID_RE.match(line)
+        if block_match and block_match.group("block_id") == task_id and insert_idx is None:
+            kept_lines.append(line)
+            insert_idx = len(kept_lines)
+            continue
+        meta_match = META_RE.match(line)
+        if meta_match and meta_match.group("key") in rewritten_keys:
+            if meta_match.group("key") in writable_append:
+                existing_append.setdefault(meta_match.group("key"), []).append(meta_match.group("value"))
+            continue
+        kept_lines.append(line)
+    if insert_idx is None:
+        raise _lib.FrameworkError(f"Task '^{task_id}' has no block ID line to anchor updates", note_path=note_rel)
+
+    child_indent = child_indent_for(block_lines)
+    new_lines = [f"{child_indent}{key}:: {value}" for key, value in writable_set.items()]
+    for key, values in writable_append.items():
+        merged = list(existing_append.get(key, []))
+        for value in values:
+            if str(value) not in merged:
+                merged.append(str(value))
+        new_lines.extend(f"{child_indent}{key}:: {value}" for value in merged)
+
+    checked_char = task_match.group("checked") if check is None else ("x" if check else " ")
+    kept_lines[0] = f"{task_match.group('indent')}- [{checked_char}] {task_match.group('text')}"
+    updated_block = kept_lines[:insert_idx] + new_lines + kept_lines[insert_idx:]
+
+    note_lines = lines[:start] + updated_block + lines[end:]
+    if check is True and not under_completed(target.heading):
+        note_lines = archive_task_block(note_lines, start, updated_block)
+    write_note(note_path, note_lines)
+
+    matches = [task for task in parse_tasks(note_path, note_rel) if task.task_id == task_id]
+    if len(matches) != 1:
+        raise _lib.FrameworkError(f"Updated task '^{task_id}' could not be re-parsed uniquely", note_path=note_rel)
+    return matches[0]
+
+
+def update_note_file_batch(
+    note_path: Path,
+    note_rel: str,
+    *,
+    set_fields: dict[str, Any],
+    append_fields: dict[str, list[Any]],
+    check: bool | None,
+    task_ids: list[str] | None = None,
+) -> list[ParsedTask]:
+    tasks = parse_tasks(note_path, note_rel)
+    if task_ids is None:
+        selected = unchecked_tasks(tasks)
+    else:
+        wanted = set(task_ids)
+        selected = [task for task in tasks if task.task_id in wanted]
+    updated: list[ParsedTask] = []
+    for task in selected:
+        if not task.task_id:
+            raise _lib.FrameworkError(f"Task at line {task.start_line} has no block ID", note_path=note_rel)
+        updated.append(
+            update_note_file(note_path, task.task_id, note_rel, set_fields=set_fields, append_fields=append_fields, check=check)
+        )
+    return updated
+
+
+# --------------------------------------------------------------------------
+# Registry entries
+# --------------------------------------------------------------------------
+
+
+def new_entry(kind: str) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "plan_mode": PLAN_MODE_FOR_KIND[kind],
+        "note_path": None,
+        "task_id": None,
+        "plan_path": None,
+        "branch": None,
+        "workflow_status": None,
+        "implementation_status": None,
+        "review_status": [],
+    }
+
+
+def merge_appends(entry: dict[str, Any], appends: dict[str, list[Any]]) -> None:
+    for key, values in appends.items():
+        current = entry.get(key)
+        if current in (None, ""):
+            current = []
+        elif not isinstance(current, list):
+            current = [current]
+        for value in values:
+            if value not in current:
+                current.append(value)
+        entry[key] = current
+
+
+def normalize_entry(ctx: Ctx, entry: dict[str, Any]) -> dict[str, Any]:
+    """Store plan paths repo-relative and note paths vault-relative, whatever the caller passed."""
+    if entry.get("plan_path"):
+        entry["plan_path"] = ctx.repo_rel(entry["plan_path"])
+    if entry.get("note_path"):
+        entry["note_path"] = ctx.note_rel_lenient(entry["note_path"])
+    if not entry.get("plan_mode") and entry.get("kind") in PLAN_MODE_FOR_KIND:
+        entry["plan_mode"] = PLAN_MODE_FOR_KIND[entry["kind"]]
+    return entry
+
+
+def upsert_entry(ctx: Ctx, key: str, kind: str, updates: dict[str, Any], appends: dict[str, list[Any]] | None = None) -> dict:
+    entry = ctx.entry(key) or new_entry(kind)
+    entry["kind"] = kind
+    entry.update(updates)
+    merge_appends(entry, appends or {})
+    return ctx.put_entry(key, normalize_entry(ctx, entry))
+
+
+def reservation_state(entry: dict[str, Any]) -> str:
+    return entry.get("implementation_status") or entry.get("workflow_status") or "reserved"
+
+
+def require_entry(ctx: Ctx, key: str) -> dict[str, Any]:
+    entry = ctx.entry(key)
+    if entry is None:
+        raise _lib.FrameworkError("Registry entry not found", code=2, key=key)
+    return entry
+
+
+def entry_note_tasks(entry: dict[str, Any]) -> list[tuple[str, str]]:
+    """(vault-relative note path, task id) for every note task an entry is bound to."""
+    if entry.get("source_tasks"):
+        return [
+            (split_note_ref(task["note_ref"])[0], task["task_id"])
+            for task in entry["source_tasks"]
+            if task.get("note_ref") and task.get("task_id")
+        ]
+    if entry.get("note_path") and entry.get("task_id"):
+        return [(entry["note_path"], entry["task_id"])]
+    return []
+
+
+def sync_entry_notes(ctx: Ctx, entry: dict[str, Any], check: bool | None, state: str) -> list[dict[str, Any]]:
+    """Scrub managed keys from every bound note task, set the box, and update reservations."""
+    updated: list[dict[str, Any]] = []
+    for note_rel, task_id in entry_note_tasks(entry):
+        note_path = ctx.resolve_note(note_rel)
+        task = update_note_file(note_path, task_id, ctx.note_rel(note_path), set_fields={}, append_fields={}, check=check)
+        ctx.reserve(task_id, _lib.note_key(note_rel, task_id), state)
+        updated.append(task.to_json())
+    return updated
+
+
+def resolve_target(ctx: Ctx, target: str) -> tuple[str | None, dict[str, Any] | None, Path | None]:
+    """A registry key or a plan path -> (registry key, entry or None, existing plan file or None).
+
+    A plan file without an entry gets its key from frontmatter `registry_key`, else
+    `epic:<slug>` for an epic file, else `plan:<safe-branch>` from its `branch` or the
+    checked-out branch. The key is None only when no branch can be derived.
+    """
+    key = normalize_key(ctx, target)
+    entry = ctx.entry(key)
+    if entry:
+        plan = ctx.repo_path(entry["plan_path"]) if entry.get("plan_path") else None
+        return key, entry, plan if plan and plan.is_file() else None
+    plan = ctx.repo_path(target)
+    if not plan.is_file():
+        raise _lib.FrameworkError(f"no registry entry or plan file matches {target}", code=2, key=key)
+    ctx.reject_summary(plan)
+    meta = _lib.read_frontmatter(plan)
+    registry_key = meta.get("registry_key")
+    key = registry_key if isinstance(registry_key, str) and registry_key else None
+    entry = ctx.entry(key) if key else None
+    if entry is None:
+        plan_rel = ctx.repo_rel(plan)
+        entry = next((e for e in ctx.entries().values() if e.get("plan_path") == plan_rel), None)
+        if entry:
+            key = entry["key"]
+    if key is None:
+        if meta.get("plan_kind") == "epic" or plan.parent.parent == _lib.epics_dir(ctx.root, ctx.cfg).resolve():
+            key = _lib.epic_key(_lib.epic_slug_from_path(plan))
+        else:
+            branch = meta.get("branch") or _lib.current_branch(ctx.root)
+            key = _lib.plan_key(str(branch)) if branch else None
+    return key, entry, plan
+
+
+def require_milestone(ctx: Ctx, slug: str, milestone_id: str) -> dict[str, Any]:
+    epic = require_entry(ctx, _lib.epic_key(slug))
+    for milestone in epic.get("milestones", []):
+        if str(milestone.get("id")) == str(milestone_id):
+            return milestone
+    raise _lib.FrameworkError(f"epic {slug} has no milestone {milestone_id}", code=2, key=epic["key"])
+
+
+# --------------------------------------------------------------------------
+# Commands: notes and task IDs
+# --------------------------------------------------------------------------
+
+
+def command_list_tasks(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    note_path = ctx.resolve_note(args.note_path)
+    tasks = ctx.tasks(note_path)
+    if args.unchecked_only:
+        tasks = unchecked_tasks(tasks)
+    return _lib.print_json({"status": "ok", "note_path": ctx.note_rel(note_path), "tasks": jsonify(tasks)})
+
+
+def command_list_task_ids(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    return _lib.print_json({"status": "ok", "vault": str(ctx.vault), "task_ids": collect_task_id_records(ctx)})
+
+
+def command_validate_vault(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    issues = duplicate_issues_for_records(collect_task_id_records(ctx))
+    if issues:
+        raise validation_error(issues[0])
+    return _lib.print_json({"status": "ok", "vault": str(ctx.vault), "message": "All task IDs are unique"})
+
+
+def command_parse_task(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    note_str, ref_task_id = split_note_ref(args.note_ref)
+    note_path = ctx.resolve_note(note_str)
+    note_rel = ctx.note_rel(note_path)
+    if ref_task_id is None and args.all_unchecked:
+        return _lib.print_json(parse_tasks_for_note(note_path, note_rel))
+    status, payload = select_task(parse_tasks(note_path, note_rel), args.task_id or ref_task_id)
+    payload = {key: jsonify(value) for key, value in payload.items()}
+    payload.update({"status": status, "note_path": note_rel})
+    if status == "duplicate_task_id":
+        payload["error"] = "Duplicate task ID in note"
+    return _lib.print_json(payload)
+
+
+def command_suggest_task_id(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    note_str, ref_task_id = split_note_ref(args.note_ref)
+    note_rel = ctx.note_rel_lenient(note_str)
+    note_ref = _lib.note_key(note_rel, ref_task_id) if ref_task_id else None
+    task_id, base = generate_task_id(ctx, note_rel, args.heading, args.task_text, note_ref=note_ref)
+    return _lib.print_json({"status": "ok", "task_id": task_id, "base_task_id": base, "note_path": note_rel})
+
+
+def command_validate_task_id(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    note_ref = normalize_key(ctx, args.note_ref) if args.note_ref else None
+    issue = validate_task_id_candidate(ctx, args.task_id, note_ref)
+    if issue:
+        raise validation_error(issue)
+    return _lib.print_json({"status": "ok", "task_id": args.task_id, "note_ref": note_ref})
+
+
+def command_ensure_task_id(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    note_str, ref_task_id = split_note_ref(args.target)
+    if args.all_unchecked and ref_task_id is None and args.line is None:
+        return _lib.print_json(ensure_task_ids_for_note(ctx, ctx.resolve_note(note_str)))
+    return _lib.print_json(ensure_task_id_for_target(ctx, args.target, args.line))
+
+
+def command_note_update(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    note_str, ref_task_id = split_note_ref(args.note_ref)
+    task_id = args.task_id or ref_task_id
+    task_ids = parse_task_ids_json(args.task_ids_json)
+    if not task_id and not args.all_unchecked and not task_ids:
+        raise _lib.FrameworkError("note-update requires a task ID via NOTE#^task-id or --task-id")
+    if args.check and args.uncheck:
+        raise _lib.FrameworkError("Use either --check or --uncheck, not both")
+    check = True if args.check else (False if args.uncheck else None)
+
+    note_path = ctx.resolve_note(note_str)
+    note_rel = ctx.note_rel(note_path)
+    set_fields = parse_key_value(args.set_fields or [])
+    append_fields = parse_append_pairs(args.append_fields or [])
+
+    if args.all_unchecked or task_ids:
+        tasks = update_note_file_batch(
+            note_path, note_rel, set_fields=set_fields, append_fields=append_fields, check=check, task_ids=task_ids
+        )
+        return _lib.print_json({"status": "ok", "note_path": note_rel, "task_count": len(tasks), "tasks": jsonify(tasks)})
+    task = update_note_file(note_path, task_id, note_rel, set_fields=set_fields, append_fields=append_fields, check=check)
+    return _lib.print_json({"status": "ok", "note_path": note_rel, "task": task.to_json()})
+
+
+# --------------------------------------------------------------------------
+# Commands: registry and plan metadata
+# --------------------------------------------------------------------------
+
+
+def command_registry_upsert(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    updates = scalar_fields(args.set_fields)
+    appends = scalar_appends(args.append_fields)
+    if args.branch:
+        updates["branch"] = args.branch
+    if args.plan_kind:
+        updates["plan_kind"] = args.plan_kind
+
+    if args.key is not None and KEY_PREFIX_RE.match(args.key):
+        if args.batch or args.task_id or args.source_tasks_json is not None:
+            raise _lib.FrameworkError("--batch, --task-id and --source-tasks-json apply to note keys only", key=args.key)
+        entry = upsert_entry(ctx, args.key, args.kind or kind_for_key(args.key), updates, appends)
+        return _lib.print_json({"status": "ok", "key": args.key, "entry": entry})
+
+    if args.key is None:
+        if args.source_tasks_json is not None or args.batch:
+            raise _lib.FrameworkError("--batch and --source-tasks-json need a note path")
+        branch = args.branch or _lib.current_branch(ctx.root)
+        if not branch:
+            raise _lib.FrameworkError("registry-upsert needs a key or --branch (no current git branch)", code=2)
+        key = _lib.plan_key(branch)
+        updates.setdefault("branch", branch)
+        entry = upsert_entry(ctx, key, args.kind or "plan", updates, appends)
+        return _lib.print_json({"status": "ok", "key": key, "entry": entry})
+
+    note_str, ref_task_id = split_note_ref(args.key)
+    task_id = args.task_id or ref_task_id
+    note_rel = ctx.note_rel(ctx.resolve_note(note_str))
+    updates["note_path"] = note_rel
+
+    if args.batch or args.key.endswith("#batch"):
+        key = _lib.note_key(note_rel, None)
+        if args.source_tasks_json is not None:
+            updates["source_tasks"] = parse_source_tasks_json(ctx, args.source_tasks_json, note_rel)
+            updates["task_count"] = len(updates["source_tasks"])
+        entry = upsert_entry(ctx, key, args.kind or "note-batch", updates, appends)
+        for task in entry.get("source_tasks") or []:
+            ctx.reserve(task["task_id"], task["note_ref"], reservation_state(entry))
+        return _lib.print_json({"status": "ok", "key": key, "entry": entry})
+
+    if not task_id:
+        raise _lib.FrameworkError("registry-upsert requires a task ID via NOTE#^task-id, --task-id, or --batch")
+    if args.source_tasks_json is not None:
+        raise _lib.FrameworkError("--source-tasks-json is only valid with --batch")
+    key = _lib.note_key(note_rel, task_id)
+    issue = validate_task_id_candidate(ctx, task_id, key)
+    if issue:
+        raise validation_error(issue)
+    updates["task_id"] = task_id
+    entry = upsert_entry(ctx, key, args.kind or "note-task", updates, appends)
+    reserved = ctx.reserve(task_id, key, reservation_state(entry))
+    return _lib.print_json({"status": "ok", "key": key, "entry": entry, "reserved_task_id": reserved})
+
+
+def command_registry_get(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    key = normalize_key(ctx, args.key)
+    entry = require_entry(ctx, key)
+    reserved = ctx.reservation(entry["task_id"]) if entry.get("task_id") else None
+    return _lib.print_json({"status": "ok", "key": key, "entry": entry, "reserved": reserved})
+
+
+def command_plan_metadata_get(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    plan = ctx.plan_file(args.plan_path)
+    return _lib.print_json({"status": "ok", "plan_path": ctx.repo_rel(plan), "metadata": _lib.read_frontmatter(plan)})
+
+
+def command_plan_metadata_set(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    plan = ctx.plan_file(args.plan_path)
+    updates = scalar_fields(args.set_fields)
+    if isinstance(updates.get("source_note_path"), str):
+        updates["source_note_path"] = ctx.note_rel_lenient(updates["source_note_path"])
+    if isinstance(updates.get("source_note_ref"), str):
+        updates["source_note_ref"] = normalize_key(ctx, updates["source_note_ref"])
+    metadata = _lib.update_frontmatter(plan, updates, scalar_appends(args.append_fields))
+    return _lib.print_json({"status": "ok", "plan_path": ctx.repo_rel(plan), "metadata": metadata})
+
+
+def command_resolve_plan(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    if args.plan_path:
+        plan = ctx.plan_file(args.plan_path)
+        return _lib.print_json({"status": "ok", "source": "explicit_path", "plan_path": ctx.repo_rel(plan)})
+
+    branch = args.branch or _lib.current_branch(ctx.root)
+    keys: list[str] = []
+    if args.note_ref:
+        keys.append(normalize_key(ctx, args.note_ref if "#" in args.note_ref else args.note_ref + "#batch"))
+    if args.note_path:
+        keys.append(_lib.note_key(ctx.note_rel_lenient(split_note_ref(args.note_path)[0]), None))
+    if branch:
+        keys.append(_lib.plan_key(branch))
+    for key in keys:
+        entry = ctx.entry(key)
+        if entry and entry.get("plan_path"):
+            ctx.reject_summary(ctx.repo_path(entry["plan_path"]))
+            return _lib.print_json({"status": "ok", "source": "registry", "key": key, "plan_path": entry["plan_path"], "entry": entry})
+
+    if branch:
+        latest = _lib.latest_plan(ctx.root, ctx.cfg, branch)
+        if latest:
+            return _lib.print_json({"status": "ok", "source": "branch_fallback", "branch": branch, "plan_path": ctx.repo_rel(latest)})
+
+    raise _lib.FrameworkError(
+        "Could not resolve a plan path", code=2, note_ref=args.note_ref, note_path=args.note_path, branch=branch, tried_keys=keys
+    )
+
+
+# --------------------------------------------------------------------------
+# Commands: lifecycle (abandon, quickfixes, epics, parent links)
+# --------------------------------------------------------------------------
+
+
+def apply_to_target(ctx: Ctx, target: str, updates: dict[str, Any]) -> dict[str, Any]:
+    """Write `updates` to the plan frontmatter and registry entry behind a key or plan path.
+
+    A plan with no entry gets one (`plan:<safe-branch>`, or `epic:<slug>` for an epic file)
+    so the new state is visible to workflow-state.
+    """
+    key, entry, plan = resolve_target(ctx, target)
+    result: dict[str, Any] = {"status": "ok", "key": key}
+    if plan is not None:
+        result["plan_path"] = ctx.repo_rel(plan)
+        result["metadata"] = _lib.update_frontmatter(plan, updates)
+    if entry is None and key is not None:
+        entry = new_entry(kind_for_key(key))
+        entry["plan_path"] = ctx.repo_rel(plan) if plan is not None else None
+        if entry["kind"] == "plan":
+            entry["branch"] = (result.get("metadata") or {}).get("branch") or _lib.current_branch(ctx.root)
+    if entry is not None:
+        entry.update(updates)
+        entry = ctx.put_entry(key, normalize_entry(ctx, entry))
+        result["entry"] = entry
+    return result
+
+
+def command_abandon(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    updates = {"workflow_status": "abandoned", "implementation_status": "abandoned", "reason": args.reason}
+    result = apply_to_target(ctx, args.target, updates)
+    if result.get("entry"):
+        result["tasks"] = sync_entry_notes(ctx, result["entry"], check=False, state="abandoned")
+    return _lib.print_json(result)
+
+
+def command_link_parent(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    require_milestone(ctx, args.parent_epic, args.milestone)
+    updates = {"parent_epic": args.parent_epic, "milestone": args.milestone}
+    return _lib.print_json(apply_to_target(ctx, args.target, updates))
+
+
+def command_quickfix_register(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    if bool(args.parent_epic) != bool(args.milestone):
+        raise _lib.FrameworkError("--parent-epic and --milestone must be given together")
+    key = _lib.quickfix_key(args.slug)
+    updates: dict[str, Any] = {
+        "title": args.title,
+        "workflow_status": "implementing",
+        "implementation_status": "implementing",
+    }
+    if args.branch:
+        updates["branch"] = args.branch
+    if args.parent_epic:
+        require_milestone(ctx, args.parent_epic, args.milestone)
+        updates.update({"parent_epic": args.parent_epic, "milestone": args.milestone})
+    task = None
+    if args.note_ref:
+        task = ensure_task_id_for_target(ctx, args.note_ref, None)
+        updates.update({"note_path": task["note_path"], "task_id": task["task_id"]})
+    entry = upsert_entry(ctx, key, "quickfix", updates)
+    if task:
+        ctx.reserve(task["task_id"], task["note_ref"], "implementing")
+    return _lib.print_json({"status": "ok", "key": key, "entry": entry, "task": task})
+
+
+def command_quickfix_complete(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    key = _lib.quickfix_key(args.slug)
+    entry = require_entry(ctx, key)
+    updates: dict[str, Any] = {"workflow_status": "shipped", "implementation_status": "shipped", "completed": _lib.today()}
+    if args.commit:
+        updates["commit"] = args.commit
+    if args.pr:
+        updates["pr"] = args.pr
+    entry = upsert_entry(ctx, key, entry.get("kind") or "quickfix", updates)
+    tasks = sync_entry_notes(ctx, entry, check=True, state="shipped")
+    return _lib.print_json({"status": "ok", "key": key, "entry": entry, "tasks": tasks})
+
+
+def command_escalate(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    key = _lib.quickfix_key(args.slug)
+    entry = require_entry(ctx, key)
+    # implementation_status too, or workflow-state keeps listing the quickfix as stuck in `implementing`.
+    entry = upsert_entry(ctx, key, entry.get("kind") or "quickfix", {"workflow_status": "escalated", "implementation_status": "escalated"})
+    note_ref = None
+    if entry.get("note_path") and entry.get("task_id"):
+        note_ref = _lib.note_key(entry["note_path"], entry["task_id"])
+        ctx.reserve(entry["task_id"], note_ref, "escalated")
+    return _lib.print_json({"status": "ok", "key": key, "note_ref": note_ref, "entry": entry})
+
+
+def command_epic_register(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    key = _lib.epic_key(args.slug)
+    plan = ctx.plan_file(args.path)
+    milestones = parse_milestones_json(ctx, args.milestones_json)
+    existing = ctx.entry(key)
+    if existing:
+        previous = {str(m.get("id")): m for m in existing.get("milestones", [])}
+        milestones = [{**previous.get(m["id"], {}), **m} for m in milestones]
+    for milestone in milestones:
+        milestone.setdefault("status", "not-started")
+    metadata = _lib.update_frontmatter(plan, {"plan_kind": "epic", "registry_key": key})
+    updates: dict[str, Any] = {"plan_path": ctx.repo_rel(plan), "plan_kind": "epic", "milestones": milestones}
+    title = args.title or metadata.get("title")
+    if isinstance(title, str) and title.strip():
+        updates["title"] = title.strip()
+    if args.branch:
+        updates["branch"] = args.branch
+    if existing is None:
+        updates.update({"workflow_status": "planning", "implementation_status": "not-started"})
+        updates.setdefault("title", args.slug)
+    entry = upsert_entry(ctx, key, "epic", updates)
+    return _lib.print_json({"status": "ok", "key": key, "entry": entry, "plan_path": entry["plan_path"], "metadata": metadata})
+
+
+def command_epic_get(args: argparse.Namespace) -> int:
+    """Epic entry with milestone status derived by _lib.epic_progress from child entries."""
+    ctx = Ctx.load()
+    key = _lib.epic_key(args.slug)
+    entry = dict(require_entry(ctx, key))
+    progress = _lib.epic_progress(ctx.root, ctx.cfg, args.slug)
+    derived_by_id = {m["id"]: m for m in progress["milestones"]}
+
+    milestones: list[dict[str, Any]] = []
+    for spec in entry.get("milestones", []):
+        record = dict(spec)
+        derived = derived_by_id.get(str(spec["id"]), {})
+        record["status"] = derived.get("status") or record.get("status") or "not-started"
+        child = ctx.entry(derived["key"]) if derived.get("key") else None
+        if child:
+            record["entry_key"] = child["key"]
+            for field in ("branch", "plan_path", "completed", "pr"):
+                if child.get(field):
+                    record[field] = child[field]
+        milestones.append(record)
+    entry["milestones"] = milestones
+
+    next_id = progress["next"]["id"] if progress["next"] else None
+    next_milestone = next((m for m in milestones if str(m["id"]) == next_id), None)
+    return _lib.print_json({"status": "ok", "key": key, "entry": entry, "progress": progress, "next_milestone": next_milestone})
+
+
+def command_milestone_set(args: argparse.Namespace) -> int:
+    ctx = Ctx.load()
+    key = _lib.epic_key(args.slug)
+    entry = require_entry(ctx, key)
+    updates = scalar_fields(args.set_fields)
+    if "id" in updates:
+        raise _lib.FrameworkError("milestone ids cannot be changed")
+    if "size" in updates and updates["size"] not in MILESTONE_SIZES:
+        raise _lib.FrameworkError(f"milestone size must be one of {', '.join(MILESTONE_SIZES)}")
+    if updates.get("plan_path"):
+        updates["plan_path"] = ctx.repo_rel(updates["plan_path"])
+    milestone = require_milestone(ctx, args.slug, args.milestone)
+    milestone.update(updates)
+    entry["milestones"] = [milestone if str(m.get("id")) == str(args.milestone) else m for m in entry.get("milestones", [])]
+    entry = ctx.put_entry(key, entry)
+    return _lib.print_json({"status": "ok", "key": key, "milestone": milestone, "entry": entry})
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    """argparse usage errors become the JSON error envelope (exit 2) instead of plain text."""
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        raise _lib.FrameworkError(message, code=2, usage=self.format_usage().strip())
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = JsonArgumentParser(description="Obsidian workflow helper CLI")
+    sub = parser.add_subparsers(dest="command", required=True, parser_class=JsonArgumentParser)
+
+    p = sub.add_parser("list-tasks", help="List tasks in a markdown note")
+    p.add_argument("note_path")
+    p.add_argument("--unchecked-only", action="store_true")
+    p.set_defaults(func=command_list_tasks)
+
+    sub.add_parser("list-task-ids", help="List every block ID across the vault").set_defaults(func=command_list_task_ids)
+    sub.add_parser("validate-vault", help="Validate task ID uniqueness across the vault").set_defaults(func=command_validate_vault)
+
+    p = sub.add_parser("parse-task", help="Select a task from NOTE[#^task-id]")
+    p.add_argument("note_ref")
+    p.add_argument("--task-id")
+    p.add_argument("--all-unchecked", action="store_true")
+    p.set_defaults(func=command_parse_task)
+
+    p = sub.add_parser("suggest-task-id", help="Suggest a unique human-readable task ID")
+    p.add_argument("--note-ref", required=True)
+    p.add_argument("--task-text", required=True)
+    p.add_argument("--heading")
+    p.set_defaults(func=command_suggest_task_id)
+
+    p = sub.add_parser("validate-task-id", help="Validate one task ID against vault + registry")
+    p.add_argument("--task-id", required=True)
+    p.add_argument("--note-ref")
+    p.set_defaults(func=command_validate_task_id)
+
+    p = sub.add_parser("ensure-task-id", help="Ensure the selected task has a valid block ID")
+    p.add_argument("target", help="NOTE or NOTE#^task-id")
+    p.add_argument("--line", type=int)
+    p.add_argument("--all-unchecked", action="store_true")
+    p.set_defaults(func=command_ensure_task_id)
+
+    p = sub.add_parser("note-update", help="Scrub managed keys from a task and optionally check/uncheck it")
+    p.add_argument("note_ref")
+    p.add_argument("--task-id")
+    p.add_argument("--all-unchecked", action="store_true")
+    p.add_argument("--task-ids-json", help="JSON list of task ids or of objects with a task_id")
+    p.add_argument("--set", dest="set_fields", action="append")
+    p.add_argument("--append", dest="append_fields", action="append")
+    p.add_argument("--check", action="store_true")
+    p.add_argument("--uncheck", action="store_true")
+    p.set_defaults(func=command_note_update)
+
+    p = sub.add_parser("registry-upsert", help="Create or update a registry entry")
+    p.add_argument("key", nargs="?", help="NOTE#^task-id | NOTE#batch | NOTE (with --task-id or --batch) | plan:<branch> | quickfix:<slug> | epic:<slug>; omit for plan:<current branch>")
+    p.add_argument("--task-id")
+    p.add_argument("--batch", action="store_true")
+    p.add_argument("--kind", choices=KINDS)
+    p.add_argument("--branch")
+    p.add_argument("--plan-kind", choices=PLAN_KINDS)
+    p.add_argument("--source-tasks-json", help="JSON list of {task_id, note_ref, heading, task_text} (with --batch)")
+    p.add_argument("--set", dest="set_fields", action="append")
+    p.add_argument("--append", dest="append_fields", action="append")
+    p.set_defaults(func=command_registry_upsert)
+
+    p = sub.add_parser("registry-get", help="Read a registry entry by key")
+    p.add_argument("key")
+    p.set_defaults(func=command_registry_get)
+
+    p = sub.add_parser("plan-metadata-get", help="Read plan frontmatter metadata")
+    p.add_argument("plan_path")
+    p.set_defaults(func=command_plan_metadata_get)
+
+    p = sub.add_parser("plan-metadata-set", help="Upsert plan frontmatter metadata")
+    p.add_argument("plan_path")
+    p.add_argument("--set", dest="set_fields", action="append")
+    p.add_argument("--append", dest="append_fields", action="append")
+    p.set_defaults(func=command_plan_metadata_set)
+
+    p = sub.add_parser("resolve-plan", help="Resolve a plan path from explicit path, registry, or branch")
+    p.add_argument("--plan-path")
+    p.add_argument("--note-ref")
+    p.add_argument("--note-path")
+    p.add_argument("--branch")
+    p.set_defaults(func=command_resolve_plan)
+
+    p = sub.add_parser("abandon", help="Mark an entry/plan abandoned and uncheck its note tasks")
+    p.add_argument("target", help="registry key or plan path")
+    p.add_argument("--reason", required=True)
+    p.set_defaults(func=command_abandon)
+
+    p = sub.add_parser("quickfix-register", help="Create or update a quickfix entry")
+    p.add_argument("--slug", required=True)
+    p.add_argument("--title", required=True)
+    p.add_argument("--note-ref")
+    p.add_argument("--parent-epic")
+    p.add_argument("--milestone")
+    p.add_argument("--branch")
+    p.set_defaults(func=command_quickfix_register)
+
+    p = sub.add_parser("quickfix-complete", help="Mark a quickfix shipped and check its note task")
+    p.add_argument("--slug", required=True)
+    p.add_argument("--commit")
+    p.add_argument("--pr")
+    p.set_defaults(func=command_quickfix_complete)
+
+    p = sub.add_parser("escalate", help="Mark a quickfix escalated to the full workflow")
+    p.add_argument("--slug", required=True)
+    p.set_defaults(func=command_escalate)
+
+    p = sub.add_parser("epic-register", help="Create or update an epic entry with milestones")
+    p.add_argument("--slug", required=True)
+    p.add_argument("--path", required=True, help="epic plan file")
+    p.add_argument("--milestones-json", required=True)
+    p.add_argument("--title", help="defaults to the epic file's frontmatter title, then the slug")
+    p.add_argument("--branch")
+    p.set_defaults(func=command_epic_register)
+
+    p = sub.add_parser("epic-get", help="Read an epic with derived milestone status")
+    p.add_argument("--slug", required=True)
+    p.set_defaults(func=command_epic_get)
+
+    p = sub.add_parser("milestone-set", help="Edit one milestone record on an epic")
+    p.add_argument("--slug", required=True)
+    p.add_argument("--milestone", required=True)
+    p.add_argument("--set", dest="set_fields", action="append", required=True)
+    p.set_defaults(func=command_milestone_set)
+
+    p = sub.add_parser("link-parent", help="Link an entry/plan to an epic milestone")
+    p.add_argument("target", help="registry key or plan path")
+    p.add_argument("--parent-epic", required=True)
+    p.add_argument("--milestone", required=True)
+    p.set_defaults(func=command_link_parent)
+
+    return parser
+
+
+def run(argv: list[str]) -> int:
+    """Parse and dispatch; every failure becomes the JSON error envelope."""
+    try:
+        args = build_parser().parse_args(argv)
+        return args.func(args)
+    except _lib.FrameworkError as exc:
+        return _lib.fail(exc.message, exc.code, **exc.payload)
+
+
+def main() -> int:
+    return run(sys.argv[1:])
+
+
+if __name__ == "__main__":
+    _lib.run_main(main)

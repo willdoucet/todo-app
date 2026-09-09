@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Food-item card — Option A: Vertical stack (plan spec)</title>
+<style>
+  :root {
+    --warm-cream: #FAF7F2;
+    --warm-beige: #F5F0E8;
+    --card-bg: #FFFDFB;
+    --card-border: rgba(232, 226, 217, 0.6);
+    --text-primary: #3D3833;
+    --text-muted: #9A9287;
+    --sage-50: #F4F7F4;
+    --sage-100: #E5EDE6;
+    --sage-600: #588D5E;
+    --terracotta-50: #FEF3F0;
+    --terracotta-100: #FCE4DE;
+    --terracotta-600: #C4613F;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--warm-cream);
+    color: var(--text-primary);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  .title { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; letter-spacing: .04em; text-transform: uppercase; }
+  .option-label { font-size: 18px; font-weight: 600; margin-bottom: 20px; color: var(--text-primary); }
+
+  /* Swimlane */
+  .lane-header { display: grid; grid-template-columns: 80px repeat(5, 1fr); gap: 8px; margin-bottom: 6px; }
+  .lane-header > div { font-size: 12px; font-weight: 600; color: var(--text-muted); padding: 6px 8px; text-align: center; }
+  .lane-header > .col-row-label { text-align: left; color: transparent; }
+  .lane-row {
+    display: grid;
+    grid-template-columns: 80px repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 4px 0;
+    border-radius: 10px;
+    min-height: 140px;
+  }
+  .lane-row.breakfast { background: linear-gradient(135deg, rgba(217, 116, 82, 0.08), rgba(217, 116, 82, 0.14)); }
+  .lane-row.lunch     { background: linear-gradient(135deg, rgba(107, 154, 112, 0.08), rgba(107, 154, 112, 0.14)); }
+  .lane-row.dinner    { background: linear-gradient(135deg, rgba(93, 138, 97, 0.08), rgba(93, 138, 97, 0.14)); }
+  .row-label { font-size: 12px; font-weight: 600; color: var(--text-primary); padding: 12px 10px; align-self: flex-start; }
+  .cell {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .cell-empty {
+    border: 1px dashed rgba(154, 146, 135, 0.3);
+    border-radius: 10px;
+    min-height: 60px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    font-size: 22px;
+    opacity: 0.5;
+  }
+
+  /* Card shared chrome */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: box-shadow .2s;
+  }
+  .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .card.cooked { background: var(--sage-50); border-color: rgba(200, 219, 201, 0.7); }
+
+  /* Recipe card (unchanged across options) */
+  .card-recipe .body {
+    padding: 12px 8px;
+    text-align: center;
+    min-height: 100px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .card-recipe .name { font-size: 14px; font-weight: 500; line-height: 1.2; }
+  .card-recipe .meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; align-items: center; gap: 3px; justify-content: center; }
+  .card-recipe .meta svg { width: 11px; height: 11px; }
+  .card .action-zone {
+    display: flex; justify-content: center; gap: 6px;
+    padding: 0 0 0 0;
+    max-height: 0; opacity: 0; overflow: hidden;
+    transition: max-height 180ms ease-out, opacity 180ms ease-out, padding-bottom 180ms ease-out;
+  }
+  .card.hovered .action-zone,
+  .card:hover .action-zone { max-height: 48px; opacity: 1; padding: 0 0 8px 0; }
+  .btn {
+    width: 44px; height: 44px;
+    border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border-radius: 50%;
+  }
+  .btn:focus-visible { outline: 2px solid var(--terracotta-600); outline-offset: 2px; }
+  .btn .chip {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: background-color .12s;
+  }
+  .btn-cooked .chip { background: var(--sage-50); color: var(--sage-600); }
+  .btn-cooked:hover .chip { background: var(--sage-100); }
+  .btn-delete .chip { background: var(--terracotta-50); color: var(--terracotta-600); }
+  .btn-delete:hover .chip { background: var(--terracotta-100); }
+
+  /* Food-item card — OPTION A: vertical stack */
+  .card-fooditem-a .body {
+    padding: 8px 8px;
+    min-height: 52px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+  }
+  .card-fooditem-a .icon {
+    font-size: 22px;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .card-fooditem-a .name {
+    font-size: 13px; font-weight: 500; line-height: 1.2;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-fooditem-a.cooked .name { text-decoration: line-through; color: var(--sage-600); }
+  .card-fooditem-a .mini-row {
+    margin-top: 4px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    font-size: 10px; color: var(--sage-600); font-weight: 600;
+  }
+  .card-fooditem-a .btn .chip { width: 24px; height: 24px; }
+  .card-fooditem-a .btn .chip svg { width: 12px; height: 12px; }
+  .card-fooditem-a .btn { width: 44px; height: 44px; }
+
+  /* smaller action SVGs */
+  .btn svg { width: 14px; height: 14px; }
+  .card-fooditem-a .btn svg { width: 12px; height: 12px; }
+
+  /* Explain box */
+  .explain {
+    margin-top: 24px;
+    padding: 14px 16px;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--card-bg);
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.6;
+  }
+  .explain strong { color: var(--text-primary); }
+  .explain .tag {
+    display: inline-block;
+    background: var(--warm-beige);
+    color: var(--text-primary);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    margin-right: 4px;
+  }
+  .hover-label {
+    font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="title">mealboard · meal planner · swimlane grid · April 2026</div>
+  <div class="option-label">Option A — Vertical stack (plan spec): icon 24px above name, hover expands action zone downward</div>
+
+  <div class="lane-header">
+    <div class="col-row-label">.</div>
+    <div>Mon 13</div><div>Tue 14</div><div>Wed 15</div><div>Thu 16</div><div>Fri 17</div>
+  </div>
+
+  <!-- Breakfast row: recipes only, identical across all options -->
+  <div class="lane-row breakfast">
+    <div class="row-label">Breakfast</div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Yogurt Parfait</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>5m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Oatmeal with Berries</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>8m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Eggs Benedict</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>20m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Avocado Toast</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>7m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="cell-empty">+</div></div>
+  </div>
+
+  <!-- LUNCH row: the food-item card variant — this is what differs across options -->
+  <div class="lane-row lunch">
+    <div class="row-label">Lunch</div>
+    <!-- Mon: short name food item -->
+    <div class="cell">
+      <div class="card card-fooditem-a">
+        <div class="body">
+          <div class="icon" aria-hidden="true">🥗</div>
+          <div class="name">Salad</div>
+        </div>
+        <div class="action-zone">
+          <button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button>
+          <button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button>
+        </div>
+      </div>
+    </div>
+    <!-- Tue: the BUG CARD — Sweet Potato — shown HOVERED -->
+    <div class="cell">
+      <div class="card card-fooditem-a hovered">
+        <div class="body">
+          <div class="icon" aria-hidden="true">🍠</div>
+          <div class="name">Sweet Potato</div>
+        </div>
+        <div class="action-zone">
+          <button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button>
+          <button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button>
+        </div>
+      </div>
+      <div class="hover-label">↑ hovered state</div>
+    </div>
+    <!-- Wed: long name, line-clamp-2 test -->
+    <div class="cell">
+      <div class="card card-fooditem-a">
+        <div class="body">
+          <div class="icon" aria-hidden="true">🌱</div>
+          <div class="name">Roasted Brussels Sprouts with Maple Glaze</div>
+        </div>
+        <div class="action-zone">
+          <button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button>
+          <button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button>
+        </div>
+      </div>
+    </div>
+    <!-- Thu: a RECIPE sibling for coherence check -->
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Chicken Caesar Wrap</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>15m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <!-- Fri: cooked-state food item -->
+    <div class="cell">
+      <div class="card card-fooditem-a cooked">
+        <div class="body">
+          <div class="icon" aria-hidden="true">🍎</div>
+          <div class="name">Apple</div>
+          <div class="mini-row">✓</div>
+        </div>
+        <div class="action-zone">
+          <button class="btn btn-cooked" aria-label="Mark not cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button>
+          <button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dinner row: recipes only, identical across all options -->
+  <div class="lane-row dinner">
+    <div class="row-label">Dinner</div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Spaghetti Bolognese</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>45m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Grilled Chicken</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>30m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Tacos</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>25m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="card card-recipe"><div class="body"><div class="name">Stir Fry</div><div class="meta"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/></svg>20m</div></div><div class="action-zone"><button class="btn btn-cooked" aria-label="Mark cooked"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span></button><button class="btn btn-delete" aria-label="Delete"><span class="chip"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></span></button></div></div></div>
+    <div class="cell"><div class="cell-empty">+</div></div>
+  </div>
+
+  <div class="explain">
+    <div><span class="tag">Option A · Vertical stack</span></div>
+    <div style="margin-top:6px;">
+      <strong>Structure:</strong> Icon (24px) sits centered on top, name centered below. Card body stays 52px when resting. Hover expands bottom by 48px to reveal the two circular action buttons.<br/>
+      <strong>Coherence:</strong> Mirrors the recipe variant's icon-less pattern — same outer chrome, same hover-expand gesture, same action-zone size. Food-item card reads as a shorter sibling of the recipe card rather than a different UI.<br/>
+      <strong>Long-name handling:</strong> `line-clamp-2` allows up to two lines (see "Roasted Brussels Sprouts..." in Wed Lunch); card grows but does not push the row taller.<br/>
+      <strong>Cooked state:</strong> Strikethrough name + sage-50 background + small ✓ mini-row under the name (see Fri Lunch "Apple").
+    </div>
+  </div>
+</div>
+</body>
+</html>

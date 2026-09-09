@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Read the review log.
+
+Usage:
+    review-read [--json]              latest entry per skill for the current branch's plan
+    review-read --plan NAME [--json]  same, for a named plan file
+    review-read --all [--json]        every entry, newest first, with the plan column
+
+Text output, one line per row:
+    plan mode:  skill|ts|status|k=v,k=v
+    --all:      plan|skill|ts|status|k=v,k=v
+JSON output: {"plan": NAME, "reviews": {skill: entry}} or {"entries": [entry, ...]}.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _lib  # noqa: E402
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(prog="review-read")
+    scope = ap.add_mutually_exclusive_group()
+    scope.add_argument("--plan", help="plan basename to filter on")
+    scope.add_argument("--all", action="store_true", help="every entry, newest first")
+    ap.add_argument("--json", action="store_true")
+    return ap.parse_args(argv)
+
+
+def fmt_extra(entry: dict) -> str:
+    extra = _lib.review_extra(entry)
+    return ",".join(f"{k}={v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)}" for k, v in sorted(extra.items()))
+
+
+def main() -> int:
+    args = parse_args(sys.argv[1:])
+    root = _lib.repo_root()
+    cfg = _lib.load_config(root)
+
+    if args.all:
+        entries = sorted(_lib.review_log_read(root, cfg), key=lambda e: e.get("ts", ""), reverse=True)
+        if args.json:
+            return _lib.print_json({"entries": entries})
+        if not entries:
+            print("(no reviews logged)")
+            return 0
+        for e in entries:
+            print(f"{e.get('plan') or '-'}|{e.get('skill', '')}|{e.get('ts', '')}|{e.get('status', '')}|{fmt_extra(e)}")
+        return 0
+
+    plan_name = args.plan
+    if not plan_name:
+        branch = _lib.current_branch(root)
+        plan = _lib.latest_plan(root, cfg, branch) if branch else None
+        if not plan:
+            if args.json:
+                return _lib.print_json({"plan": None, "reviews": {}})
+            print("(no plan on this branch)")
+            return 0
+        plan_name = plan.name
+
+    reviews = _lib.reviews_for_plan(root, cfg, plan_name)
+    if args.json:
+        return _lib.print_json({"plan": plan_name, "reviews": reviews})
+    if not reviews:
+        print(f"(no reviews for plan: {plan_name})")
+        return 0
+    for skill, e in sorted(reviews.items(), key=lambda kv: kv[1].get("ts", "")):
+        print(f"{skill}|{e.get('ts', '')}|{e.get('status', '')}|{fmt_extra(e)}")
+    return 0
+
+
+if __name__ == "__main__":
+    _lib.run_main(main)

@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "framework_version": "1.0.0",
+  "project_name": "my-app",
+  "project_shape": "web-split",
+  "default_branch": "main",
+  "vault_path": "my-app-notes",
+  "paths": {
+    "docs": ".agents/docs",
+    "plans": ".agents/plans",
+    "state": ".agents/state"
+  },
+  "layout": {
+    "backend_dir": "backend",
+    "frontend_dir": "frontend"
+  },
+  "doc_guard_mode": "pr-strict",
+  "doc_map": {
+    "rules": [
+      {
+        "paths": ["backend/app/models*.py", "backend/app/models/**", "backend/alembic/**", "backend/migrations/**"],
+        "doc": "BACKEND_STRUCTURE.md",
+        "section": "Data Model"
+      },
+      {
+        "paths": ["backend/app/routes/**", "backend/app/routers/**", "backend/app/api/**", "backend/app/main.py"],
+        "doc": "BACKEND_STRUCTURE.md",
+        "section": "API Endpoints"
+      },
+      {
+        "paths": ["backend/app/schemas*.py", "backend/app/schemas/**"],
+        "doc": "BACKEND_STRUCTURE.md",
+        "section": "Data Validation"
+      },
+      {
+        "paths": ["backend/app/services/**", "backend/app/tasks*.py", "backend/app/celery*.py", "backend/app/storage/**", "backend/app/auth/**"],
+        "doc": "BACKEND_STRUCTURE.md",
+        "section": "Code Organization"
+      },
+      {
+        "paths": ["frontend/src/pages/**", "frontend/src/App.*", "frontend/src/router*", "frontend/src/routes/**"],
+        "doc": "APP_FLOW.md",
+        "section": "Screen Inventory"
+      },
+      {
+        "paths": ["frontend/src/components/**", "frontend/src/features/**", "frontend/src/hooks/**", "frontend/src/lib/**"],
+        "doc": "FRONTEND_STRUCTURE.md",
+        "section": "Directory Overview"
+      },
+      {
+        "paths": ["frontend/src/index.css", "frontend/src/styles/**", "frontend/tailwind.config.*", "frontend/src/constants/*olors*"],
+        "doc": "FRONTEND_GUIDELINES.md",
+        "section": "Color Palette"
+      },
+      {
+        "paths": ["backend/pyproject.toml", "backend/requirements*.txt", "frontend/package.json"],
+        "doc": "TECH_STACK.md",
+        "section": "Dependencies"
+      },
+      {
+        "paths": ["backend/docker-compose*.yml", "docker-compose*.yml", "backend/Dockerfile", "frontend/Dockerfile", "backend/.env.example", ".env.example"],
+        "doc": "development-commands.md",
+        "section": "Full Stack"
+      },
+      {
+        "paths": [".github/workflows/**"],
+        "doc": "TECH_STACK.md",
+        "section": "CI/CD Pipeline"
+      }
+    ],
+    "exempt": [
+      "**/tests/**",
+      "**/test_*.py",
+      "**/*.test.*",
+      "**/*.spec.*",
+      "**/*.lock",
+      "**/uv.lock",
+      "**/package-lock.json",
+      ".agents/**",
+      ".claude/**",
+      ".grok/**",
+      ".cursor/**",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "README.md",
+      ".gitignore",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.svg"
+    ]
+  },
+  "design_watched_files": [
+    ".agents/docs/FRONTEND_GUIDELINES.md",
+    "frontend/src/index.css"
+  ],
+  "modules": {
+    "learning": false,
+    "design_sync": false,
+    "learning_summaries": false
+  }
+}

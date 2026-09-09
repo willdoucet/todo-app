@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mealboard — Playful Swimlanes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FFF9F2;
+    --beige: #F8F0E5;
+    --sand: #EDE3D5;
+    --card-bg: #FFFFFF;
+    --card-border: #EDE5DC;
+    --terracotta-50: #FFF5F0;
+    --terracotta-100: #FCE4DE;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --peach-100: #FFE8DF;
+    --sage-50: #F4F7F4;
+    --sage-100: #E5EDE6;
+    --sage-500: #6B9A70;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #A09788;
+
+    --amber: #F5A623;
+    --amber-light: #FFF8E7;
+    --amber-border: #FDDF8E;
+    --amber-text: #7A5100;
+    --sage-slot: #6B9A70;
+    --sage-light: #EDF7EE;
+    --sage-border: #B8D8BB;
+    --sage-text: #2D5E32;
+    --peach-slot: #E8927C;
+    --peach-light: #FFF0EC;
+    --peach-border: #FCC9B8;
+    --peach-text: #7A3020;
+    --lavender: #A78BDB;
+    --lavender-light: #F6F0FF;
+    --lavender-border: #D4C9EC;
+    --lavender-text: #4A3080;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--cream);
+    background-image:
+      radial-gradient(circle at 15% 85%, rgba(245,166,35,0.07) 0%, transparent 45%),
+      radial-gradient(circle at 85% 15%, rgba(232,146,124,0.07) 0%, transparent 45%),
+      radial-gradient(circle at 50% 50%, rgba(167,139,219,0.05) 0%, transparent 55%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  .page-wrapper {
+    margin-left: 304px;
+    padding: 24px 28px;
+    min-height: 100vh;
+  }
+
+  /* ─── APP SIDEBAR ─── */
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 80px;
+    background: var(--sand);
+    border-right: 1px solid var(--card-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 0;
+    gap: 6px;
+    z-index: 30;
+  }
+
+  .sb-btn {
+    width: 56px;
+    height: 56px;
+    border: none;
+    background: transparent;
+    border-radius: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .sb-btn svg {
+    width: 24px;
+    height: 24px;
+    stroke-width: 1.8;
+  }
+
+  .sb-btn:hover {
+    color: var(--terracotta-600);
+    background: rgba(255,232,223,0.4);
+  }
+
+  .sb-btn.active {
+    background: var(--peach-100);
+    color: var(--terracotta-600);
+    box-shadow: 0 2px 8px rgba(217,116,82,0.15);
+  }
+
+  .sb-btn .sb-tooltip {
+    position: absolute;
+    left: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--text-primary);
+    color: var(--cream);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 8px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 40;
+  }
+
+  .sb-btn:hover .sb-tooltip {
+    opacity: 1;
+  }
+
+  .sb-spacer { flex: 1; }
+
+  .sb-btn.moon {
+    color: var(--text-muted);
+  }
+  .sb-btn.moon:hover {
+    color: var(--text-secondary);
+    background: rgba(0,0,0,0.04);
+  }
+
+  /* ─── MEALBOARD NAV PANEL ─── */
+  .mb-nav {
+    position: fixed;
+    left: 80px;
+    top: 0;
+    bottom: 0;
+    width: 224px;
+    background: rgba(237,227,213,0.5);
+    border-right: 1px solid var(--card-border);
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .mb-nav-header {
+    padding: 28px 24px 20px;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .mb-nav-header h2 {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  .mb-nav-items {
+    padding: 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mb-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin: 0 12px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    text-align: left;
+    width: calc(100% - 24px);
+  }
+
+  .mb-item svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    stroke-width: 1.8;
+  }
+
+  .mb-item:hover {
+    background: var(--beige);
+    color: var(--terracotta-600);
+  }
+
+  .mb-item.active {
+    background: var(--peach-100);
+    color: var(--terracotta-600);
+    box-shadow: 0 1px 4px rgba(217,116,82,0.1);
+  }
+
+  .mb-item.disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  .mb-item.disabled:hover {
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  .mb-soon {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    background: var(--sand);
+    color: var(--text-muted);
+    padding: 2px 7px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+  }
+
+  /* ─── HEADER ─── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .header-left h1 {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C, var(--amber));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header-left .subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .week-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .week-nav button {
+    width: 38px;
+    height: 38px;
+    border: none;
+    background: var(--card-bg);
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 16px;
+    transition: all 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .week-nav button:hover {
+    background: var(--terracotta-50);
+    color: var(--terracotta-500);
+    transform: scale(1.06);
+  }
+
+  .week-nav .label {
+    font-size: 15px;
+    font-weight: 700;
+    min-width: 170px;
+    text-align: center;
+  }
+
+  /* ─── FAMILY STRIP ─── */
+  .family-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+    padding: 10px 16px;
+    background: var(--card-bg);
+    border: 1.5px solid var(--card-border);
+    border-radius: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  }
+
+  .family-strip .fs-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+
+  .family-member {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px 4px 4px;
+    background: var(--beige);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+
+  .family-member:hover {
+    background: var(--peach-100);
+    color: var(--terracotta-600);
+  }
+
+  .fm-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    color: white;
+  }
+
+  .fm-avatar.dad  { background: linear-gradient(135deg, #5B8DEF, #4A7BE0); }
+  .fm-avatar.mom  { background: linear-gradient(135deg, #E06B9F, #D15A8E); }
+  .fm-avatar.kid1 { background: linear-gradient(135deg, #F5A623, #E89514); }
+  .fm-avatar.kid2 { background: linear-gradient(135deg, #7EC8A0, #6DB990); }
+  .fm-avatar.baby { background: linear-gradient(135deg, #C4A0E8, #B490DA); }
+
+  /* ─── DAY HEADER ROW ─── */
+  .day-headers {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 1fr);
+    gap: 0;
+    margin-bottom: 6px;
+  }
+
+  .day-headers .spacer {}
+
+  .dh-cell {
+    text-align: center;
+    padding: 8px 4px 6px;
+  }
+
+  .dh-cell .day-name {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+  }
+
+  .dh-cell .day-num {
+    font-size: 22px;
+    font-weight: 800;
+    margin-top: 2px;
+    line-height: 1;
+  }
+
+  .dh-cell.is-today .day-name {
+    color: var(--terracotta-500);
+  }
+
+  .dh-cell.is-today .day-num {
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C);
+    color: white;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 19px;
+    box-shadow: 0 3px 10px rgba(217,116,82,0.3);
+  }
+
+  /* ─── SWIMLANE GRID ─── */
+  .swimlane-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .swimlane {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 1fr);
+    gap: 0;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1.5px solid transparent;
+    min-height: 96px;
+    transition: box-shadow 0.2s;
+  }
+
+  .swimlane:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  }
+
+  .swimlane.breakfast {
+    background: linear-gradient(135deg, #FFF8E7, #FFF0CC);
+    border-color: var(--amber-border);
+  }
+  .swimlane.lunch {
+    background: linear-gradient(135deg, #EDF7EE, #DCEEDD);
+    border-color: var(--sage-border);
+  }
+  .swimlane.dinner {
+    background: linear-gradient(135deg, #FFF0EC, #FFE0D6);
+    border-color: var(--peach-border);
+  }
+  .swimlane.snack {
+    background: linear-gradient(135deg, #F6F0FF, #EDE3FF);
+    border-color: var(--lavender-border);
+  }
+
+  /* ─── LANE LABEL (left rail) ─── */
+  .lane-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 14px 10px;
+    border-right: 1px solid rgba(0,0,0,0.05);
+  }
+
+  .lane-label .lane-emoji {
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  .lane-label .lane-text {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .lane-label.breakfast .lane-text { color: var(--amber-text); }
+  .lane-label.lunch    .lane-text { color: var(--sage-text); }
+  .lane-label.dinner   .lane-text { color: var(--peach-text); }
+  .lane-label.snack    .lane-text { color: var(--lavender-text); }
+
+  /* ─── LANE CELL ─── */
+  .lane-cell {
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    position: relative;
+  }
+
+  .lane-cell:last-child { border-right: none; }
+
+  .lane-cell.is-today {
+    background: rgba(255,255,255,0.45);
+  }
+
+  /* ─── SWIM CARD (recipe) ─── */
+  .swim-card {
+    background: white;
+    border: 1.5px solid rgba(255,255,255,0.8);
+    border-radius: 12px;
+    padding: 8px 9px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    transition: all 0.2s;
+    cursor: default;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .swim-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+  }
+
+  .swimlane.breakfast .swim-card::before { background: linear-gradient(to bottom, var(--amber), #F5C164); }
+  .swimlane.lunch    .swim-card::before { background: linear-gradient(to bottom, var(--sage-slot), #8FC497); }
+  .swimlane.dinner   .swim-card::before { background: linear-gradient(to bottom, var(--peach-slot), #F0B4A2); }
+  .swimlane.snack    .swim-card::before { background: linear-gradient(to bottom, var(--lavender), #C4B0ED); }
+
+  .swim-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 14px rgba(0,0,0,0.08);
+  }
+
+  .swim-card .card-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    padding-left: 4px;
+  }
+
+  .swim-card .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 3px;
+    padding-left: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .swim-card .fav-pill {
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C);
+    color: white;
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .swim-card .card-notes {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding-left: 4px;
+    margin-top: 2px;
+  }
+
+  /* Cooked */
+  .swim-card.cooked {
+    background: var(--sage-50);
+    border-color: var(--sage-100);
+  }
+
+  .swim-card.cooked .card-name {
+    text-decoration: line-through;
+    color: var(--sage-500);
+  }
+
+  .cooked-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 18px;
+    height: 18px;
+    background: linear-gradient(135deg, var(--sage-500), #5CB068);
+    border-radius: 50%;
+    color: white;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(107,154,112,0.3);
+  }
+
+  /* ─── AVATARS ─── */
+  .play-avatars {
+    display: flex;
+    margin-top: 4px;
+    padding-left: 4px;
+  }
+
+  .play-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: 800;
+    color: white;
+    margin-left: -4px;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .play-avatar:first-child { margin-left: 0; }
+  .play-avatar.dad  { background: linear-gradient(135deg, #5B8DEF, #4A7BE0); }
+  .play-avatar.mom  { background: linear-gradient(135deg, #E06B9F, #D15A8E); }
+  .play-avatar.kid1 { background: linear-gradient(135deg, #F5A623, #E89514); }
+  .play-avatar.kid2 { background: linear-gradient(135deg, #7EC8A0, #6DB990); }
+  .play-avatar.baby { background: linear-gradient(135deg, #C4A0E8, #B490DA); }
+
+  /* "Everyone" badge */
+  .all-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    background: var(--beige);
+    border-radius: 6px;
+    margin-top: 4px;
+    margin-left: 4px;
+  }
+
+  /* ─── FOOD ITEM (simple) ─── */
+  .swim-food {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px;
+    background: rgba(255,255,255,0.65);
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+
+  .swim-food:hover {
+    background: rgba(255,255,255,0.9);
+    transform: scale(1.02);
+  }
+
+  .swim-food .emoji { font-size: 14px; }
+
+  .swim-food .play-avatars {
+    margin-top: 0;
+    margin-left: auto;
+    padding-left: 0;
+  }
+
+  /* ─── INLINE ADD (inside filled cells) ─── */
+  .cell-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    margin-top: 2px;
+    padding: 3px 0;
+    border: 1.5px dashed rgba(0,0,0,0.06);
+    border-radius: 8px;
+    color: rgba(0,0,0,0.12);
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    opacity: 0;
+  }
+
+  .lane-cell:hover .cell-add {
+    opacity: 1;
+  }
+
+  .cell-add:hover {
+    border-color: var(--terracotta-500);
+    color: var(--terracotta-500);
+    background: rgba(255,255,255,0.55);
+    transform: scale(1.04);
+  }
+
+  /* ─── EMPTY CELL ─── */
+  .lane-empty {
+    width: 100%;
+    height: 100%;
+    min-height: 44px;
+    border: 2px dashed rgba(0,0,0,0.07);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0,0,0,0.14);
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .lane-empty:hover {
+    border-color: var(--terracotta-500);
+    color: var(--terracotta-500);
+    background: rgba(255,255,255,0.5);
+    transform: scale(1.03);
+  }
+
+  /* ─── PROGRESS ─── */
+  .progress-section {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+  }
+
+  .prog-card {
+    flex: 1;
+    border-radius: 18px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .prog-card.breakfast { background: linear-gradient(135deg, #FFF8E7, #FFF0CC); border: 1.5px solid var(--amber-border); }
+  .prog-card.lunch    { background: linear-gradient(135deg, #EDF7EE, #DCEEDD); border: 1.5px solid var(--sage-border); }
+  .prog-card.dinner   { background: linear-gradient(135deg, #FFF0EC, #FFE0D6); border: 1.5px solid var(--peach-border); }
+  .prog-card.snack    { background: linear-gradient(135deg, #F6F0FF, #EDE3FF); border: 1.5px solid var(--lavender-border); }
+
+  .prog-card .pg-emoji {
+    font-size: 22px;
+    margin-bottom: 6px;
+  }
+
+  .prog-card .pg-count {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .prog-card .pg-count small {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .prog-card .pg-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-top: 3px;
+  }
+
+  .prog-card .pg-bar {
+    height: 7px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .prog-card .pg-fill {
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  .prog-card.breakfast .pg-fill { background: var(--amber); }
+  .prog-card.lunch    .pg-fill { background: var(--sage-slot); }
+  .prog-card.dinner   .pg-fill { background: var(--peach-slot); }
+  .prog-card.snack    .pg-fill { background: var(--lavender); }
+
+  .prog-card .pg-msg {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    font-weight: 600;
+  }
+
+  /* ─── TOP BAR (family + shopping side by side) ─── */
+  .top-bar {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .top-bar .family-strip {
+    flex: 1;
+    margin-bottom: 0;
+  }
+
+  .shopping-card {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    background: var(--card-bg);
+    border: 1.5px solid var(--card-border);
+    border-radius: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .shopping-card:hover {
+    border-color: var(--terracotta-500);
+    color: var(--terracotta-600);
+    box-shadow: 0 3px 12px rgba(217,116,82,0.1);
+  }
+
+  .shopping-card span {
+    color: var(--terracotta-500);
+    font-weight: 700;
+  }
+
+  /* ─── BADGE ─── */
+  .concept-badge {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px 18px;
+    border-radius: 14px;
+    z-index: 100;
+    box-shadow: 0 4px 16px rgba(217,116,82,0.3);
+  }
+
+  /* ─── STAGGER ANIMATION ─── */
+  @keyframes swim-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .swimlane {
+    animation: swim-in 0.45s ease-out both;
+  }
+  .swimlane:nth-child(1) { animation-delay: 0.05s; }
+  .swimlane:nth-child(2) { animation-delay: 0.12s; }
+  .swimlane:nth-child(3) { animation-delay: 0.19s; }
+  .swimlane:nth-child(4) { animation-delay: 0.26s; }
+
+  @keyframes prog-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .prog-card {
+    animation: prog-in 0.4s ease-out both;
+  }
+  .prog-card:nth-child(1) { animation-delay: 0.35s; }
+  .prog-card:nth-child(2) { animation-delay: 0.42s; }
+  .prog-card:nth-child(3) { animation-delay: 0.49s; }
+  .prog-card:nth-child(4) { animation-delay: 0.56s; }
+</style>
+</head>
+<body>
+
+<!-- ─── APP SIDEBAR ─── -->
+<nav class="app-sidebar">
+  <button class="sb-btn">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>
+    <span class="sb-tooltip">Dashboard</span>
+  </button>
+  <button class="sb-btn">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+    <span class="sb-tooltip">Lists</span>
+  </button>
+  <button class="sb-btn">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    <span class="sb-tooltip">Responsibilities</span>
+  </button>
+  <button class="sb-btn active">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+    <span class="sb-tooltip">Mealboard</span>
+  </button>
+  <button class="sb-btn">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    <span class="sb-tooltip">Settings</span>
+  </button>
+  <div class="sb-spacer"></div>
+  <button class="sb-btn moon">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+    <span class="sb-tooltip">Dark mode</span>
+  </button>
+</nav>
+
+<!-- ─── MEALBOARD NAV PANEL ─── -->
+<nav class="mb-nav">
+  <div class="mb-nav-header">
+    <h2>Mealboard</h2>
+  </div>
+  <div class="mb-nav-items">
+    <button class="mb-item active">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      Meal Planner
+    </button>
+    <button class="mb-item">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+      Recipes
+    </button>
+    <button class="mb-item">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+      Shopping
+    </button>
+    <button class="mb-item disabled">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      Recipe Finder
+      <span class="mb-soon">Soon</span>
+    </button>
+  </div>
+</nav>
+
+<div class="page-wrapper">
+
+  <!-- ─── HEADER ─── -->
+  <div class="header">
+    <div class="header-left">
+      <h1>What's Cooking? 🍳</h1>
+      <div class="subtitle">Wednesday, April 2</div>
+    </div>
+    <div class="week-nav">
+      <button>&larr;</button>
+      <span class="label">Mar 31 &mdash; Apr 6</span>
+      <button>&rarr;</button>
+    </div>
+  </div>
+
+  <!-- ─── FAMILY STRIP + SHOPPING ─── -->
+  <div class="top-bar">
+    <div class="family-strip">
+      <span class="fs-label">Family</span>
+      <div class="family-member"><div class="fm-avatar dad">D</div> Dad</div>
+      <div class="family-member"><div class="fm-avatar mom">M</div> Mom</div>
+      <div class="family-member"><div class="fm-avatar kid1">E</div> Emma</div>
+      <div class="family-member"><div class="fm-avatar kid2">L</div> Liam</div>
+      <div class="family-member"><div class="fm-avatar baby">B</div> Baby</div>
+    </div>
+    <div class="shopping-card">
+      🛒 <span>12</span> items on shopping list
+    </div>
+  </div>
+
+  <!-- ─── DAY HEADERS ─── -->
+  <div class="day-headers">
+    <div class="spacer"></div>
+    <div class="dh-cell"><div class="day-name">Mon</div><div class="day-num">31</div></div>
+    <div class="dh-cell"><div class="day-name">Tue</div><div class="day-num">1</div></div>
+    <div class="dh-cell is-today"><div class="day-name">Wed</div><div class="day-num">2</div></div>
+    <div class="dh-cell"><div class="day-name">Thu</div><div class="day-num">3</div></div>
+    <div class="dh-cell"><div class="day-name">Fri</div><div class="day-num">4</div></div>
+    <div class="dh-cell"><div class="day-name">Sat</div><div class="day-num">5</div></div>
+    <div class="dh-cell"><div class="day-name">Sun</div><div class="day-num">6</div></div>
+  </div>
+
+  <!-- ─── SWIMLANES ─── -->
+  <div class="swimlane-grid">
+
+    <!-- ☀ BREAKFAST -->
+    <div class="swimlane breakfast">
+      <div class="lane-label breakfast">
+        <span class="lane-emoji">☀</span>
+        <span class="lane-text">Breakfast</span>
+      </div>
+      <!-- Mon -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Oatmeal with Berries</div>
+          <div class="card-meta">🕐 15m</div>
+          <div class="all-badge">👨‍👩‍👧‍👦 Everyone</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Tue -->
+      <div class="lane-cell">
+        <div class="swim-card cooked">
+          <div class="card-name">Scrambled Eggs</div>
+          <div class="card-meta">🕐 10m</div>
+          <div class="cooked-badge">✓</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Wed -->
+      <div class="lane-cell is-today">
+        <div class="swim-card">
+          <div class="card-name">Avocado Toast</div>
+          <div class="card-meta">🕐 10m</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Thu -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Pancakes</div>
+          <div class="card-meta">🕐 20m</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Fri -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+      <!-- Sat -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">French Toast</div>
+          <div class="card-meta">🕐 20m</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Sun -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+    </div>
+
+    <!-- 🥪 LUNCH -->
+    <div class="swimlane lunch">
+      <div class="lane-label lunch">
+        <span class="lane-emoji">🥪</span>
+        <span class="lane-text">Lunch</span>
+      </div>
+      <!-- Mon -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Turkey Wrap</div>
+          <div class="play-avatars"><div class="play-avatar dad">D</div></div>
+        </div>
+        <div class="swim-card">
+          <div class="card-name">PB&amp;J Sandwich</div>
+          <div class="play-avatars">
+            <div class="play-avatar kid1">E</div>
+            <div class="play-avatar kid2">L</div>
+          </div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Tue -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+      <!-- Wed -->
+      <div class="lane-cell is-today">
+        <div class="swim-card">
+          <div class="card-name">Chicken Caesar</div>
+          <div class="play-avatars">
+            <div class="play-avatar dad">D</div>
+            <div class="play-avatar mom">M</div>
+          </div>
+        </div>
+        <div class="swim-card">
+          <div class="card-name">Cheese Quesadilla</div>
+          <div class="play-avatars">
+            <div class="play-avatar kid1">E</div>
+            <div class="play-avatar kid2">L</div>
+          </div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Thu -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+      <!-- Fri -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Soup &amp; Sandwich</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Sat -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+      <!-- Sun -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+    </div>
+
+    <!-- 🍽 DINNER -->
+    <div class="swimlane dinner">
+      <div class="lane-label dinner">
+        <span class="lane-emoji">🍽</span>
+        <span class="lane-text">Dinner</span>
+      </div>
+      <!-- Mon -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Pasta Bolognese</div>
+          <div class="card-meta">🕐 45m <span class="fav-pill">★ FAV</span></div>
+          <div class="card-notes">"Extra garlic tonight"</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Tue -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Homemade Pizza</div>
+          <div class="card-meta">🕐 35m <span class="fav-pill">★ FAV</span></div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Wed -->
+      <div class="lane-cell is-today">
+        <div class="swim-card">
+          <div class="card-name">Grilled Salmon</div>
+          <div class="card-meta">🕐 25m</div>
+          <div class="all-badge">👨‍👩‍👧‍👦 Everyone</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Thu -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Chicken Stir Fry</div>
+          <div class="card-meta">🕐 30m</div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Fri -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Fish Tacos</div>
+          <div class="card-meta">🕐 25m <span class="fav-pill">★ FAV</span></div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Sat -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+      <!-- Sun -->
+      <div class="lane-cell">
+        <div class="swim-card">
+          <div class="card-name">Roast Chicken</div>
+          <div class="card-meta">🕐 90m <span class="fav-pill">★ FAV</span></div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+    </div>
+
+    <!-- 🍌 SNACK -->
+    <div class="swimlane snack">
+      <div class="lane-label snack">
+        <span class="lane-emoji">🍌</span>
+        <span class="lane-text">Snack</span>
+      </div>
+      <!-- Mon -->
+      <div class="lane-cell">
+        <div class="swim-food">
+          <span class="emoji">🍌</span> Banana
+          <div class="play-avatars"><div class="play-avatar baby">B</div></div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Tue -->
+      <div class="lane-cell">
+        <div class="swim-food">
+          <span class="emoji">🥛</span> Yogurt
+          <div class="play-avatars"><div class="play-avatar baby">B</div></div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Wed -->
+      <div class="lane-cell is-today">
+        <div class="swim-food">
+          <span class="emoji">🫐</span> Blueberries
+          <div class="play-avatars"><div class="play-avatar baby">B</div></div>
+        </div>
+        <div class="swim-food">
+          <span class="emoji">🍪</span> Rice Crackers
+          <div class="play-avatars"><div class="play-avatar baby">B</div></div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Thu -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+      <!-- Fri -->
+      <div class="lane-cell">
+        <div class="swim-food">
+          <span class="emoji">🍎</span> Apple Slices
+          <div class="play-avatars"><div class="play-avatar baby">B</div></div>
+        </div>
+        <div class="cell-add">+</div>
+      </div>
+      <!-- Sat -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+      <!-- Sun -->
+      <div class="lane-cell"><div class="lane-empty">+</div></div>
+    </div>
+
+  </div>
+
+  <!-- ─── PROGRESS CARDS ─── -->
+  <div class="progress-section">
+    <div class="prog-card breakfast">
+      <div class="pg-emoji">☀</div>
+      <div class="pg-count">5<small>/7</small></div>
+      <div class="pg-label">Breakfasts</div>
+      <div class="pg-bar"><div class="pg-fill" style="width:71%"></div></div>
+      <div class="pg-msg">2 more to go!</div>
+    </div>
+    <div class="prog-card lunch">
+      <div class="pg-emoji">🥪</div>
+      <div class="pg-count">3<small>/7</small></div>
+      <div class="pg-label">Lunches</div>
+      <div class="pg-bar"><div class="pg-fill" style="width:43%"></div></div>
+      <div class="pg-msg">Keep planning!</div>
+    </div>
+    <div class="prog-card dinner">
+      <div class="pg-emoji">🍽</div>
+      <div class="pg-count">6<small>/7</small></div>
+      <div class="pg-label">Dinners</div>
+      <div class="pg-bar"><div class="pg-fill" style="width:86%"></div></div>
+      <div class="pg-msg">Almost there! 🎉</div>
+    </div>
+    <div class="prog-card snack">
+      <div class="pg-emoji">🍌</div>
+      <div class="pg-count">4<small>/7</small></div>
+      <div class="pg-label">Snacks</div>
+      <div class="pg-bar"><div class="pg-fill" style="width:57%"></div></div>
+      <div class="pg-msg">3 snacks to plan</div>
+    </div>
+  </div>
+
+
+</div>
+
+<div class="concept-badge">Concept 5 — Playful Swimlanes</div>
+
+</body>
+</html>

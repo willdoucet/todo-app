@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Report whether the watched design files changed since the design system was last marked synced.
+
+Usage:
+    design-sync-check
+
+Reads <state>/design-system-synced.json and compares synced_design_sha with the latest
+commit touching any file in config `design_watched_files`.
+
+Exit codes: 0 clean, 1 drift, 2 marker missing or malformed.
+When config modules.design_sync is false, prints "design-sync: module disabled" and exits 0.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _design_sync as ds  # noqa: E402
+import _lib  # noqa: E402
+
+
+def main() -> int:
+    root = _lib.repo_root()
+    cfg = _lib.load_config(root)
+    if not ds.enabled(cfg):
+        print(ds.DISABLED_MESSAGE)
+        return 0
+
+    marker = ds.marker_path(root, cfg)
+    rel_marker = _lib.repo_relpath(root, marker)
+    mark_cmd = _lib.repo_relpath(root, Path(__file__).resolve().parent / "design-sync-mark")
+    if not marker.is_file():
+        print(f"design-sync-check: marker missing at {rel_marker} (run {mark_cmd} to bootstrap)")
+        return 2
+    try:
+        data = _lib.read_json(marker)
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"design-sync-check: marker is unreadable ({exc})", file=sys.stderr)
+        return 2
+    synced_sha = data.get("synced_design_sha") if isinstance(data, dict) else None
+    if not synced_sha:
+        print("design-sync-check: marker is malformed (no synced_design_sha)", file=sys.stderr)
+        return 2
+    synced_at = data.get("synced_at", "?")
+
+    files = ds.watched_files(cfg)
+    current_sha = ds.design_sha(root, files)
+    if synced_sha == current_sha:
+        print(f"design-sync-check: CLEAN (last synced {synced_at}, design files unchanged since {synced_sha})")
+        return 0
+
+    drift = _lib.git(root, "rev-list", "--count", f"{synced_sha}..HEAD", "--", *files, check=False) or "?"
+    org_url = data.get("claude_design_org_url") or "the design system"
+    print(f"design-sync-check: DRIFT — {drift} commit(s) have touched the design system since last sync ({synced_at}).")
+    print(f"  synced_design_sha:  {synced_sha}")
+    print(f"  current_design_sha: {current_sha}")
+    print(f"  Action: re-sync {org_url} from the watched files, then run {mark_cmd}")
+    return 1
+
+
+if __name__ == "__main__":
+    _lib.run_main(main)
