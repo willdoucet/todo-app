@@ -1,0 +1,23 @@
+name: doc-guard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: doc-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doc-guard:
+    name: Changed code has its owning doc staged
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run doc-guard against the pull request range
+        run: python3 .agents/bin/doc-guard --range "origin/${{ github.base_ref }}..HEAD"

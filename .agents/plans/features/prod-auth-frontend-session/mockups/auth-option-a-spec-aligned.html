@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>/auth — Option A (Mealy brand-prominent inside card, subtle border)</title>
+<style>
+  :root {
+    --warm-cream:#FAF7F2; --warm-beige:#F5F0E8; --warm-sand:#EBE5DA;
+    --card-bg:#FFFDFB; --card-border:#E8E2D9;
+    --terracotta-50:#FEF3F0; --terracotta-100:#FCE4DE; --terracotta-200:#FAC9BD;
+    --terracotta-300:#F5A893; --terracotta-500:#D97452; --terracotta-600:#C4613F; --terracotta-700:#A34E32;
+    --text-primary:#3D3833; --text-secondary:#6B645A; --text-muted:#9A9287;
+  }
+  html.dark {
+    --warm-cream:#111827; --card-bg:#1F2937; --card-border:#374151;
+    --terracotta-50:#7c2d12; --terracotta-100:#9a3412; --terracotta-200:#c2410c;
+    --terracotta-500:#3B82F6; --terracotta-600:#2563EB; --terracotta-700:#fcd5c4;
+    --text-primary:#F3F4F6; --text-secondary:#9CA3AF; --text-muted:#6B7280;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; background:var(--warm-cream);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+    color:var(--text-primary);
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:32px 16px; transition:background .2s;
+  }
+  @media (min-width:640px){ body{align-items:center} }
+  .card{
+    width:100%; max-width:448px; background:var(--card-bg);
+    border:1px solid var(--card-border); border-radius:12px;
+    padding:24px; transition:background .2s,border-color .2s;
+  }
+  @media (min-width:640px){ .card{padding:32px} }
+  .brand{
+    font-size:1.875rem; font-weight:700; letter-spacing:-0.02em;
+    color:var(--text-primary); display:flex; align-items:center; gap:10px;
+    line-height:1;
+  }
+  .brand-dot{width:12px; height:12px; border-radius:9999px; background:var(--terracotta-500)}
+  .headline{
+    margin:24px 0 4px; font-size:1.125rem; font-weight:500; color:var(--text-primary); line-height:1.3;
+  }
+  .subhead{
+    margin:0; font-size:.875rem; color:var(--text-secondary);
+  }
+  .info-banner{
+    margin-top:20px; background:var(--terracotta-50); border:1px solid var(--terracotta-100);
+    border-radius:8px; padding:8px 12px; font-size:.875rem; color:var(--text-secondary);
+  }
+  .error-banner{
+    margin-top:20px; background:var(--terracotta-100); border:1px solid var(--terracotta-200);
+    border-radius:8px; padding:8px 12px; font-size:.875rem; color:var(--terracotta-700);
+    display:flex; gap:8px; align-items:flex-start;
+  }
+  .error-banner svg{flex-shrink:0; margin-top:2px}
+  form{margin-top:24px; display:flex; flex-direction:column; gap:16px}
+  label{display:block; font-size:.875rem; font-weight:500; color:var(--text-primary); margin-bottom:4px}
+  .input-wrap{position:relative}
+  input{
+    width:100%; padding:8px 12px; border:1px solid var(--card-border); border-radius:8px;
+    background:var(--card-bg); color:var(--text-primary); font-size:1rem;
+    font-family:inherit; transition:border-color .15s, box-shadow .15s;
+  }
+  input::placeholder{color:var(--text-muted)}
+  input:focus{outline:none; border-color:var(--terracotta-500); box-shadow:0 0 0 2px var(--terracotta-200)}
+  .input-with-toggle input{padding-right:40px}
+  .toggle-eye{
+    position:absolute; right:8px; top:50%; transform:translateY(-50%);
+    background:transparent; border:none; padding:6px; cursor:pointer;
+    color:var(--text-muted); border-radius:6px;
+  }
+  .toggle-eye:hover{color:var(--text-secondary)}
+  .helper{margin-top:4px; font-size:.75rem; color:var(--text-muted)}
+  .submit{
+    margin-top:8px; width:100%; padding:10px 16px; background:var(--terracotta-500);
+    color:#fff; border:none; border-radius:8px; font-size:.95rem; font-weight:500;
+    cursor:pointer; transition:background-color .2s;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .submit:hover{background:var(--terracotta-600)}
+  .submit:disabled{background:var(--terracotta-300); cursor:not-allowed}
+  .spinner{
+    width:16px; height:16px; border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:9999px; animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .toolbar{
+    position:fixed; bottom:16px; right:16px; background:var(--card-bg);
+    border:1px solid var(--card-border); border-radius:12px; padding:8px;
+    display:flex; gap:6px; flex-wrap:wrap; max-width:min(100%,400px);
+    box-shadow:0 4px 12px rgba(0,0,0,.08); font-size:.75rem;
+  }
+  .toolbar button{
+    background:var(--warm-sand); color:var(--text-secondary); border:none;
+    padding:6px 10px; border-radius:6px; font-size:.75rem; cursor:pointer;
+    font-family:inherit;
+  }
+  .toolbar button.active{background:var(--terracotta-500); color:#fff}
+  .toolbar-label{font-size:.7rem; color:var(--text-muted); padding:6px 4px; align-self:center}
+</style>
+</head>
+<body>
+
+<div class="card" role="main" aria-label="Auth portal">
+  <div class="brand"><span class="brand-dot"></span><span>Mealy</span></div>
+
+  <h1 class="headline" data-headline>Welcome back</h1>
+  <p class="subhead" data-subhead>Sign in to your household</p>
+
+  <div class="info-banner" data-info hidden>Your session ended. Sign in to pick up where you left off.</div>
+
+  <div class="error-banner" data-error hidden role="alert" aria-live="polite">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <span data-error-text>Invalid email or password</span>
+  </div>
+
+  <form onsubmit="event.preventDefault()">
+    <div>
+      <label for="email">Email</label>
+      <div class="input-wrap"><input id="email" type="email" autocomplete="email" autofocus placeholder="you@example.com" required></div>
+    </div>
+    <div>
+      <label for="password">Password</label>
+      <div class="input-wrap input-with-toggle">
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button type="button" class="toggle-eye" aria-label="Show password" onclick="togglePw('password',this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+    <div data-setup hidden>
+      <label for="confirm">Confirm password</label>
+      <div class="input-wrap input-with-toggle">
+        <input id="confirm" type="password" autocomplete="new-password">
+        <button type="button" class="toggle-eye" aria-label="Show password" onclick="togglePw('confirm',this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+    <div data-setup hidden>
+      <label for="key">Household access key</label>
+      <div class="input-wrap input-with-toggle">
+        <input id="key" type="password" autocomplete="off" aria-describedby="key-help">
+        <button type="button" class="toggle-eye" aria-label="Show access key" onclick="togglePw('key',this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <p id="key-help" class="helper">From your server config (HOUSEHOLD_ACCESS_KEY).</p>
+    </div>
+    <button class="submit" type="submit" data-submit><span data-submit-spinner hidden class="spinner"></span><span data-submit-label>Sign in</span></button>
+  </form>
+</div>
+
+<div class="toolbar" role="toolbar" aria-label="State toggles">
+  <span class="toolbar-label">View:</span>
+  <button data-mode="login" class="active" onclick="setMode('login')">Login</button>
+  <button data-mode="setup" onclick="setMode('setup')">Setup</button>
+  <span class="toolbar-label">Banners:</span>
+  <button onclick="toggle('info')">Bounce</button>
+  <button onclick="toggle('error')">Error</button>
+  <span class="toolbar-label">State:</span>
+  <button onclick="togglePending()">Pending</button>
+  <span class="toolbar-label">Theme:</span>
+  <button onclick="document.documentElement.classList.toggle('dark')">Dark</button>
+</div>
+
+<script>
+function setMode(mode){
+  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  document.querySelectorAll('[data-setup]').forEach(el=>el.hidden=mode!=='setup');
+  const headline=document.querySelector('[data-headline]'), sub=document.querySelector('[data-subhead]'), label=document.querySelector('[data-submit-label]'), err=document.querySelector('[data-error-text]');
+  if(mode==='setup'){
+    headline.textContent='Set up your household';
+    sub.textContent='First time here? Create the operator account.';
+    label.textContent='Create household';
+    err.textContent='Invalid household access key';
+  } else {
+    headline.textContent='Welcome back';
+    sub.textContent='Sign in to your household';
+    label.textContent='Sign in';
+    err.textContent='Invalid email or password';
+  }
+}
+function toggle(name){ const el=document.querySelector('[data-'+name+']'); el.hidden=!el.hidden; }
+function togglePending(){
+  const sp=document.querySelector('[data-submit-spinner]'), btn=document.querySelector('[data-submit]');
+  sp.hidden=!sp.hidden; btn.disabled=!sp.hidden===false;
+}
+function togglePw(id,btn){
+  const i=document.getElementById(id);
+  const showing=i.type==='text';
+  i.type=showing?'password':'text';
+  btn.setAttribute('aria-label', showing?'Show password':'Hide password');
+}
+</script>
+</body>
+</html>

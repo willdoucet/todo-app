@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Append one entry to the review log (state/review-log.jsonl).
+
+Usage:
+    review-log '{"skill":"plan-eng-review","status":"clean","issues":0}'
+    review-log --skill plan-eng-review --status clean [--field issues=0 ...] [--plan NAME]
+
+`ts`, `branch`, `plan` (latest plan basename on the current branch), `commit` and
+`harness` are filled in automatically unless supplied. `--plan NAME` overrides the
+plan the entry is logged against. Prints the stored entry as JSON.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _lib  # noqa: E402
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(prog="review-log")
+    ap.add_argument("entry", nargs="?", help="JSON object for the whole entry")
+    ap.add_argument("--skill")
+    ap.add_argument("--status")
+    ap.add_argument("--plan", help="plan basename to log against (default: latest plan on this branch)")
+    ap.add_argument("--field", action="append", default=[], metavar="k=v", help="extra field; value parsed as JSON when possible")
+    return ap.parse_args(argv)
+
+
+def build_entry(args: argparse.Namespace) -> dict:
+    if args.entry:
+        try:
+            entry = json.loads(args.entry)
+        except json.JSONDecodeError as exc:
+            raise _lib.FrameworkError(f"entry is not valid JSON: {exc}")
+        if not isinstance(entry, dict):
+            raise _lib.FrameworkError("entry must be a JSON object")
+    else:
+        entry = {}
+    if args.skill:
+        entry["skill"] = args.skill
+    if args.status:
+        entry["status"] = args.status
+    for item in args.field:
+        if "=" not in item:
+            raise _lib.FrameworkError(f"--field expects k=v, got {item!r}")
+        key, raw = item.split("=", 1)
+        entry[key.strip()] = _lib.parse_scalar(raw)
+    if args.plan:
+        entry["plan"] = args.plan
+    for required in ("skill", "status"):
+        if not entry.get(required):
+            raise _lib.FrameworkError(f"entry needs a {required!r} (pass --{required} or include it in the JSON)")
+    return entry
+
+
+def main() -> int:
+    args = parse_args(sys.argv[1:])
+    root = _lib.repo_root()
+    cfg = _lib.load_config(root)
+    stored = _lib.review_log_append(root, cfg, build_entry(args))
+    return _lib.print_json(stored)
+
+
+if __name__ == "__main__":
+    _lib.run_main(main)

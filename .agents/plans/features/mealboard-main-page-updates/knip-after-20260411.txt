@@ -1,0 +1,15 @@
+
+> frontend@0.0.0 hygiene
+> knip
+
+Unused dependencies (1)
+@tanstack/react-query  package.json:21:6
+Unused exports (8)
+default            function  src/components/shared/EmptyState.jsx:14:25
+EmptyListsState    function  src/components/shared/EmptyState.jsx:77:17
+default            function  src/components/shared/Tooltip.jsx:14:25   
+FOOD_EMOJI_LOOKUP            src/constants/foodEmojis.js:11:14         
+GRADIENT_PRESETS             src/constants/recipeGradients.js:49:10    
+WEIGHT_UNITS                 src/constants/units.js:6:14               
+VOLUME_UNITS                 src/constants/units.js:13:14              
+COUNT_UNITS                  src/constants/units.js:25:14              

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Food Items pill — Option A (single-line compact)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --warm-cream: #FAF7F2;
+    --warm-beige: #F5F0E8;
+    --warm-sand: #EBE5DA;
+    --card-bg: #FFFDFB;
+    --card-border: #E8E2D9;
+    --terracotta-50: #FEF3F0;
+    --terracotta-100: #FCE4DE;
+    --terracotta-200: #FAC9BD;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #9A9287;
+  }
+  body { background: var(--warm-cream); font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text-primary); }
+  .card-bg { background: var(--card-bg); }
+  .card-border { border-color: var(--card-border); }
+  .text-primary { color: var(--text-primary); }
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted { color: var(--text-muted); }
+  .terracotta-500 { color: var(--terracotta-500); }
+  .terracotta-500-bg { background: var(--terracotta-500); }
+  .warm-sand { background: var(--warm-sand); }
+  .warm-beige-hover:hover { background: var(--warm-beige); }
+</style>
+</head>
+<body>
+  <!-- App chrome: left rail -->
+  <div class="flex min-h-screen">
+    <aside class="w-16 border-r card-border flex flex-col items-center py-4 gap-3">
+      <div class="w-10 h-10 rounded-xl bg-[var(--terracotta-100)] flex items-center justify-center">
+        <span class="text-xl">🍽</span>
+      </div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center text-muted">📅</div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center text-muted">👥</div>
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center text-muted">🛒</div>
+    </aside>
+
+    <main class="flex-1 max-w-5xl mx-auto px-6 py-6">
+      <!-- Page header -->
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h1 class="text-2xl font-bold">Food Items</h1>
+          <p class="text-sm text-secondary mt-0.5">Pantry staples and household ingredients · 24 items</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="relative">
+            <input placeholder="Search food items..." class="pl-9 pr-3 py-2 rounded-lg border card-border card-bg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-[var(--terracotta-500)]" />
+            <svg class="w-4 h-4 absolute left-3 top-2.5 text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <button class="px-4 py-2 terracotta-500-bg text-white rounded-lg text-sm font-medium">+ Add food item</button>
+        </div>
+      </div>
+
+      <!-- OPTION A: compact single-line horizontal pill, 52px tall -->
+      <div class="grid grid-cols-3 gap-3">
+        <!-- Row 1 -->
+        <button type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl border card-border card-bg warm-beige-hover transition-all hover:shadow-sm hover:border-[var(--terracotta-200)] text-left">
+          <span class="text-2xl flex-shrink-0">🥛</span>
+          <span class="flex-1 text-sm font-medium truncate">Whole milk</span>
+          <svg class="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          <span class="w-2 h-2 rounded-full bg-blue-200 flex-shrink-0" title="Dairy"></span>
+        </button>
+        <button type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl border card-border card-bg warm-beige-hover transition-all hover:shadow-sm hover:border-[var(--terracotta-200)] text-left">
+          <span class="text-2xl flex-shrink-0">🍞</span>
+          <span class="flex-1 text-sm font-medium truncate">Sourdough bread</span>
+          <svg class="w-4 h-4 terracotta-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          <span class="w-2 h-2 rounded-full warm-sand flex-shrink-0" title="Grain"></span>
+        </button>
+        <button type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl border card-border card-bg warm-beige-hover transition-all hover:shadow-sm hover:border-[var(--terracotta-200)] text-left">
+          <span class="text-2xl flex-shrink-0">🥑</span>
+          <span class="flex-1 text-sm font-medium truncate">Avocados</span>
+          <svg class="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          <span class="w-2 h-2 rounded-full bg-green-200 flex-shrink-0" title="Produce"></span>
+        </button>
+        <!-- Row 2 -->
+        <button type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl border card-border card-bg warm-beige-hover transition-all hover:shadow-sm hover:border-[var(--terracotta-200)] text-left">
+          <span class="text-2xl flex-shrink-0">🧀</span>
+          <span class="flex-1 text-sm font-medium truncate">Sharp cheddar</span>
+          <svg class="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          <span class="w-2 h-2 rounded-full bg-blue-200 flex-shrink-0"></span>
+        </button>
+        <button type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl border card-border card-bg warm-beige-hover transition-all hover:shadow-sm hover:border-[var(--terracotta-200)] text-left">
+          <span class="text-2xl flex-shrink-0">🥕</span>
+          <span class="flex-1 text-sm font-medium truncate">Organic carrots</span>
+          <svg class="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          <span class="w-2 h-2 rounded-full bg-green-200 flex-shrink-0"></span>
+        </button>
+        <button type="button" class="flex items-center gap-3 px-3 py-2.5 rounded-xl border card-border card-bg warm-beige-hover transition-all hover:shadow-sm hover:border-[var(--terracotta-200)] text-left">
+          <span class="text-2xl flex-shrink-0">🍗</span>
+          <span class="flex-1 text-sm font-medium truncate">Chicken breast (family photo)</span>
+          <svg class="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          <span class="w-2 h-2 rounded-full bg-red-200 flex-shrink-0"></span>
+        </button>
+      </div>
+
+      <div class="mt-8 p-4 rounded-xl border-2 border-dashed card-border">
+        <p class="text-xs text-muted uppercase tracking-wide font-semibold mb-2">Option A — single-line compact pill</p>
+        <p class="text-sm text-secondary">Each card is a single horizontal row: icon · name · favorite · category dot. 52px tall (from 120px square = 57% reduction). 3-column grid on desktop, 1 column on mobile. Name uses <code>truncate</code> — long names end with an ellipsis. Favorite heart is always visible (un/filled). Category dot is far-right. Entire card is one <code>&lt;button&gt;</code>, favorite stops propagation. Fewest pixels, densest grid, smallest mental overhead.</p>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

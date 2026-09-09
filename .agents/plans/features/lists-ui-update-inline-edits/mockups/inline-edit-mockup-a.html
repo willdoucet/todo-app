@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inline Edit Mockup A — Warm Subtle</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #FAF7F2;
+    color: #3D3833;
+    padding: 24px;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    color: #3D3833;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: #9A9287;
+    margin-bottom: 20px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #6B645A;
+    padding: 4px 10px;
+    background: #F5F0E8;
+    border-radius: 6px;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  /* ── Task List Container ── */
+  .task-list {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  /* ── Section Header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #F5F0E8;
+    border-bottom: 1px solid #EBE5DA;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .section-chevron {
+    width: 16px;
+    height: 16px;
+    color: #9A9287;
+    flex-shrink: 0;
+  }
+
+  .section-name {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6B645A;
+  }
+
+  .section-count {
+    font-size: 11px;
+    color: #9A9287;
+    margin-left: auto;
+  }
+
+  /* ── Task Card ── */
+  .task-card {
+    border-bottom: 1px solid #f0ece5;
+    transition: background 0.15s;
+  }
+
+  .task-card:hover {
+    background: #f7f4ee;
+  }
+
+  .task-row {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  /* Color stripe on left */
+  .task-card[data-member="blue"] {
+    border-left: 3px solid #5B9BD5;
+  }
+  .task-card[data-member="pink"] {
+    border-left: 3px solid #E8839B;
+  }
+  .task-card[data-member="green"] {
+    border-left: 3px solid #7BC47F;
+  }
+  .task-card[data-member="none"] {
+    border-left: 3px solid transparent;
+  }
+
+  /* Checkbox */
+  .checkbox {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    flex-shrink: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .checkbox:hover {
+    border-color: #D97452;
+  }
+
+  .checkbox.checked {
+    background: #D97452;
+    border-color: #D97452;
+  }
+
+  .checkbox.checked::after {
+    content: '✓';
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  /* Task title area (clickable for inline edit) */
+  .task-title-area {
+    flex: 1;
+    min-width: 0;
+    cursor: text;
+    padding: 4px 0;
+  }
+
+  .task-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #3D3833;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .task-title.completed {
+    text-decoration: line-through;
+    color: #9A9287;
+    opacity: 0.6;
+  }
+
+  /* Inline edit input */
+  .inline-edit-input {
+    font-size: 13px;
+    font-weight: 500;
+    color: #3D3833;
+    border: none;
+    border-bottom: 2px solid #D97452;
+    background: transparent;
+    outline: none;
+    width: 100%;
+    padding: 4px 0;
+    font-family: inherit;
+  }
+
+  /* ── Action Area (distinct background) ── */
+  .action-area {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    padding: 4px 6px;
+    background: #F5F0E8;
+    border-radius: 8px;
+    margin: 4px 0;
+  }
+
+  /* Indicator pills */
+  .priority-flag {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .priority-flag svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .priority-high svg { color: #ef4444; }
+  .priority-med svg { color: #f59e0b; }
+  .priority-low svg { color: #9ca3af; }
+
+  .due-date-chip {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .due-date-chip.normal {
+    background: #F5F0E8;
+    color: #6B645A;
+    border: 1px solid #EBE5DA;
+  }
+
+  .due-date-chip.overdue {
+    background: #fef2f2;
+    color: #ef4444;
+    border: 1px solid #fecaca;
+  }
+
+  .due-date-chip svg {
+    width: 11px;
+    height: 11px;
+  }
+
+  /* Icon buttons */
+  .icon-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #9A9287;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .icon-btn:hover {
+    background: #EBE5DA;
+    color: #6B645A;
+  }
+
+  .icon-btn.delete:hover {
+    background: #fef2f2;
+    color: #ef4444;
+  }
+
+  .icon-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Save/Cancel buttons (only visible when editing) */
+  .edit-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .btn-save {
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #D97452;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-save:hover { background: #c4633f; }
+
+  .btn-save.delete-mode {
+    background: #ef4444;
+  }
+
+  .btn-save.delete-mode:hover {
+    background: #dc2626;
+  }
+
+  .btn-cancel {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    background: transparent;
+    color: #9A9287;
+    border: 1px solid #EBE5DA;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-cancel:hover {
+    background: #F5F0E8;
+    color: #6B645A;
+  }
+
+  /* Expand/contract button */
+  .expand-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #9A9287;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .expand-btn:hover {
+    background: #EBE5DA;
+    color: #6B645A;
+  }
+
+  .expand-btn.expanded svg {
+    transform: rotate(180deg);
+  }
+
+  .expand-btn svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── Expanded Panel ── */
+  .expand-panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .expand-panel.open {
+    grid-template-rows: 1fr;
+  }
+
+  .expand-panel-inner {
+    overflow: hidden;
+  }
+
+  .expand-content {
+    padding: 12px 16px 16px 42px; /* 42px = checkbox + gap indent */
+    background: #F5F0E8;
+    border-top: 1px solid #EBE5DA;
+  }
+
+  .field-group {
+    margin-bottom: 12px;
+  }
+
+  .field-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9A9287;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+  }
+
+  .field-textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #3D3833;
+    background: white;
+    border: 1px solid #EBE5DA;
+    border-radius: 8px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .field-textarea:focus {
+    border-color: #D97452;
+  }
+
+  .field-textarea::placeholder {
+    color: #9A9287;
+  }
+
+  /* Date picker styled */
+  .field-date {
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #3D3833;
+    background: white;
+    border: 1px solid #EBE5DA;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .field-date:focus {
+    border-color: #D97452;
+  }
+
+  /* Pills */
+  .pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 16px;
+    border: 1px solid #EBE5DA;
+    background: white;
+    color: #6B645A;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .pill:hover {
+    border-color: #D97452;
+  }
+
+  .pill.active {
+    background: #D97452;
+    color: white;
+    border-color: #D97452;
+  }
+
+  .pill.member {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pill .member-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  /* Priority pills with colors */
+  .pill.priority-none.active { background: #e5e7eb; color: #3D3833; border-color: #e5e7eb; }
+  .pill.priority-low.active { background: #9ca3af; color: white; border-color: #9ca3af; }
+  .pill.priority-med.active { background: #f59e0b; color: white; border-color: #f59e0b; }
+  .pill.priority-high.active { background: #ef4444; color: white; border-color: #ef4444; }
+
+  /* ── Add Task Inline ── */
+  .add-task-row {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 12px;
+    gap: 8px;
+    border-bottom: 1px solid #f0ece5;
+    cursor: pointer;
+    transition: background 0.15s;
+    color: #9A9287;
+  }
+
+  .add-task-row:hover {
+    background: #f7f4ee;
+    color: #D97452;
+  }
+
+  .add-icon {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 300;
+    flex-shrink: 0;
+  }
+
+  .add-task-label {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Add task in active state */
+  .add-task-row.active {
+    background: transparent;
+    cursor: default;
+  }
+
+  /* ── Add Section ── */
+  .add-section-row {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 16px;
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    color: #D97452;
+    border-top: 2px dashed #EBE5DA;
+    margin-top: 4px;
+  }
+
+  .add-section-row:hover {
+    background: #f7f4ee;
+  }
+
+  .add-section-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── State Labels (for mockup) ── */
+  .state-label {
+    position: relative;
+    display: inline-block;
+  }
+
+  .state-label::before {
+    content: attr(data-state);
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateX(100%) translateY(-50%);
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    background: #D97452;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* Mockup annotations */
+  .annotation {
+    font-size: 10px;
+    background: #D97452;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin: 8px 0 4px 12px;
+    font-weight: 600;
+  }
+
+  .spacer { height: 8px; }
+
+  /* Hidden elements for placeholder spacing */
+  .edit-actions-placeholder {
+    display: flex;
+    gap: 4px;
+    visibility: hidden;
+  }
+
+  .edit-actions-placeholder .btn-save,
+  .edit-actions-placeholder .btn-cancel {
+    visibility: hidden;
+  }
+</style>
+</head>
+<body>
+
+<h1>General</h1>
+<p class="subtitle">Mockup A — "Warm Subtle" variant · Hybrid approach</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#5B9BD5"></div> Dad</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E8839B"></div> Mom</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#7BC47F"></div> Alex</div>
+</div>
+
+<div class="task-list">
+
+  <!-- ─── ANNOTATION ─── -->
+  <div class="annotation">▼ Unsectioned tasks — normal contracted state</div>
+
+  <!-- Task 1: Normal contracted state -->
+  <div class="task-card" data-member="blue">
+    <div class="task-row">
+      <div class="checkbox"></div>
+      <div class="task-title-area">
+        <div class="task-title">Pick up groceries from Costco</div>
+      </div>
+      <div class="action-area">
+        <div class="priority-flag priority-high">
+          <svg fill="currentColor" viewBox="0 0 24 24"><path d="M5 3v18l2-1.5V10h10.5l2-3.5-2-3.5H7V1.5L5 3z"/></svg>
+        </div>
+        <div class="due-date-chip normal">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Apr 3
+        </div>
+        <button class="icon-btn delete" title="Delete">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <!-- Save/Cancel hidden when not editing — space reserved -->
+        <button class="expand-btn" title="Expand details">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task 2: Completed state -->
+  <div class="task-card" data-member="pink">
+    <div class="task-row">
+      <div class="checkbox checked"></div>
+      <div class="task-title-area">
+        <div class="task-title completed">Schedule dentist appointment</div>
+      </div>
+      <div class="action-area">
+        <div class="due-date-chip normal">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Mar 28
+        </div>
+        <button class="icon-btn delete" title="Delete">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <button class="expand-btn" title="Expand details">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ANNOTATION ─── -->
+  <div class="annotation">▼ Inline edit ACTIVE — title being edited, save/cancel visible</div>
+
+  <!-- Task 3: Active inline edit state -->
+  <div class="task-card" data-member="green" style="background:#f7f4ee;">
+    <div class="task-row">
+      <div class="checkbox"></div>
+      <div class="task-title-area">
+        <input class="inline-edit-input" value="Clean out the garage" autofocus />
+      </div>
+      <div class="action-area">
+        <div class="priority-flag priority-low">
+          <svg fill="currentColor" viewBox="0 0 24 24"><path d="M5 3v18l2-1.5V10h10.5l2-3.5-2-3.5H7V1.5L5 3z"/></svg>
+        </div>
+        <button class="icon-btn delete" title="Delete">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <div class="edit-actions">
+          <button class="btn-save">Save</button>
+          <button class="btn-cancel">Cancel</button>
+        </div>
+        <button class="expand-btn" title="Expand details">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ANNOTATION ─── -->
+  <div class="annotation">▼ Empty text — "Save" becomes "Delete" (red)</div>
+
+  <!-- Task 3b: Empty text state — delete mode -->
+  <div class="task-card" data-member="none" style="background:#f7f4ee;">
+    <div class="task-row">
+      <div class="checkbox"></div>
+      <div class="task-title-area">
+        <input class="inline-edit-input" value="" placeholder="Task title..." style="border-bottom-color: #ef4444;" />
+      </div>
+      <div class="action-area">
+        <button class="icon-btn delete" title="Delete">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <div class="edit-actions">
+          <button class="btn-save delete-mode">Delete</button>
+          <button class="btn-cancel">Cancel</button>
+        </div>
+        <button class="expand-btn" title="Expand details">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ANNOTATION ─── -->
+  <div class="annotation">▼ Add task (unsectioned) — inline at bottom of unsectioned tasks</div>
+
+  <!-- Add task row (inactive) -->
+  <div class="add-task-row">
+    <div class="add-icon">+</div>
+    <div class="add-task-label">Add a task</div>
+  </div>
+
+  <!-- ═══ SECTION 1 ═══ -->
+  <div class="section-header">
+    <svg class="section-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+    <span class="section-name">Home Maintenance</span>
+    <span class="section-count">2</span>
+  </div>
+
+  <!-- Task 4: Normal -->
+  <div class="task-card" data-member="blue">
+    <div class="task-row">
+      <div class="checkbox"></div>
+      <div class="task-title-area">
+        <div class="task-title">Fix the leaky faucet in bathroom</div>
+      </div>
+      <div class="action-area">
+        <div class="priority-flag priority-med">
+          <svg fill="currentColor" viewBox="0 0 24 24"><path d="M5 3v18l2-1.5V10h10.5l2-3.5-2-3.5H7V1.5L5 3z"/></svg>
+        </div>
+        <div class="due-date-chip overdue">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M12 2l9 16H3L12 2z"/></svg>
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Mar 25
+        </div>
+        <button class="icon-btn delete" title="Delete">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <button class="expand-btn" title="Expand details">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ANNOTATION ─── -->
+  <div class="annotation">▼ EXPANDED state — detail fields visible below task</div>
+
+  <!-- Task 5: Expanded state -->
+  <div class="task-card" data-member="pink" style="background:#f7f4ee;">
+    <div class="task-row">
+      <div class="checkbox"></div>
+      <div class="task-title-area">
+        <input class="inline-edit-input" value="Replace air filters" />
+      </div>
+      <div class="action-area">
+        <div class="priority-flag priority-med">
+          <svg fill="currentColor" viewBox="0 0 24 24"><path d="M5 3v18l2-1.5V10h10.5l2-3.5-2-3.5H7V1.5L5 3z"/></svg>
+        </div>
+        <div class="due-date-chip normal">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Apr 10
+        </div>
+        <button class="icon-btn delete" title="Delete">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <div class="edit-actions">
+          <button class="btn-save">Save</button>
+          <button class="btn-cancel">Cancel</button>
+        </div>
+        <button class="expand-btn expanded" title="Collapse details">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+    </div>
+    <!-- Expanded panel -->
+    <div class="expand-panel open">
+      <div class="expand-panel-inner">
+        <div class="expand-content">
+          <div class="field-group">
+            <div class="field-label">Due Date</div>
+            <input type="date" class="field-date" value="2026-04-10" />
+          </div>
+          <div class="field-group">
+            <div class="field-label">Description</div>
+            <textarea class="field-textarea" placeholder="Add a description...">Need 20x20x1 size filters from Home Depot. Check furnace manual for exact spec.</textarea>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Assigned To</div>
+            <div class="pills">
+              <div class="pill member"><span class="member-dot" style="background:#5B9BD5"></span> Dad</div>
+              <div class="pill member active"><span class="member-dot" style="background:#E8839B"></span> Mom</div>
+              <div class="pill member"><span class="member-dot" style="background:#7BC47F"></span> Alex</div>
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="field-label">Priority</div>
+            <div class="pills">
+              <div class="pill priority-none">None</div>
+              <div class="pill priority-low">Low</div>
+              <div class="pill priority-med active">Medium</div>
+              <div class="pill priority-high">High</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add task in section -->
+  <div class="add-task-row">
+    <div class="add-icon">+</div>
+    <div class="add-task-label">Add a task</div>
+  </div>
+
+  <!-- ═══ SECTION 2 ═══ -->
+  <div class="section-header">
+    <svg class="section-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+    <span class="section-name">School</span>
+    <span class="section-count">1</span>
+  </div>
+
+  <!-- Task 6: Normal -->
+  <div class="task-card" data-member="green">
+    <div class="task-row">
+      <div class="checkbox"></div>
+      <div class="task-title-area">
+        <div class="task-title">Sign permission slip for field trip</div>
+      </div>
+      <div class="action-area">
+        <div class="due-date-chip normal">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Apr 5
+        </div>
+        <button class="icon-btn delete" title="Delete">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+        <button class="expand-btn" title="Expand details">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ANNOTATION ─── -->
+  <div class="annotation">▼ Add task (active state) — user clicked "+", typing inline</div>
+
+  <!-- Add task row (active — user is typing) -->
+  <div class="add-task-row active" style="background:#f7f4ee;">
+    <div class="add-icon" style="color:#D97452;">+</div>
+    <div class="task-title-area">
+      <input class="inline-edit-input" placeholder="What needs to be done?" value="Buy new notebooks for" />
+    </div>
+    <div class="action-area" style="margin-left: auto;">
+      <div class="edit-actions">
+        <button class="btn-save">Save</button>
+        <button class="btn-cancel">Cancel</button>
+      </div>
+      <button class="expand-btn" title="Expand details">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ ADD SECTION ═══ -->
+  <div class="add-section-row">
+    <div class="add-icon" style="font-weight:600;">+</div>
+    <div class="add-section-label">Add Section</div>
+  </div>
+
+</div>
+
+<div class="spacer"></div>
+<p style="font-size:11px; color:#9A9287; margin-top:16px; text-align:center;">
+  Mockup A — "Warm Subtle" · Action area uses warm-beige (#F5F0E8) background<br>
+  Expanded panel continues with same warm-beige, separated by subtle border
+</p>
+
+</body>
+</html>

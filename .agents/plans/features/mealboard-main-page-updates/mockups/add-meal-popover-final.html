@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add Meal Popover — Final</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FFF9F2;
+    --beige: #F8F0E5;
+    --sand: #EDE3D5;
+    --card-bg: #FFFFFF;
+    --card-border: #EDE5DC;
+    --terracotta-50: #FFF5F0;
+    --terracotta-100: #FCE4DE;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --peach-100: #FFE8DF;
+    --peach-slot: #E8927C;
+    --peach-light: #FFF0EC;
+    --peach-border: #FCC9B8;
+    --peach-text: #7A3020;
+    --sage-50: #F4F7F4;
+    --sage-100: #E5EDE6;
+    --sage-500: #6B9A70;
+    --sage-slot: #6B9A70;
+    --sage-light: #EDF7EE;
+    --sage-border: #B8D8BB;
+    --sage-text: #2D5E32;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #A09788;
+    --amber: #F5A623;
+    --amber-light: #FFF8E7;
+    --amber-border: #FDDF8E;
+    --amber-text: #7A5100;
+    --lavender: #A78BDB;
+    --lavender-light: #F6F0FF;
+    --lavender-border: #D4C9EC;
+    --lavender-text: #4A3080;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--cream);
+    background-image:
+      radial-gradient(circle at 15% 85%, rgba(245,166,35,0.07) 0%, transparent 45%),
+      radial-gradient(circle at 85% 15%, rgba(232,146,124,0.07) 0%, transparent 45%),
+      radial-gradient(circle at 50% 50%, rgba(167,139,219,0.05) 0%, transparent 55%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    padding: 40px;
+  }
+
+  /* ─── SWIMLANE BACKGROUND (dimmed) ─── */
+  .grid-bg {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .grid-bg h2 {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C, var(--amber));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+  }
+
+  .day-headers {
+    display: grid;
+    grid-template-columns: 80px repeat(7, 1fr);
+    gap: 0;
+    margin-bottom: 6px;
+  }
+
+  .dh-cell {
+    text-align: center;
+    padding: 6px 4px;
+  }
+
+  .dh-cell .day-name {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+  }
+
+  .dh-cell .day-num {
+    font-size: 18px;
+    font-weight: 800;
+    margin-top: 1px;
+    line-height: 1;
+  }
+
+  .swimlane {
+    display: grid;
+    grid-template-columns: 80px repeat(7, 1fr);
+    gap: 0;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1.5px solid transparent;
+    min-height: 80px;
+    margin-bottom: 8px;
+    position: relative;
+  }
+
+  .swimlane.dinner {
+    background: linear-gradient(135deg, #FFF0EC, #FFE0D6);
+    border-color: var(--peach-border);
+  }
+
+  .swimlane.lunch {
+    background: linear-gradient(135deg, #EDF7EE, #DCEEDD);
+    border-color: var(--sage-border);
+  }
+
+  .swimlane.breakfast {
+    background: linear-gradient(135deg, #FFF8E7, #FFF0CC);
+    border-color: var(--amber-border);
+  }
+
+  .lane-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 10px 8px;
+    border-right: 1px solid rgba(0,0,0,0.05);
+  }
+
+  .lane-label .lane-emoji { font-size: 20px; line-height: 1; }
+  .lane-label .lane-text {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    text-align: center;
+  }
+
+  .lane-label.dinner .lane-text { color: var(--peach-text); }
+  .lane-label.lunch .lane-text { color: var(--sage-text); }
+  .lane-label.breakfast .lane-text { color: var(--amber-text); }
+
+  .lane-cell {
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    position: relative;
+  }
+
+  .lane-cell:last-child { border-right: none; }
+
+  .swim-card {
+    background: white;
+    border: 1.5px solid rgba(255,255,255,0.8);
+    border-radius: 10px;
+    padding: 6px 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    position: relative;
+    overflow: hidden;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .swim-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+  }
+
+  .swimlane.dinner .swim-card::before { background: linear-gradient(to bottom, var(--peach-slot), #F0B4A2); }
+  .swimlane.lunch .swim-card::before { background: linear-gradient(to bottom, var(--sage-slot), #8FC497); }
+  .swimlane.breakfast .swim-card::before { background: linear-gradient(to bottom, var(--amber), #F5C164); }
+
+  .lane-empty {
+    width: 100%;
+    height: 100%;
+    min-height: 40px;
+    border: 2px dashed rgba(0,0,0,0.07);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0,0,0,0.14);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Dim the grid — opacity on children, NOT the container */
+  .grid-bg.dimmed .swimlane,
+  .grid-bg.dimmed .day-headers,
+  .grid-bg.dimmed h2 {
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  /* ─── BACKDROP (sibling of grid, sibling of popover) ─── */
+  .popover-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(61, 56, 51, 0.18);
+    z-index: 50;
+  }
+
+  /* ─── POPOVER — fixed, centered, NOT a child of dimmed grid ─── */
+  .popover {
+    position: fixed;
+    z-index: 60;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 390px;
+    background: var(--card-bg);
+    border: 1.5px solid var(--card-border);
+    border-radius: 20px;
+    box-shadow:
+      0 12px 48px rgba(0,0,0,0.12),
+      0 4px 12px rgba(0,0,0,0.05);
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    animation: pop-in 0.25s ease-out;
+  }
+
+  @keyframes pop-in {
+    from { opacity: 0; transform: translate(-50%, -50%) translateY(10px) scale(0.96); }
+    to   { opacity: 1; transform: translate(-50%, -50%) translateY(0) scale(1); }
+  }
+
+  /* ─── Popover header ─── */
+  .pop-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .pop-header .pop-context {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .pop-slot-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: linear-gradient(135deg, #FFF0EC, #FFE0D6);
+    border: 1.5px solid var(--peach-border);
+    border-radius: 10px;
+    padding: 5px 12px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--peach-text);
+  }
+
+  .pop-slot-badge .slot-emoji {
+    font-size: 14px;
+  }
+
+  .pop-date {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .pop-close {
+    width: 30px;
+    height: 30px;
+    border: none;
+    background: var(--beige);
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .pop-close:hover {
+    background: var(--peach-100);
+    color: var(--terracotta-600);
+  }
+
+  /* ─── Filter tabs (none active by default) ─── */
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .filter-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 2px;
+    flex-shrink: 0;
+  }
+
+  .filter-chip {
+    border: 1.5px solid var(--card-border);
+    background: white;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding: 4px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .filter-chip:hover {
+    border-color: var(--terracotta-500);
+    color: var(--terracotta-500);
+    background: var(--terracotta-50);
+  }
+
+  /* Active state (not used by default, shown for reference) */
+  .filter-chip.active {
+    background: linear-gradient(135deg, var(--terracotta-500), var(--peach-slot));
+    border-color: transparent;
+    color: white;
+  }
+
+  /* ─── Unified search field ─── */
+  .search-field {
+    position: relative;
+  }
+
+  .search-field input {
+    width: 100%;
+    padding: 11px 14px 11px 36px;
+    border: 1.5px solid var(--card-border);
+    border-radius: 14px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: white;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-field input:focus {
+    border-color: var(--terracotta-500);
+    box-shadow: 0 0 0 3px rgba(217,116,82,0.1);
+  }
+
+  .search-field input::placeholder {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  /* ─── Grouped search results ─── */
+  .search-results {
+    max-height: 260px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: -6px;
+  }
+
+  .search-results::-webkit-scrollbar { width: 5px; }
+  .search-results::-webkit-scrollbar-track { background: transparent; }
+  .search-results::-webkit-scrollbar-thumb {
+    background: var(--sand);
+    border-radius: 3px;
+  }
+
+  .result-group-header {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    padding: 8px 10px 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .result-group-header::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--sand);
+  }
+
+  .result-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .result-item:hover {
+    background: var(--terracotta-50);
+  }
+
+  .result-item .ri-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .result-item .ri-icon.recipe-icon {
+    background: var(--peach-light);
+  }
+
+  .result-item .ri-icon.food-icon {
+    background: var(--sage-light);
+  }
+
+  .result-item .ri-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .result-item .ri-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .result-item .ri-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .result-item .fav-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--amber);
+    background: var(--amber-light);
+    border: 1px solid var(--amber-border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .result-item .ri-time {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* Custom meal fallback */
+  .custom-fallback {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.12s;
+    border-top: 1.5px dashed var(--card-border);
+    margin-top: 4px;
+  }
+
+  .custom-fallback:hover {
+    background: var(--terracotta-50);
+  }
+
+  .custom-fallback .cf-plus {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: var(--lavender-light);
+    border: 1.5px dashed var(--lavender-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--lavender);
+    flex-shrink: 0;
+  }
+
+  .custom-fallback .cf-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--lavender-text);
+  }
+
+  .custom-fallback .cf-text .cf-query {
+    font-weight: 800;
+    color: var(--lavender);
+  }
+
+  /* ─── Divider ─── */
+  .pop-divider {
+    height: 1px;
+    background: var(--card-border);
+    margin: 2px 0;
+  }
+
+  /* ─── Participants ─── */
+  .participants-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .participants-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .avatar-toggles {
+    display: flex;
+    gap: 8px;
+  }
+
+  .avatar-toggle {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 800;
+    color: white;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 2.5px solid transparent;
+    position: relative;
+  }
+
+  .avatar-toggle.active {
+    border-color: white;
+    box-shadow: 0 0 0 2px var(--terracotta-500), 0 2px 6px rgba(0,0,0,0.1);
+  }
+
+  .avatar-toggle.inactive {
+    opacity: 0.35;
+    filter: grayscale(0.5);
+  }
+
+  .avatar-toggle.dad  { background: linear-gradient(135deg, #5B8DEF, #4A7BE0); }
+  .avatar-toggle.mom  { background: linear-gradient(135deg, #E06B9F, #D15A8E); }
+  .avatar-toggle.kid1 { background: linear-gradient(135deg, #F5A623, #E89514); }
+  .avatar-toggle.kid2 { background: linear-gradient(135deg, #7EC8A0, #6DB990); }
+  .avatar-toggle.baby { background: linear-gradient(135deg, #C4A0E8, #B490DA); }
+
+  /* ─── Notes ─── */
+  .notes-field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid var(--card-border);
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: white;
+    outline: none;
+    resize: none;
+    height: 44px;
+    transition: border-color 0.15s;
+  }
+
+  .notes-field textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  .notes-field textarea:focus {
+    border-color: var(--terracotta-500);
+    box-shadow: 0 0 0 3px rgba(217,116,82,0.1);
+  }
+
+  /* ─── Actions ─── */
+  .pop-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn-cancel {
+    flex: 1;
+    padding: 10px;
+    border: 1.5px solid var(--card-border);
+    border-radius: 12px;
+    background: white;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-cancel:hover {
+    background: var(--beige);
+    border-color: var(--sand);
+  }
+
+  .btn-save {
+    flex: 2;
+    padding: 10px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--terracotta-500), var(--peach-slot));
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 0 4px 14px rgba(217,116,82,0.25);
+  }
+
+  .btn-save:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(217,116,82,0.35);
+  }
+
+  /* ─── CONCEPT BADGE ─── */
+  .concept-badge {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, var(--terracotta-500), #E8927C);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px 18px;
+    border-radius: 14px;
+    z-index: 100;
+    box-shadow: 0 4px 16px rgba(217,116,82,0.3);
+  }
+
+  .concept-badge .badge-sub {
+    font-size: 10px;
+    font-weight: 500;
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── GRID BACKGROUND (dimmed, NOT parent of popover) ─── -->
+<div class="grid-bg dimmed">
+  <h2>Meal Plan</h2>
+
+  <div class="day-headers">
+    <div></div>
+    <div class="dh-cell"><div class="day-name">Mon</div><div class="day-num">31</div></div>
+    <div class="dh-cell"><div class="day-name">Tue</div><div class="day-num">1</div></div>
+    <div class="dh-cell"><div class="day-name">Wed</div><div class="day-num">2</div></div>
+    <div class="dh-cell"><div class="day-name">Thu</div><div class="day-num">3</div></div>
+    <div class="dh-cell"><div class="day-name">Fri</div><div class="day-num">4</div></div>
+    <div class="dh-cell"><div class="day-name">Sat</div><div class="day-num">5</div></div>
+    <div class="dh-cell"><div class="day-name">Sun</div><div class="day-num">6</div></div>
+  </div>
+
+  <!-- Breakfast -->
+  <div class="swimlane breakfast">
+    <div class="lane-label breakfast"><div class="lane-emoji">&#9728;&#65039;</div><div class="lane-text">Breakfast</div></div>
+    <div class="lane-cell"><div class="swim-card">Overnight Oats</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">Pancakes</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">Smoothie Bowl</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">French Toast</div></div>
+  </div>
+
+  <!-- Dinner -->
+  <div class="swimlane dinner">
+    <div class="lane-label dinner"><div class="lane-emoji">&#127765;</div><div class="lane-text">Dinner</div></div>
+    <div class="lane-cell"><div class="swim-card">Tacos</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">Pasta Bolognese</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">Fish &amp; Chips</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">Pizza Night</div></div>
+  </div>
+
+  <!-- Lunch -->
+  <div class="swimlane lunch">
+    <div class="lane-label lunch"><div class="lane-emoji">&#127774;</div><div class="lane-text">Lunch</div></div>
+    <div class="lane-cell"><div class="swim-card">Caesar Salad</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">Grilled Cheese</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+    <div class="lane-cell"><div class="swim-card">Wraps</div></div>
+    <div class="lane-cell"><div class="lane-empty">+</div></div>
+  </div>
+</div>
+
+<!-- ─── BACKDROP (sibling of grid) ─── -->
+<div class="popover-backdrop"></div>
+
+<!-- ─── POPOVER (sibling of grid, NOT a child) ─── -->
+<div class="popover">
+  <!-- Header: slot badge + date + close -->
+  <div class="pop-header">
+    <div class="pop-context">
+      <div class="pop-slot-badge">
+        <span class="slot-emoji">&#127765;</span>
+        Dinner
+      </div>
+      <div class="pop-date">Tuesday, Apr 1</div>
+    </div>
+    <button class="pop-close" aria-label="Close">&#10005;</button>
+  </div>
+
+  <!-- Unified search field -->
+  <div class="search-field">
+    <span class="search-icon">&#128269;</span>
+    <input type="text" placeholder="Search recipes, food items..." value="chick">
+  </div>
+
+  <!-- Optional filter chips (none active) -->
+  <div class="filter-row">
+    <span class="filter-label">Filter</span>
+    <button class="filter-chip">Recipes</button>
+    <button class="filter-chip">Food Items</button>
+    <button class="filter-chip">Custom</button>
+  </div>
+
+  <!-- Grouped search results -->
+  <div class="search-results">
+    <!-- RECIPES group -->
+    <div class="result-group-header">Recipes</div>
+
+    <div class="result-item">
+      <div class="ri-icon recipe-icon">&#127831;</div>
+      <div class="ri-text">
+        <div class="ri-name">Chicken Parmesan</div>
+        <div class="ri-sub">45 min</div>
+      </div>
+      <span class="fav-badge">&#9733; Fav</span>
+    </div>
+
+    <div class="result-item">
+      <div class="ri-icon recipe-icon">&#127834;</div>
+      <div class="ri-text">
+        <div class="ri-name">Chicken Stir-Fry</div>
+        <div class="ri-sub">25 min</div>
+      </div>
+      <span class="fav-badge">&#9733; Fav</span>
+    </div>
+
+    <div class="result-item">
+      <div class="ri-icon recipe-icon">&#127836;</div>
+      <div class="ri-text">
+        <div class="ri-name">Chicken Noodle Soup</div>
+        <div class="ri-sub">35 min</div>
+      </div>
+      <span class="ri-time">35m</span>
+    </div>
+
+    <div class="result-item">
+      <div class="ri-icon recipe-icon">&#129385;</div>
+      <div class="ri-text">
+        <div class="ri-name">Chickpea Curry</div>
+        <div class="ri-sub">30 min</div>
+      </div>
+      <span class="ri-time">30m</span>
+    </div>
+
+    <!-- FOOD ITEMS group -->
+    <div class="result-group-header">Food Items</div>
+
+    <div class="result-item">
+      <div class="ri-icon food-icon">&#127831;</div>
+      <div class="ri-text">
+        <div class="ri-name">Chicken Breast</div>
+      </div>
+    </div>
+
+    <div class="result-item">
+      <div class="ri-icon food-icon">&#127831;</div>
+      <div class="ri-text">
+        <div class="ri-name">Chicken Thighs</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom meal fallback (always visible) -->
+  <div class="custom-fallback">
+    <div class="cf-plus">+</div>
+    <div class="cf-text">Add "<span class="cf-query">chick</span>" as custom meal</div>
+  </div>
+
+  <div class="pop-divider"></div>
+
+  <!-- Participants -->
+  <div class="participants-row">
+    <div class="participants-label">Who's eating</div>
+    <div class="avatar-toggles">
+      <div class="avatar-toggle dad active">W</div>
+      <div class="avatar-toggle mom active">A</div>
+      <div class="avatar-toggle kid1 active">E</div>
+      <div class="avatar-toggle kid2 active">L</div>
+      <div class="avatar-toggle baby inactive">B</div>
+    </div>
+  </div>
+
+  <!-- Notes -->
+  <div class="notes-field">
+    <textarea placeholder="Notes (optional)..."></textarea>
+  </div>
+
+  <!-- Actions -->
+  <div class="pop-actions">
+    <button class="btn-cancel">Cancel</button>
+    <button class="btn-save">Add Meal</button>
+  </div>
+</div>
+
+<!-- Concept badge -->
+<div class="concept-badge">
+  Add Meal — Final<br>
+  <span class="badge-sub">Unified search, grouped results, 390px wide</span>
+</div>
+
+</body>
+</html>

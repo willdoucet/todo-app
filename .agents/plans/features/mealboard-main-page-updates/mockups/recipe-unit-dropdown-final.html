@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recipe Unit Dropdown — Final</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FFF9F2;
+    --beige: #F8F0E5;
+    --sand: #EDE3D5;
+    --card-bg: #FFFFFF;
+    --card-border: #EDE5DC;
+    --terracotta-50: #FFF5F0;
+    --terracotta-100: #FCE4DE;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --peach-100: #FFE8DF;
+    --sage-50: #F4F7F4;
+    --sage-100: #E5EDE6;
+    --sage-500: #6B9A70;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #A09788;
+    --lavender: #A78BDB;
+    --lavender-light: #F6F0FF;
+    --amber: #F5A623;
+    --amber-light: #FFF8E7;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--cream);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+
+  .concept-badge {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--lavender);
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 16px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    z-index: 100;
+    box-shadow: 0 2px 12px rgba(167,139,219,0.3);
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(61, 56, 51, 0.25);
+    z-index: 40;
+  }
+
+  .modal {
+    position: relative;
+    z-index: 50;
+    width: 100%;
+    max-width: 700px;
+    margin-top: 40px;
+    background: var(--card-bg);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(61, 56, 51, 0.15), 0 0 0 1px var(--card-border);
+    overflow: visible;
+  }
+
+  .modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--card-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .modal-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .close-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: var(--beige);
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+
+  .close-btn:hover {
+    background: var(--terracotta-100);
+    color: var(--terracotta-600);
+  }
+
+  .modal-body {
+    padding: 24px;
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+
+  .recipe-name-field {
+    margin-bottom: 24px;
+  }
+
+  .recipe-name-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .recipe-name-field input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px solid var(--card-border);
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: white;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .recipe-name-field input:focus {
+    border-color: var(--terracotta-500);
+    box-shadow: 0 0 0 3px rgba(217,116,82,0.1);
+  }
+
+  .section-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+
+  /* -- Ingredient Row -- */
+  .ingredient-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .column-headers {
+    display: grid;
+    grid-template-columns: 64px 120px 1fr 110px 36px;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding: 0 2px;
+  }
+
+  .column-headers span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .ingredient-row {
+    display: grid;
+    grid-template-columns: 64px 120px 1fr 110px 36px;
+    gap: 8px;
+    align-items: center;
+    position: relative;
+  }
+
+  .ingredient-row input,
+  .ingredient-row select {
+    padding: 9px 10px;
+    border: 1.5px solid var(--card-border);
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: white;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .ingredient-row input:focus,
+  .ingredient-row select:focus {
+    border-color: var(--terracotta-500);
+    box-shadow: 0 0 0 3px rgba(217,116,82,0.1);
+  }
+
+  .ingredient-row input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .ingredient-row select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23A09788' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+    cursor: pointer;
+  }
+
+  /* -- Combobox Input -- */
+  .combobox-wrapper {
+    position: relative;
+  }
+
+  .combobox-input {
+    width: 100%;
+    padding: 9px 10px;
+    padding-right: 28px;
+    border: 1.5px solid var(--card-border);
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: white;
+    outline: none;
+    transition: border-color 0.15s;
+    cursor: text;
+  }
+
+  .combobox-input:focus {
+    border-color: var(--terracotta-500);
+    box-shadow: 0 0 0 3px rgba(217,116,82,0.1);
+  }
+
+  .combobox-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  /* Search icon inside combobox */
+  .combobox-icon {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  /* -- Dropdown Menu (shown for one row as demo) -- */
+  .combobox-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 220px;
+    background: white;
+    border: 1.5px solid var(--card-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(61, 56, 51, 0.12);
+    z-index: 60;
+    overflow: hidden;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .dropdown-group-label {
+    padding: 6px 12px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--beige);
+    border-top: 1px solid var(--card-border);
+  }
+
+  .dropdown-group-label:first-child {
+    border-top: none;
+  }
+
+  .dropdown-item {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .dropdown-item:hover,
+  .dropdown-item.highlighted {
+    background: var(--terracotta-50);
+  }
+
+  .dropdown-item.selected {
+    background: var(--terracotta-100);
+    font-weight: 700;
+  }
+
+  .dropdown-item .unit-name {
+    color: var(--text-primary);
+  }
+
+  .dropdown-item .unit-long {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 6px;
+  }
+
+  .dropdown-item .group-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .group-tag.weight {
+    background: var(--terracotta-50);
+    color: var(--terracotta-600);
+  }
+
+  .group-tag.volume {
+    background: var(--sage-50);
+    color: var(--sage-500);
+  }
+
+  .group-tag.count {
+    background: var(--lavender-light);
+    color: var(--lavender);
+  }
+
+  /* special "no unit" item */
+  .dropdown-item.no-unit-item {
+    font-style: italic;
+    color: var(--text-muted);
+    border-top: 1px solid var(--card-border);
+  }
+
+  /* Keyboard hint */
+  .keyboard-hint {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--beige);
+    border-top: 1px solid var(--card-border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .keyboard-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 5px;
+    background: white;
+    border: 1px solid var(--card-border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    min-width: 20px;
+  }
+
+  /* No unit rows */
+  .ingredient-row.no-unit .combobox-input {
+    background: var(--beige);
+    color: var(--text-muted);
+    border-color: transparent;
+    font-style: italic;
+  }
+
+  .ingredient-row.no-unit input[type="number"] {
+    background: var(--beige);
+    color: var(--text-muted);
+    border-color: transparent;
+  }
+
+  .delete-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+
+  .delete-btn:hover {
+    background: #FEE2E2;
+    color: #DC2626;
+  }
+
+  .add-ingredient-btn {
+    width: 100%;
+    padding: 10px;
+    border: 2px dashed var(--card-border);
+    border-radius: 12px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .add-ingredient-btn:hover {
+    border-color: var(--terracotta-500);
+    color: var(--terracotta-600);
+    background: var(--terracotta-50);
+  }
+
+  .modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--card-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn-cancel {
+    padding: 10px 20px;
+    border: none;
+    background: var(--beige);
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-cancel:hover { background: var(--sand); }
+
+  .btn-save {
+    padding: 10px 24px;
+    border: none;
+    background: var(--terracotta-500);
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-save:hover {
+    background: var(--terracotta-600);
+    box-shadow: 0 4px 12px rgba(217,116,82,0.3);
+  }
+
+  .concept-description {
+    max-width: 700px;
+    width: 100%;
+    margin-top: 24px;
+    padding: 16px 20px;
+    background: var(--beige);
+    border-radius: 14px;
+    border: 1px solid var(--card-border);
+  }
+
+  .concept-description h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--lavender);
+    margin-bottom: 6px;
+  }
+
+  .concept-description p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+
+  /* Filtered state demo text */
+  .filter-demo {
+    padding: 4px 12px 8px;
+    font-size: 11px;
+    color: var(--terracotta-600);
+    font-weight: 600;
+    background: var(--terracotta-50);
+  }
+</style>
+</head>
+<body>
+
+<div class="concept-badge">Recipe Units — Final</div>
+<div class="modal-backdrop"></div>
+
+<div class="wrapper">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Edit Recipe</h2>
+      <button class="close-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="recipe-name-field">
+        <label>Recipe Name</label>
+        <input type="text" value="Pasta Bolognese" />
+      </div>
+
+      <div class="section-label">Ingredients</div>
+
+      <div class="column-headers">
+        <span>Qty</span>
+        <span>Unit</span>
+        <span>Ingredient</span>
+        <span>Category</span>
+        <span></span>
+      </div>
+
+      <div class="ingredient-list">
+
+        <!-- 1: ground beef — shows selected value "lb" -->
+        <div class="ingredient-row">
+          <input type="number" value="1" step="0.1" min="0" placeholder="Qty" />
+          <div class="combobox-wrapper">
+            <input type="text" class="combobox-input" value="lb" readonly />
+            <span class="combobox-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+          </div>
+          <input type="text" value="ground beef" placeholder="Ingredient" />
+          <select>
+            <option>Produce</option>
+            <option selected>Meat</option>
+            <option>Dairy</option>
+            <option>Pantry</option>
+            <option>Other</option>
+          </select>
+          <button class="delete-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- 2: garlic — ACTIVE / OPEN dropdown, user typed "cl" to filter -->
+        <div class="ingredient-row" style="z-index: 65;">
+          <input type="number" value="2" step="0.1" min="0" placeholder="Qty" />
+          <div class="combobox-wrapper">
+            <input type="text" class="combobox-input" value="cl" placeholder="Search unit..." style="border-color: var(--terracotta-500); box-shadow: 0 0 0 3px rgba(217,116,82,0.1);" />
+            <span class="combobox-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <!-- Dropdown showing filtered results for "cl" -->
+            <div class="combobox-dropdown">
+              <div class="filter-demo">Showing matches for "cl"</div>
+              <div class="dropdown-group-label">Count</div>
+              <div class="dropdown-item highlighted">
+                <span>
+                  <span class="unit-name"><strong>cl</strong>ove</span>
+                  <span class="unit-long">e.g., garlic</span>
+                </span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="keyboard-hint">
+                <kbd>&#8593;</kbd><kbd>&#8595;</kbd> navigate
+                <kbd>Enter</kbd> select
+                <kbd>Esc</kbd> close
+              </div>
+            </div>
+          </div>
+          <input type="text" value="garlic" placeholder="Ingredient" />
+          <select>
+            <option selected>Produce</option>
+            <option>Meat</option>
+            <option>Dairy</option>
+            <option>Pantry</option>
+            <option>Other</option>
+          </select>
+          <button class="delete-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- 3: pasta -->
+        <div class="ingredient-row">
+          <input type="number" value="400" step="0.1" min="0" placeholder="Qty" />
+          <div class="combobox-wrapper">
+            <input type="text" class="combobox-input" value="g" readonly />
+            <span class="combobox-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+          </div>
+          <input type="text" value="pasta" placeholder="Ingredient" />
+          <select>
+            <option>Produce</option>
+            <option>Meat</option>
+            <option>Dairy</option>
+            <option selected>Pantry</option>
+            <option>Other</option>
+          </select>
+          <button class="delete-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- 4: olive oil — showing full dropdown (not filtered) -->
+        <div class="ingredient-row" style="z-index: 64;">
+          <input type="number" value="2" step="0.1" min="0" placeholder="Qty" />
+          <div class="combobox-wrapper">
+            <input type="text" class="combobox-input" value="" placeholder="Search unit..." style="border-color: var(--terracotta-500); box-shadow: 0 0 0 3px rgba(217,116,82,0.1);" />
+            <span class="combobox-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <div class="combobox-dropdown">
+              <div class="dropdown-item no-unit-item">
+                <span class="unit-name">(no unit)</span>
+              </div>
+              <div class="dropdown-group-label">Weight</div>
+              <div class="dropdown-item">
+                <span class="unit-name">lb</span>
+                <span class="group-tag weight">Weight</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">oz</span>
+                <span class="group-tag weight">Weight</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">g</span>
+                <span class="group-tag weight">Weight</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">kg</span>
+                <span class="group-tag weight">Weight</span>
+              </div>
+              <div class="dropdown-group-label">Volume</div>
+              <div class="dropdown-item">
+                <span class="unit-name">cup</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item selected">
+                <span class="unit-name">tbsp</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">tsp</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">ml</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">l</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">fl oz</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">quart</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">pint</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">gallon</span>
+                <span class="group-tag volume">Volume</span>
+              </div>
+              <div class="dropdown-group-label">Count</div>
+              <div class="dropdown-item">
+                <span class="unit-name">piece</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">clove</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">slice</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">bunch</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">can</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">package</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">head</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">stalk</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="dropdown-item">
+                <span class="unit-name">sprig</span>
+                <span class="group-tag count">Count</span>
+              </div>
+              <div class="keyboard-hint">
+                <kbd>&#8593;</kbd><kbd>&#8595;</kbd> navigate
+                <kbd>Enter</kbd> select
+                <kbd>Esc</kbd> close
+              </div>
+            </div>
+          </div>
+          <input type="text" value="olive oil" placeholder="Ingredient" />
+          <select>
+            <option>Produce</option>
+            <option>Meat</option>
+            <option>Dairy</option>
+            <option selected>Pantry</option>
+            <option>Other</option>
+          </select>
+          <button class="delete-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- 5: crushed tomatoes -->
+        <div class="ingredient-row">
+          <input type="number" value="1" step="0.1" min="0" placeholder="Qty" />
+          <div class="combobox-wrapper">
+            <input type="text" class="combobox-input" value="can" readonly />
+            <span class="combobox-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+          </div>
+          <input type="text" value="crushed tomatoes" placeholder="Ingredient" />
+          <select>
+            <option>Produce</option>
+            <option>Meat</option>
+            <option>Dairy</option>
+            <option selected>Pantry</option>
+            <option>Other</option>
+          </select>
+          <button class="delete-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- 6: salt (no unit) -->
+        <div class="ingredient-row no-unit">
+          <input type="number" value="" step="0.1" min="0" placeholder="--" disabled />
+          <div class="combobox-wrapper">
+            <input type="text" class="combobox-input" value="(none)" readonly />
+            <span class="combobox-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+          </div>
+          <input type="text" value="salt" placeholder="Ingredient" />
+          <select>
+            <option>Produce</option>
+            <option>Meat</option>
+            <option>Dairy</option>
+            <option selected>Pantry</option>
+            <option>Other</option>
+          </select>
+          <button class="delete-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- 7: pepper (no unit) -->
+        <div class="ingredient-row no-unit">
+          <input type="number" value="" step="0.1" min="0" placeholder="--" disabled />
+          <div class="combobox-wrapper">
+            <input type="text" class="combobox-input" value="(none)" readonly />
+            <span class="combobox-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+          </div>
+          <input type="text" value="pepper" placeholder="Ingredient" />
+          <select>
+            <option>Produce</option>
+            <option>Meat</option>
+            <option>Dairy</option>
+            <option selected>Pantry</option>
+            <option>Other</option>
+          </select>
+          <button class="delete-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+      </div>
+
+      <button class="add-ingredient-btn">+ Add Ingredient</button>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel">Cancel</button>
+      <button class="btn-save">Update Recipe</button>
+    </div>
+  </div>
+
+  <div class="concept-description">
+    <h3>Recipe Units — Final: Smart Search Combobox</h3>
+    <p>
+      A searchable combobox that replaces the native select. Users can click to browse all units (shown grouped with color-coded
+      category tags), or start typing to instantly filter ("tb" narrows to "tbsp", "cl" narrows to "clove"). Full keyboard
+      navigation with arrow keys, Enter to select, Esc to close. The "(no unit)" option sits at the top of the full list.
+      Two states are shown above: row 2 demonstrates a filtered search for "cl", and row 4 shows the full unfiltered dropdown.
+      Pros: fastest for keyboard-heavy users, scales well if more units are added later, accessible with proper ARIA roles.
+      Cons: requires a custom combobox component (Headless UI Combobox or similar), more implementation effort than native select.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>

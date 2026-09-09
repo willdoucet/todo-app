@@ -1,0 +1,21 @@
+{
+  "branch": "prod-contract-freeze",
+  "completed": "2026-04-22",
+  "created_at": "2026-09-09T22:10:05Z",
+  "implementation_status": "shipped",
+  "key": "plan:prod-contract-freeze",
+  "kind": "plan",
+  "milestone": "M1",
+  "note_path": null,
+  "parent_epic": "v1-productionization",
+  "plan_kind": "feature",
+  "plan_mode": "feature",
+  "plan_path": ".agents/plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md",
+  "pr": "#25",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Contract freeze: doc alignment, branch protection, squash-merge",
+  "updated_at": "2026-09-09T22:10:05Z",
+  "workflow_status": "shipped"
+}

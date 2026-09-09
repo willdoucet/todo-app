@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ItemFormModal icon XOR — Option D (compact, tabs inline with icon square, file + URL)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --warm-cream: #FAF7F2;
+    --warm-beige: #F5F0E8;
+    --warm-sand: #EBE5DA;
+    --card-bg: #FFFDFB;
+    --card-border: #E8E2D9;
+    --terracotta-50: #FDF0EB;
+    --terracotta-100: #FCE4DE;
+    --terracotta-200: #FAC9BD;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #9A9287;
+    --sage-500: #8BA989;
+  }
+  html, body { background: var(--warm-cream); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+  /* Utility: the compact modal panel — matches existing FoodItemFormModal */
+  .modal-panel {
+    width: 100%;
+    max-width: 28rem; /* max-w-md */
+    border-radius: 1rem;
+    background: var(--card-bg);
+    padding: 1.5rem;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  }
+  /* Icon square — click target for BOTH modes, larger and prominent */
+  .icon-square {
+    width: 4rem;      /* 64px — larger, tile-sized */
+    height: 4rem;     /* 64px */
+    border-radius: 0.625rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 1px solid var(--card-border);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+  .icon-square:hover { border-color: var(--terracotta-500); }
+  .icon-square.dashed {
+    border-style: dashed;
+    border-width: 1.5px;
+    background: rgba(235, 229, 218, 0.35);
+  }
+  .icon-square.dashed:hover {
+    background: var(--terracotta-50);
+    border-color: var(--terracotta-200);
+  }
+  .icon-square .emoji-char { font-size: 2.25rem; line-height: 1; }
+
+  /* Segmented tab control — inline with icon square, compact height */
+  .tab-switch {
+    display: flex;
+    background: var(--warm-sand);
+    padding: 0.125rem;            /* 2px */
+    border-radius: 0.5rem;
+    gap: 0.0625rem;
+    height: 2rem;                 /* 32px — shorter */
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .tab-switch button {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0 0.5rem;
+    font-size: 0.6875rem;         /* 11px */
+    font-weight: 500;
+    color: var(--text-secondary);
+    border-radius: 0.375rem;
+    transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .tab-switch button[aria-selected="true"] {
+    background: var(--card-bg);
+    color: var(--text-primary);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.06);
+  }
+  .tab-switch button[aria-selected="false"]:hover { color: var(--text-primary); }
+  .tab-icon { width: 0.75rem; height: 0.75rem; flex-shrink: 0; }
+  .tab-emoji { font-size: 0.75rem; line-height: 1; }
+
+  /* URL input row (appears in Custom image mode) */
+  .url-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-left: 4.5rem;         /* align under the tabs, past the 64px square + gap */
+  }
+  .url-input {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.4375rem 0.625rem 0.4375rem 1.875rem;  /* room for leading icon */
+    font-size: 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--card-border);
+    background: #fff;
+    color: var(--text-primary);
+  }
+  .url-input::placeholder { color: var(--text-muted); }
+  .url-input:focus { outline: none; box-shadow: 0 0 0 2px var(--terracotta-500); border-color: transparent; }
+
+  .url-wrap { position: relative; flex: 1 1 0; min-width: 0; }
+  .url-wrap svg { position: absolute; left: 0.625rem; top: 50%; transform: translateY(-50%); width: 0.75rem; height: 0.75rem; color: var(--text-muted); pointer-events: none; }
+</style>
+</head>
+<body>
+  <!-- Faded page chrome -->
+  <div class="fixed inset-0 flex opacity-30 pointer-events-none">
+    <aside class="w-16 border-r border-[var(--card-border)] bg-[var(--warm-beige)]"></aside>
+    <main class="flex-1 max-w-5xl mx-auto px-6 py-6">
+      <h1 class="text-2xl font-bold">Food Items</h1>
+    </main>
+  </div>
+
+  <div class="relative pt-10 pb-6 px-8">
+    <p class="text-xs uppercase tracking-[0.12em] text-[var(--text-muted)] font-semibold mb-1">Mockup — Option D (v2)</p>
+    <h1 class="text-xl font-semibold text-[var(--text-primary)]">Food Item Modal · Icon XOR</h1>
+    <p class="text-sm text-[var(--text-secondary)] mt-1 max-w-xl">
+      Compact modal based on the existing <code class="text-xs bg-[var(--warm-sand)] px-1 py-0.5 rounded">FoodItemFormModal</code>.
+      The icon square and the tab switcher share the same row. Custom image mode supports
+      <strong>both file upload and URL paste</strong> — click the square to browse/upload a file,
+      or type/paste a URL in the input that appears below the tabs.
+    </p>
+  </div>
+
+  <!-- Two modals side by side, each showing one tab state -->
+  <div class="relative px-8 pb-16">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+
+      <!-- ===================== STATE 1: EMOJI TAB ACTIVE ===================== -->
+      <div>
+        <p class="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold mb-2">State 1 · Emoji tab active</p>
+        <div class="modal-panel relative">
+          <!-- Header -->
+          <div class="flex justify-between items-center mb-5">
+            <h2 class="text-lg font-semibold text-[var(--text-primary)]">New Food Item</h2>
+            <button class="text-[var(--text-muted)] hover:text-[var(--text-secondary)] p-1 rounded-lg hover:bg-[var(--warm-beige)]" aria-label="Close">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <form class="space-y-4" onsubmit="return false;">
+            <!-- Name -->
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Name</label>
+              <input type="text" value="Whole milk"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-[var(--card-border)] bg-white text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--terracotta-500)]"
+              />
+            </div>
+
+            <!-- ICON SECTION: square and tabs share the row -->
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Icon</label>
+              <div class="flex items-center gap-2">
+                <!-- Icon square (filled emoji). Clicking opens picker. -->
+                <button type="button" class="icon-square" aria-label="Change emoji">
+                  <span class="emoji-char">🥛</span>
+                </button>
+
+                <!-- Tab switcher, inline -->
+                <div class="tab-switch" role="tablist" aria-label="Icon source">
+                  <button type="button" role="tab" aria-selected="true">
+                    <span class="tab-emoji">😀</span>
+                    Emoji
+                  </button>
+                  <button type="button" role="tab" aria-selected="false">
+                    <svg class="tab-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Custom image
+                  </button>
+                </div>
+              </div>
+              <p class="text-[0.6875rem] text-[var(--text-muted)] mt-1.5 pl-[4.5rem]">Click the square to open the emoji picker.</p>
+            </div>
+
+            <!-- Category (full width) -->
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Category</label>
+              <select class="w-full h-[42px] px-3 text-sm rounded-lg border border-[var(--card-border)] bg-white text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--terracotta-500)]">
+                <option>Dairy</option>
+                <option>Fruit</option>
+                <option>Vegetable</option>
+                <option>Protein</option>
+                <option>Grain</option>
+              </select>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-2 pt-2">
+              <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-[var(--terracotta-500)] hover:bg-[var(--terracotta-600)] text-white transition-colors">
+                Create
+              </button>
+              <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg text-[var(--text-secondary)] hover:bg-[var(--warm-beige)] transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ===================== STATE 2: CUSTOM IMAGE TAB ACTIVE ===================== -->
+      <div>
+        <p class="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold mb-2">State 2 · Custom image tab active</p>
+        <div class="modal-panel relative">
+          <!-- Header -->
+          <div class="flex justify-between items-center mb-5">
+            <h2 class="text-lg font-semibold text-[var(--text-primary)]">New Food Item</h2>
+            <button class="text-[var(--text-muted)] hover:text-[var(--text-secondary)] p-1 rounded-lg hover:bg-[var(--warm-beige)]" aria-label="Close">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <form class="space-y-4" onsubmit="return false;">
+            <!-- Name -->
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Name</label>
+              <input type="text" value="Whole milk"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-[var(--card-border)] bg-white text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--terracotta-500)]"
+              />
+            </div>
+
+            <!-- ICON SECTION: square + tabs inline, URL row below -->
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Icon</label>
+              <div class="flex items-center gap-2">
+                <!-- Dashed upload square. Clicking opens file picker. -->
+                <button type="button" class="icon-square dashed" aria-label="Upload custom image from computer">
+                  <div class="flex flex-col items-center gap-0.5 text-[var(--text-muted)]">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    <span class="text-[0.625rem] leading-none">Upload</span>
+                  </div>
+                </button>
+
+                <!-- Tab switcher (Custom image active) -->
+                <div class="tab-switch" role="tablist" aria-label="Icon source">
+                  <button type="button" role="tab" aria-selected="false">
+                    <span class="tab-emoji">😀</span>
+                    Emoji
+                  </button>
+                  <button type="button" role="tab" aria-selected="true">
+                    <svg class="tab-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Custom image
+                  </button>
+                </div>
+              </div>
+
+              <!-- URL paste input row (only shown when Custom image tab active) -->
+              <div class="url-row">
+                <div class="url-wrap">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                  </svg>
+                  <input type="url" class="url-input w-full" placeholder="…or paste an image URL" />
+                </div>
+              </div>
+              <p class="text-[0.6875rem] text-[var(--text-muted)] mt-1.5 pl-[4.5rem]">
+                Click the square to upload from your computer.
+              </p>
+            </div>
+
+            <!-- Category -->
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Category</label>
+              <select class="w-full h-[42px] px-3 text-sm rounded-lg border border-[var(--card-border)] bg-white text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--terracotta-500)]">
+                <option>Dairy</option>
+                <option>Fruit</option>
+                <option>Vegetable</option>
+                <option>Protein</option>
+                <option>Grain</option>
+              </select>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-2 pt-2">
+              <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-[var(--terracotta-500)] hover:bg-[var(--terracotta-600)] text-white transition-colors">
+                Create
+              </button>
+              <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg text-[var(--text-secondary)] hover:bg-[var(--warm-beige)] transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================ BONUS: filled custom-image state + notes ================ -->
+    <div class="max-w-5xl mx-auto mt-12">
+      <p class="text-xs uppercase tracking-wide text-[var(--text-muted)] font-semibold mb-2">State 3 · After custom image uploaded (for reference)</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="modal-panel relative">
+          <div class="flex justify-between items-center mb-5">
+            <h2 class="text-lg font-semibold text-[var(--text-primary)]">Edit Food Item</h2>
+            <button class="text-[var(--text-muted)] hover:text-[var(--text-secondary)] p-1 rounded-lg hover:bg-[var(--warm-beige)]" aria-label="Close">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <form class="space-y-4" onsubmit="return false;">
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Name</label>
+              <input type="text" value="Whole milk"
+                class="w-full px-3 py-2 text-sm rounded-lg border border-[var(--card-border)] bg-white text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--terracotta-500)]"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Icon</label>
+              <div class="flex items-center gap-2">
+                <!-- Filled custom image thumbnail -->
+                <div class="relative group" style="flex-shrink:0;">
+                  <button type="button" class="icon-square" aria-label="Change uploaded image"
+                    style="background-image: linear-gradient(135deg, #F5F0E8 0%, #EBE5DA 100%); overflow: hidden; padding: 0;">
+                    <svg viewBox="0 0 40 40" class="w-full h-full">
+                      <rect x="6" y="12" width="28" height="24" rx="2" fill="#FFFDFB" stroke="#E8E2D9" stroke-width="1.5"/>
+                      <path d="M 6 12 L 14 4 L 34 4 L 34 12 Z" fill="#FCE4DE" stroke="#E8E2D9" stroke-width="1.5" stroke-linejoin="round"/>
+                      <rect x="11" y="20" width="18" height="3" rx="0.5" fill="#D97452"/>
+                      <rect x="11" y="26" width="12" height="2" rx="0.5" fill="#9A9287"/>
+                    </svg>
+                  </button>
+                  <button type="button"
+                    class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[var(--text-primary)] text-white flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label="Remove image">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div class="tab-switch" role="tablist" aria-label="Icon source">
+                  <button type="button" role="tab" aria-selected="false">
+                    <span class="tab-emoji">😀</span>
+                    Emoji
+                  </button>
+                  <button type="button" role="tab" aria-selected="true">
+                    <svg class="tab-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Custom image
+                  </button>
+                </div>
+              </div>
+
+              <!-- URL row still available (empty) — user can still paste a different URL to replace -->
+              <div class="url-row">
+                <div class="url-wrap">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                  </svg>
+                  <input type="url" class="url-input w-full" placeholder="…or paste an image URL" />
+                </div>
+              </div>
+              <p class="text-[0.6875rem] text-[var(--text-muted)] mt-1.5 pl-[4.5rem]">
+                <span class="text-[var(--sage-500)]">●</span> milk-carton.png uploaded · hover the square to remove
+              </p>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-[var(--text-secondary)] mb-1">Category</label>
+              <select class="w-full h-[42px] px-3 text-sm rounded-lg border border-[var(--card-border)] bg-white text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--terracotta-500)]">
+                <option>Dairy</option>
+              </select>
+            </div>
+
+            <div class="flex gap-2 pt-2">
+              <button type="submit" class="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-[var(--terracotta-500)] hover:bg-[var(--terracotta-600)] text-white transition-colors">
+                Save Changes
+              </button>
+              <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg text-[var(--text-secondary)] hover:bg-[var(--warm-beige)] transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Design notes -->
+        <div class="rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] p-5 text-sm text-[var(--text-secondary)] leading-relaxed">
+          <p class="text-xs uppercase tracking-wide font-semibold text-[var(--text-muted)] mb-3">Design notes</p>
+          <ul class="space-y-2.5">
+            <li>
+              <strong class="text-[var(--text-primary)]">Single row for icon + tabs.</strong>
+              Square and tabs share one 42px-tall row. Tabs are 11px/tight padding.
+              Total added height over the current modal is one row.
+            </li>
+            <li>
+              <strong class="text-[var(--text-primary)]">Two paths into Custom image.</strong>
+              <em>File upload</em> — click the square. <em>URL paste</em> — type into
+              the input that appears below the tabs. Both write the same
+              <code class="text-xs bg-[var(--warm-sand)] px-1 py-0.5 rounded">icon_url</code> field.
+            </li>
+            <li>
+              <strong class="text-[var(--text-primary)]">URL input is contextual.</strong>
+              It only renders when the Custom image tab is active. In Emoji mode it disappears.
+            </li>
+            <li>
+              <strong class="text-[var(--text-primary)]">XOR stays visual.</strong>
+              One square holds one thing. Switching tabs with content already set triggers
+              the plan's discard-warning. Matches backend XOR constraint.
+            </li>
+            <li>
+              <strong class="text-[var(--text-primary)]">Keyboard & a11y.</strong>
+              Tabs use <code class="text-xs bg-[var(--warm-sand)] px-1 py-0.5 rounded">role="tablist"</code>
+              + arrow keys. Square + URL input are separate tab stops. URL input has
+              <code class="text-xs bg-[var(--warm-sand)] px-1 py-0.5 rounded">type="url"</code> for native validation.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

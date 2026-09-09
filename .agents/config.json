@@ -1,0 +1,184 @@
+{
+  "default_branch": "master",
+  "design_watched_files": [
+    ".agents/docs/FRONTEND_GUIDELINES.md",
+    "frontend/src/index.css",
+    "frontend/src/constants/familyColors.js"
+  ],
+  "doc_guard_mode": "pr-strict",
+  "doc_map": {
+    "exempt": [
+      "**/tests/**",
+      "**/test_*.py",
+      "**/*.test.*",
+      "**/*.spec.*",
+      "**/*.lock",
+      "**/uv.lock",
+      "**/package-lock.json",
+      ".agents/**",
+      ".claude/**",
+      ".grok/**",
+      ".cursor/**",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "README.md",
+      ".gitignore",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.svg",
+      "**/*.ico",
+      "frontend/index.html",
+      "frontend/public/**",
+      "frontend/dist/**",
+      "frontend/test-results/**",
+      "frontend/mockups/**",
+      "backend/stock_icons/**",
+      "frontend/README.md",
+      "*.md",
+      "screenshots/**",
+      "prompts/**",
+      "node_modules/**",
+      ".prettierrc",
+      ".python-version",
+      "**/.dockerignore",
+      "**/.gitignore",
+      "**/__init__.py",
+      "**/.vrt-token"
+    ],
+    "rules": [
+      {
+        "doc": "BACKEND_STRUCTURE.md",
+        "paths": [
+          "backend/app/models.py",
+          "backend/alembic/**"
+        ],
+        "section": "Database Schema"
+      },
+      {
+        "doc": "BACKEND_STRUCTURE.md",
+        "paths": [
+          "backend/app/routes/**",
+          "backend/app/main.py",
+          "backend/app/uploads.py"
+        ],
+        "section": "API Endpoints"
+      },
+      {
+        "doc": "BACKEND_STRUCTURE.md",
+        "paths": [
+          "backend/app/schemas.py"
+        ],
+        "section": "Data Validation"
+      },
+      {
+        "doc": "BACKEND_STRUCTURE.md",
+        "paths": [
+          "backend/app/crud_*.py",
+          "backend/app/services/**",
+          "backend/app/tasks.py",
+          "backend/app/celery_app.py",
+          "backend/app/storage/**",
+          "backend/app/auth/**",
+          "backend/app/utils/**",
+          "backend/app/database.py",
+          "backend/app/constants/**"
+        ],
+        "section": "Code Organization"
+      },
+      {
+        "doc": "APP_FLOW.md",
+        "paths": [
+          "frontend/src/pages/**",
+          "frontend/src/RootLayout.jsx",
+          "frontend/src/main.jsx"
+        ],
+        "section": "Screen Inventory"
+      },
+      {
+        "doc": "FRONTEND_STRUCTURE.md",
+        "paths": [
+          "frontend/src/components/**",
+          "frontend/src/hooks/**",
+          "frontend/src/lib/**",
+          "frontend/src/contexts/**"
+        ],
+        "section": "Directory Overview"
+      },
+      {
+        "doc": "FRONTEND_GUIDELINES.md",
+        "paths": [
+          "frontend/src/index.css",
+          "frontend/src/constants/familyColors.js",
+          "frontend/style-guide.html"
+        ],
+        "section": "Color Palette"
+      },
+      {
+        "doc": "TECH_STACK.md",
+        "paths": [
+          "backend/pyproject.toml",
+          "frontend/package.json"
+        ],
+        "section": "Dependencies"
+      },
+      {
+        "doc": "TECH_STACK.md",
+        "paths": [
+          "frontend/vite.config.js",
+          "frontend/vitest.config.js",
+          "frontend/playwright.config.js",
+          "frontend/eslint.config.js",
+          "frontend/knip.json",
+          "backend/alembic.ini"
+        ],
+        "section": "Development Tools"
+      },
+      {
+        "doc": "development-commands.md",
+        "paths": [
+          "backend/docker-compose.yml",
+          "backend/Dockerfile",
+          "frontend/Dockerfile",
+          "backend/.env.example",
+          "backend/init-test-db.sh"
+        ],
+        "section": "Full Stack"
+      },
+      {
+        "doc": "TECH_STACK.md",
+        "paths": [
+          "backend/fly.toml",
+          "frontend/vercel.json",
+          "infra/**"
+        ],
+        "section": "Infrastructure"
+      },
+      {
+        "doc": "TECH_STACK.md",
+        "paths": [
+          ".github/workflows/**"
+        ],
+        "section": "CI/CD Pipeline"
+      }
+    ]
+  },
+  "framework_version": "1.0.0",
+  "layout": {
+    "backend_dir": "backend",
+    "frontend_dir": "frontend"
+  },
+  "modules": {
+    "design_sync": true,
+    "learning": true,
+    "learning_summaries": true
+  },
+  "paths": {
+    "docs": ".agents/docs",
+    "plans": ".agents/plans",
+    "state": ".agents/state"
+  },
+  "project_name": "todo-app",
+  "project_shape": "web-split",
+  "schema_version": 1,
+  "vault_path": "todo-app-notes"
+}

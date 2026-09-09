@@ -1,0 +1,21 @@
+{
+  "branch": "prod-deploy-skeleton",
+  "completed": "2026-05-01",
+  "created_at": "2026-09-09T22:10:06Z",
+  "implementation_status": "shipped",
+  "key": "plan:prod-deploy-skeleton",
+  "kind": "plan",
+  "milestone": "M2",
+  "note_path": null,
+  "parent_epic": "v1-productionization",
+  "plan_kind": "feature",
+  "plan_mode": "feature",
+  "plan_path": ".agents/plans/features/prod-deploy-skeleton/prod-deploy-skeleton-plan-20260422-214657.md",
+  "pr": "#26",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Deploy skeleton: Fly, Upstash, R2, Vercel, DNS, healthz, edge gate, plumbing test",
+  "updated_at": "2026-09-09T22:10:06Z",
+  "workflow_status": "shipped"
+}

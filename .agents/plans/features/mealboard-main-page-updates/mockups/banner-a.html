@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banner A — Gradient Title + Refined Selector</title>
+<style>
+  :root {
+    --warm-cream: #FAF7F2;
+    --warm-beige: #F5F0E8;
+    --warm-sand: #EBE5DA;
+    --card-bg: #FFFDFB;
+    --card-border: #E8E2D9;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --terracotta-50: #FFF5F0;
+    --peach-100: #FFE8DF;
+    --peach-200: #FFD4C4;
+    --peach: #E8927C;
+    --amber: #F5A623;
+    --sage: #6B8F71;
+    --sage-light: #EDF7EE;
+    --amber-light: #FFF8E7;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #9A9287;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    background: var(--warm-cream);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ============================================================
+     APP CHROME — sidebar (80px) + mealboard nav (224px) = 304px
+     ============================================================ */
+  .app-sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: 80px;
+    background: var(--warm-sand);
+    border-right: 1px solid var(--card-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 0;
+    gap: 8px;
+    z-index: 10;
+  }
+  .sb-item {
+    width: 48px; height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .sb-item.active {
+    background: var(--peach-100);
+    color: var(--terracotta-600);
+  }
+  .sb-item svg { width: 22px; height: 22px; }
+
+  .mb-nav {
+    position: fixed;
+    left: 80px; top: 0; bottom: 0;
+    width: 224px;
+    background: var(--card-bg);
+    border-right: 1px solid var(--card-border);
+    padding: 24px 16px;
+    z-index: 10;
+  }
+  .mb-nav-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding: 0 8px;
+  }
+  .mb-nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-bottom: 2px;
+  }
+  .mb-nav-item.active {
+    background: var(--peach-100);
+    color: var(--terracotta-600);
+    font-weight: 600;
+  }
+  .mb-nav-item svg { width: 18px; height: 18px; }
+
+  /* ============================================================
+     MAIN CONTENT AREA (offset by sidebar + nav)
+     ============================================================ */
+  .main-content {
+    margin-left: 304px;
+    min-height: 100vh;
+  }
+
+  /* ============================================================
+     BANNER — Direction A: Gradient title + refined segmented selector
+     ============================================================ */
+  .banner {
+    background: rgba(255, 253, 251, 0.5);
+    border-bottom: 1px solid var(--card-border);
+    padding: 16px 32px;
+  }
+  .banner-inner {
+    display: flex;
+    align-items: center;
+    max-width: 1280px;
+  }
+  .banner-title {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    background: linear-gradient(135deg, #D97452, #E8927C, #F5A623);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+  }
+  .banner-spacer { flex: 1; }
+
+  /* Segmented pill selector — 4 segments joined by divider lines */
+  .week-selector {
+    display: inline-flex;
+    align-items: stretch;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    overflow: hidden;
+    height: 36px;
+  }
+  .ws-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .ws-btn:hover {
+    background: var(--warm-beige);
+    color: var(--terracotta-600);
+  }
+  .ws-btn svg { width: 16px; height: 16px; }
+
+  .ws-range {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+
+  .ws-today {
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--terracotta-500);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.02em;
+    transition: background 120ms ease;
+  }
+  .ws-today:hover { background: var(--terracotta-50); }
+
+  .ws-divider {
+    width: 1px;
+    background: var(--card-border);
+    margin: 6px 0;
+  }
+
+  /* ============================================================
+     FAMILY STRIP + SHOPPING CARD (below banner)
+     ============================================================ */
+  .top-bar {
+    display: flex; gap: 12px;
+    padding: 12px 32px;
+    align-items: center;
+  }
+  .family-strip {
+    display: flex; gap: 8px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 8px 12px;
+    flex: 1;
+    align-items: center;
+  }
+  .fs-label {
+    font-size: 11px; font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding-right: 4px;
+  }
+  .fm-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px 4px 4px;
+    border-radius: 999px;
+    background: var(--warm-beige);
+    font-size: 12px; font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .fm-avatar {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: white;
+  }
+  .shop-card {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .shop-card .shop-count { color: var(--terracotta-500); font-weight: 700; }
+
+  /* ============================================================
+     SWIMLANES (truncated preview)
+     ============================================================ */
+  .swimlanes { padding: 12px 32px 32px; }
+  .swimlane {
+    display: grid;
+    grid-template-columns: 100px repeat(7, 1fr);
+    border-radius: 16px;
+    border: 1px solid;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .swimlane.breakfast {
+    background: linear-gradient(135deg, #FFF8E7, #FFF0CC);
+    border-color: #FDDF8E;
+  }
+  .swimlane.lunch {
+    background: linear-gradient(135deg, #EDF7EE, #DCEEDD);
+    border-color: #B8D8BB;
+  }
+  .lane-label {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 12px 8px;
+    border-right: 1px solid rgba(0,0,0,0.04);
+    font-size: 10px; font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .swimlane.breakfast .lane-label { color: #7A5100; }
+  .swimlane.lunch .lane-label { color: #2D5E32; }
+  .lane-cell {
+    padding: 8px;
+    border-right: 1px solid rgba(0,0,0,0.03);
+    min-height: 64px;
+  }
+  .lane-cell:last-child { border-right: none; }
+  .meal-card-mini {
+    background: white;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .meal-card-mini .meta {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Concept badge */
+  .concept-badge {
+    position: fixed;
+    bottom: 16px; right: 16px;
+    background: var(--text-primary);
+    color: var(--warm-cream);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    z-index: 100;
+    font-feature-settings: "ss01";
+  }
+</style>
+</head>
+<body>
+
+<!-- APP SIDEBAR (80px) -->
+<nav class="app-sidebar">
+  <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+  <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+  <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+  <div class="sb-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2"/><path d="M7 2v20M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg></div>
+  <div class="sb-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+</nav>
+
+<!-- MEALBOARD NAV (224px) -->
+<aside class="mb-nav">
+  <div class="mb-nav-title">Mealboard</div>
+  <div class="mb-nav-item active">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+    Meal Planner
+  </div>
+  <div class="mb-nav-item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    Recipes
+  </div>
+  <div class="mb-nav-item">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
+    Shopping
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main-content">
+  <!-- BANNER: Direction A — Gradient title + Refined segmented pill -->
+  <header class="banner">
+    <div class="banner-inner">
+      <h1 class="banner-title">What's Cooking?</h1>
+      <div class="banner-spacer"></div>
+      <div class="week-selector">
+        <button class="ws-btn" aria-label="Previous week">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="ws-divider"></div>
+        <span class="ws-range">Apr 1 – 7</span>
+        <div class="ws-divider"></div>
+        <button class="ws-today">Today</button>
+        <div class="ws-divider"></div>
+        <button class="ws-btn" aria-label="Next week">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Family strip + shopping card -->
+  <div class="top-bar">
+    <div class="family-strip">
+      <span class="fs-label">Family</span>
+      <div class="fm-pill"><div class="fm-avatar" style="background:#D4695A">W</div>Will</div>
+      <div class="fm-pill"><div class="fm-avatar" style="background:#5A80B0">D</div>Dad</div>
+      <div class="fm-pill"><div class="fm-avatar" style="background:#BFA04A">C</div>Celine</div>
+      <div class="fm-pill"><div class="fm-avatar" style="background:#5E9E6B">E</div>Emma</div>
+      <div class="fm-pill"><div class="fm-avatar" style="background:#B06085">L</div>Liam</div>
+    </div>
+    <div class="shop-card">🛒 <span class="shop-count">12</span> items in shopping list</div>
+  </div>
+
+  <!-- Swimlane preview -->
+  <div class="swimlanes">
+    <!-- Day headers (dummy row for context) -->
+    <div class="swimlane breakfast">
+      <div class="lane-label">☀ Breakfast</div>
+      <div class="lane-cell"><div class="meal-card-mini">Oatmeal<div class="meta">🕐 15m</div></div></div>
+      <div class="lane-cell"><div class="meal-card-mini">Pancakes<div class="meta">🕐 20m</div></div></div>
+      <div class="lane-cell"><div class="meal-card-mini">Toast & Eggs<div class="meta">🕐 10m</div></div></div>
+      <div class="lane-cell"></div>
+      <div class="lane-cell"><div class="meal-card-mini">Smoothie<div class="meta">🕐 5m</div></div></div>
+      <div class="lane-cell"></div>
+      <div class="lane-cell"></div>
+    </div>
+    <div class="swimlane lunch">
+      <div class="lane-label">🥪 Lunch</div>
+      <div class="lane-cell"><div class="meal-card-mini">Turkey Wrap</div></div>
+      <div class="lane-cell"></div>
+      <div class="lane-cell"><div class="meal-card-mini">Caesar Salad<div class="meta">🕐 15m</div></div></div>
+      <div class="lane-cell"><div class="meal-card-mini">Soup & Bread</div></div>
+      <div class="lane-cell"></div>
+      <div class="lane-cell"><div class="meal-card-mini">Leftovers</div></div>
+      <div class="lane-cell"></div>
+    </div>
+  </div>
+</main>
+
+<div class="concept-badge">Banner A — Gradient Title</div>
+
+</body>
+</html>

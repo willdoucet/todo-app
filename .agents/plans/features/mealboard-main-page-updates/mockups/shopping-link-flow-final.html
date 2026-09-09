@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopping Link Flow — Final</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FFF9F2;
+    --beige: #F8F0E5;
+    --sand: #EDE3D5;
+    --card-bg: #FFFFFF;
+    --card-border: #EDE5DC;
+    --terracotta-50: #FFF5F0;
+    --terracotta-100: #FCE4DE;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --peach-100: #FFE8DF;
+    --sage-50: #F4F7F4;
+    --sage-100: #E5EDE6;
+    --sage-200: #C8DBC9;
+    --sage-500: #6B9A70;
+    --sage-600: #588D5E;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #A09788;
+
+    --amber: #F5A623;
+    --amber-light: #FFF8E7;
+    --amber-border: #FDDF8E;
+    --sage-slot: #6B9A70;
+    --sage-light: #EDF7EE;
+    --sage-border: #B8D8BB;
+    --peach-slot: #E8927C;
+    --peach-light: #FFF0EC;
+    --peach-border: #FCC9B8;
+    --lavender: #A78BDB;
+    --lavender-light: #F6F0FF;
+    --lavender-border: #D4C9EC;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--cream);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    padding: 40px;
+  }
+
+  .concept-badge {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    background: #5A80B0;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(90,128,176,0.3);
+  }
+
+  .states-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 60px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .state-block {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .state-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #5A80B0;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  h2.section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--sand);
+  }
+
+  /* ─── MODAL SCENE WITH DIMMED MEALBOARD BACKGROUND ─── */
+  .modal-scene {
+    position: relative;
+    border-radius: 20px;
+    min-height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* Simplified mealboard swimlane grid behind modal */
+  .bg-mealboard {
+    position: absolute;
+    inset: 0;
+    background: var(--cream);
+    padding: 20px;
+    opacity: 0.5;
+    filter: blur(1px);
+    pointer-events: none;
+  }
+
+  .bg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .bg-header-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-primary);
+  }
+
+  .bg-header-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .bg-header-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--sand);
+  }
+
+  .bg-swimlane-grid {
+    display: grid;
+    grid-template-columns: 80px repeat(7, 1fr);
+    gap: 6px;
+  }
+
+  .bg-day-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 4px 0;
+  }
+
+  .bg-row-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding: 10px 6px;
+    display: flex;
+    align-items: center;
+  }
+
+  .bg-cell {
+    height: 44px;
+    border-radius: 10px;
+    border: 1.5px dashed var(--card-border);
+    background: rgba(255,255,255,0.4);
+  }
+
+  .bg-cell.filled {
+    border-style: solid;
+    background: var(--card-bg);
+    border-color: var(--card-border);
+  }
+
+  .bg-cell.filled-amber {
+    border-style: solid;
+    background: var(--amber-light);
+    border-color: var(--amber-border);
+  }
+
+  .bg-cell.filled-sage {
+    border-style: solid;
+    background: var(--sage-light);
+    border-color: var(--sage-border);
+  }
+
+  .bg-cell.filled-peach {
+    border-style: solid;
+    background: var(--peach-light);
+    border-color: var(--peach-border);
+  }
+
+  /* Overlay dimmer */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(61, 56, 51, 0.35);
+    backdrop-filter: blur(2px);
+    z-index: 1;
+    border-radius: 20px;
+  }
+
+  /* ─── MODAL ─── */
+  .modal {
+    position: relative;
+    z-index: 2;
+    background: var(--card-bg);
+    border-radius: 22px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow:
+      0 20px 60px rgba(0,0,0,0.12),
+      0 4px 16px rgba(0,0,0,0.06);
+    overflow: hidden;
+  }
+
+  .modal-header {
+    padding: 24px 28px 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .modal-header-text h3 {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  .modal-header-text p {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-top: 4px;
+  }
+
+  .modal-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: var(--beige);
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .modal-close:hover {
+    background: var(--sand);
+    color: var(--text-secondary);
+  }
+
+  .modal-close svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+  }
+
+  /* ─── STEP INDICATOR ─── */
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 28px 0;
+  }
+
+  .step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--sand);
+    transition: all 0.2s;
+  }
+
+  .step-dot.active {
+    background: var(--terracotta-500);
+    width: 24px;
+    border-radius: 4px;
+  }
+
+  .step-dot.done {
+    background: var(--sage-500);
+  }
+
+  /* ─── SEARCH BAR ─── */
+  .modal-search {
+    margin: 16px 28px 0;
+    position: relative;
+  }
+
+  .modal-search input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    border: 1.5px solid var(--card-border);
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--cream);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .modal-search input:focus {
+    border-color: var(--terracotta-500);
+  }
+
+  .modal-search input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .modal-search svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    stroke-width: 2;
+  }
+
+  /* ─── LIST ITEMS IN MODAL ─── */
+  .modal-list {
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .modal-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 2px solid transparent;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    width: 100%;
+  }
+
+  .modal-list-item:hover {
+    background: var(--beige);
+    border-color: var(--card-border);
+  }
+
+  .modal-list-item.selected {
+    background: var(--terracotta-50);
+    border-color: var(--terracotta-100);
+  }
+
+  .item-color {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid transparent;
+  }
+
+  .item-color.green { background: #6B9A70; }
+  .item-color.blue { background: #5A80B0; }
+  .item-color.terracotta { background: #D97452; }
+
+  .modal-list-item.selected .item-color {
+    border-color: white;
+    box-shadow: 0 0 0 2px var(--terracotta-500);
+  }
+
+  .item-info {
+    flex: 1;
+  }
+
+  .item-info .name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: block;
+  }
+
+  .item-info .meta {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .item-check {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--card-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .modal-list-item.selected .item-check {
+    background: var(--terracotta-500);
+    border-color: var(--terracotta-500);
+  }
+
+  .item-check svg {
+    width: 12px;
+    height: 12px;
+    color: white;
+    stroke-width: 3;
+    opacity: 0;
+  }
+
+  .modal-list-item.selected .item-check svg {
+    opacity: 1;
+  }
+
+  /* ─── MODAL DIVIDER ─── */
+  .modal-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 28px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .modal-divider::before,
+  .modal-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--card-border);
+  }
+
+  /* ─── MODAL ACTIONS ─── */
+  .modal-actions-row {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px;
+    margin-bottom: 4px;
+  }
+
+  .modal-action-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1.5px dashed var(--card-border);
+    border-radius: 14px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .modal-action-btn:hover {
+    border-color: var(--terracotta-500);
+    color: var(--terracotta-500);
+    background: var(--terracotta-50);
+    border-style: solid;
+  }
+
+  .modal-action-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+  }
+
+  /* ─── MODAL FOOTER ─── */
+  .modal-footer {
+    padding: 16px 28px 24px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .btn-cancel {
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-cancel:hover {
+    background: var(--beige);
+    color: var(--text-secondary);
+  }
+
+  .btn-confirm {
+    padding: 10px 24px;
+    background: var(--terracotta-500);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-confirm:hover {
+    background: var(--terracotta-600);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(217,116,82,0.25);
+  }
+
+  .btn-confirm:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* ─── EMPTY STATE ─── */
+  .modal-empty {
+    padding: 32px 28px;
+    text-align: center;
+  }
+
+  .modal-empty .empty-icon {
+    width: 72px;
+    height: 72px;
+    background: var(--terracotta-50);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+  }
+
+  .modal-empty .empty-icon svg {
+    width: 36px;
+    height: 36px;
+    color: var(--terracotta-500);
+    stroke-width: 1.5;
+  }
+
+  .modal-empty h4 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .modal-empty p {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+    max-width: 300px;
+    margin: 0 auto 20px;
+  }
+
+  .modal-empty .btn-primary-lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 28px;
+    background: var(--terracotta-500);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 14px;
+  }
+
+  .modal-empty .btn-primary-lg:hover {
+    background: var(--terracotta-600);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(217,116,82,0.25);
+  }
+
+  .modal-empty .btn-primary-lg svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
+  }
+
+  .modal-empty .icloud-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s;
+    border: none;
+    background: none;
+    font-family: inherit;
+  }
+
+  .modal-empty .icloud-link:hover {
+    color: var(--text-secondary);
+  }
+
+  .modal-empty .icloud-link svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 2.5;
+  }
+
+  /* ─── SUCCESS STATE ─── */
+  .modal-success {
+    padding: 36px 28px;
+    text-align: center;
+  }
+
+  .success-ring {
+    width: 64px;
+    height: 64px;
+    background: var(--sage-50);
+    border: 3px solid var(--sage-200);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    animation: successPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  @keyframes successPop {
+    0% { transform: scale(0.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes checkDraw {
+    0% { stroke-dashoffset: 24; }
+    100% { stroke-dashoffset: 0; }
+  }
+
+  .success-ring svg {
+    width: 30px;
+    height: 30px;
+    color: var(--sage-500);
+    stroke-width: 2.5;
+  }
+
+  .success-ring svg path {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 0;
+    animation: checkDraw 0.35s ease-out 0.25s both;
+  }
+
+  .modal-success h4 {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .modal-success .linked-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: var(--sage-50);
+    border: 1.5px solid var(--sage-200);
+    border-radius: 14px;
+    margin-bottom: 16px;
+  }
+
+  .modal-success .linked-pill .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #6B9A70;
+  }
+
+  .modal-success .linked-pill .label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--sage-600);
+  }
+
+  .modal-success .change-btn {
+    display: block;
+    margin: 0 auto;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--terracotta-500);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.15s;
+  }
+
+  .modal-success .change-btn:hover {
+    color: var(--terracotta-600);
+    text-decoration: underline;
+  }
+
+  .modal-footer-centered {
+    padding: 0 28px 24px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .btn-done {
+    padding: 10px 32px;
+    background: var(--sage-500);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-done:hover {
+    background: var(--sage-600);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(107,154,112,0.25);
+  }
+</style>
+</head>
+<body>
+
+<div class="concept-badge">SHOPPING LINK -- FINAL</div>
+
+<div class="states-grid">
+
+  <!-- ═══════════════════════════════════ STATE A ═══════════════════════════════════ -->
+  <div class="state-block">
+    <div class="state-label">State A -- Lists exist, none linked</div>
+    <h2 class="section-title">Choose from existing lists</h2>
+
+    <div class="modal-scene">
+      <!-- Dimmed mealboard background -->
+      <div class="bg-mealboard">
+        <div class="bg-header">
+          <span class="bg-header-title">Mealboard</span>
+          <div class="bg-header-dots"><span></span><span></span><span></span></div>
+        </div>
+        <div class="bg-swimlane-grid">
+          <div class="bg-day-label"></div>
+          <div class="bg-day-label">Mon</div>
+          <div class="bg-day-label">Tue</div>
+          <div class="bg-day-label">Wed</div>
+          <div class="bg-day-label">Thu</div>
+          <div class="bg-day-label">Fri</div>
+          <div class="bg-day-label">Sat</div>
+          <div class="bg-day-label">Sun</div>
+          <!-- Breakfast row -->
+          <div class="bg-row-label">Breakfast</div>
+          <div class="bg-cell filled-amber"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-amber"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-amber"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <!-- Lunch row -->
+          <div class="bg-row-label">Lunch</div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-sage"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-sage"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-sage"></div>
+          <div class="bg-cell"></div>
+          <!-- Dinner row -->
+          <div class="bg-row-label">Dinner</div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-peach"></div>
+          <!-- Snacks row -->
+          <div class="bg-row-label">Snacks</div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled"></div>
+          <div class="bg-cell"></div>
+        </div>
+      </div>
+      <div class="modal-overlay"></div>
+
+      <!-- Modal -->
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-header-text">
+            <h3>Link a shopping list</h3>
+            <p>Choose a list to track ingredients from your meals</p>
+          </div>
+          <button class="modal-close" aria-label="Close">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="step-indicator">
+          <div class="step-dot active"></div>
+          <div class="step-dot"></div>
+        </div>
+
+        <div class="modal-search">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" placeholder="Search lists...">
+        </div>
+
+        <div class="modal-list">
+          <button class="modal-list-item selected">
+            <span class="item-color green"></span>
+            <div class="item-info">
+              <span class="name">Groceries</span>
+              <span class="meta">12 items -- Last updated 2h ago</span>
+            </div>
+            <div class="item-check">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+          </button>
+          <button class="modal-list-item">
+            <span class="item-color blue"></span>
+            <div class="item-info">
+              <span class="name">Costco Run</span>
+              <span class="meta">5 items -- Last updated 1d ago</span>
+            </div>
+            <div class="item-check">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+          </button>
+          <button class="modal-list-item">
+            <span class="item-color terracotta"></span>
+            <div class="item-info">
+              <span class="name">Weekly Shop</span>
+              <span class="meta">8 items -- Last updated 3d ago</span>
+            </div>
+            <div class="item-check">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+          </button>
+        </div>
+
+        <div class="modal-divider">or</div>
+
+        <div class="modal-actions-row">
+          <button class="modal-action-btn">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Create new list
+          </button>
+          <button class="modal-action-btn">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Import from iCloud
+          </button>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel">Cancel</button>
+          <button class="btn-confirm">Link list</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════ STATE B ═══════════════════════════════════ -->
+  <div class="state-block">
+    <div class="state-label">State B -- No lists exist, empty state</div>
+    <h2 class="section-title">Empty state with create prompt</h2>
+
+    <div class="modal-scene">
+      <!-- Dimmed mealboard background -->
+      <div class="bg-mealboard">
+        <div class="bg-header">
+          <span class="bg-header-title">Mealboard</span>
+          <div class="bg-header-dots"><span></span><span></span><span></span></div>
+        </div>
+        <div class="bg-swimlane-grid">
+          <div class="bg-day-label"></div>
+          <div class="bg-day-label">Mon</div>
+          <div class="bg-day-label">Tue</div>
+          <div class="bg-day-label">Wed</div>
+          <div class="bg-day-label">Thu</div>
+          <div class="bg-day-label">Fri</div>
+          <div class="bg-day-label">Sat</div>
+          <div class="bg-day-label">Sun</div>
+          <div class="bg-row-label">Breakfast</div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-row-label">Lunch</div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-row-label">Dinner</div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+        </div>
+      </div>
+      <div class="modal-overlay"></div>
+
+      <!-- Modal -->
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-header-text">
+            <h3>Link a shopping list</h3>
+            <p>Choose a list to track ingredients from your meals</p>
+          </div>
+          <button class="modal-close" aria-label="Close">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="step-indicator">
+          <div class="step-dot active"></div>
+          <div class="step-dot"></div>
+        </div>
+
+        <div class="modal-empty">
+          <div class="empty-icon">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"/></svg>
+          </div>
+          <h4>No shopping lists yet</h4>
+          <p>Create your first list and it will automatically link to your mealboard</p>
+          <button class="btn-primary-lg">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Create your first list
+          </button>
+          <button class="icloud-link">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Import from iCloud
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════ STATE C ═══════════════════════════════════ -->
+  <div class="state-block">
+    <div class="state-label">State C -- Success, just linked</div>
+    <h2 class="section-title">Confirmation with success animation</h2>
+
+    <div class="modal-scene">
+      <!-- Dimmed mealboard background -->
+      <div class="bg-mealboard">
+        <div class="bg-header">
+          <span class="bg-header-title">Mealboard</span>
+          <div class="bg-header-dots"><span></span><span></span><span></span></div>
+        </div>
+        <div class="bg-swimlane-grid">
+          <div class="bg-day-label"></div>
+          <div class="bg-day-label">Mon</div>
+          <div class="bg-day-label">Tue</div>
+          <div class="bg-day-label">Wed</div>
+          <div class="bg-day-label">Thu</div>
+          <div class="bg-day-label">Fri</div>
+          <div class="bg-day-label">Sat</div>
+          <div class="bg-day-label">Sun</div>
+          <div class="bg-row-label">Breakfast</div>
+          <div class="bg-cell filled-amber"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-amber"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-amber"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-row-label">Lunch</div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-sage"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-sage"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-sage"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-row-label">Dinner</div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled-peach"></div>
+          <div class="bg-row-label">Snacks</div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell"></div>
+          <div class="bg-cell filled"></div>
+          <div class="bg-cell"></div>
+        </div>
+      </div>
+      <div class="modal-overlay"></div>
+
+      <!-- Modal -->
+      <div class="modal">
+        <div class="modal-header">
+          <div class="modal-header-text">
+            <h3>Link a shopping list</h3>
+          </div>
+          <button class="modal-close" aria-label="Close">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="step-indicator">
+          <div class="step-dot done"></div>
+          <div class="step-dot active"></div>
+        </div>
+
+        <div class="modal-success">
+          <div class="success-ring">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </div>
+          <h4>Shopping list linked!</h4>
+          <div class="linked-pill">
+            <span class="dot"></span>
+            <span class="label">Groceries</span>
+          </div>
+          <button class="change-btn">Change list</button>
+        </div>
+
+        <div class="modal-footer-centered">
+          <button class="btn-done">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

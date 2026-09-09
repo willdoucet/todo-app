@@ -1,0 +1,19 @@
+{
+  "branch": "lists-ui-update-inline-edits",
+  "completed": "2026-04-01",
+  "completed_approx": true,
+  "created_at": "2026-09-09T22:10:06Z",
+  "implementation_status": "shipped",
+  "key": "plan:lists-ui-update-inline-edits",
+  "kind": "plan",
+  "note": "backfilled at framework migration; branch merged before the registry existed",
+  "note_path": null,
+  "plan_kind": "feature",
+  "plan_mode": "feature",
+  "plan_path": ".agents/plans/features/lists-ui-update-inline-edits/lists-ui-update-inline-edits-plan-20260401-161442.md",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "updated_at": "2026-09-09T22:10:06Z",
+  "workflow_status": "shipped"
+}

@@ -1,0 +1,14 @@
+#!/bin/sh
+# commit-msg hook: run doc-guard against the staged changes and this message.
+# Installed by `framework init` via `git config core.hooksPath .agents/hooks`.
+# Bypass once with `git commit --no-verify`.
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+GUARD="$ROOT/.agents/bin/doc-guard"
+
+if [ ! -f "$GUARD" ] || ! command -v python3 >/dev/null 2>&1; then
+  echo "commit-msg: doc-guard skipped (needs $GUARD and python3)" >&2
+  exit 0
+fi
+
+exec python3 "$GUARD" --commit-msg "$1"

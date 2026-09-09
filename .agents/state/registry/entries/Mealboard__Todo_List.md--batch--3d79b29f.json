@@ -1,0 +1,20 @@
+{
+  "completed": "2026-04-18",
+  "created_at": "2026-09-09T22:03:40Z",
+  "implementation_status": "shipped",
+  "key": "Mealboard/Todo List.md#batch",
+  "kind": "note-batch",
+  "note_path": "Mealboard/Todo List.md",
+  "plan_mode": "batch-note",
+  "plan_path": ".agents/plans/features/mealboard-meal-card-polish/mealboard-meal-card-polish-plan-20260418-183015.md",
+  "registry_version": 3,
+  "review_status": [
+    "pending",
+    "eng-reviewed",
+    "design-reviewed"
+  ],
+  "source_tasks": [],
+  "task_count": 0,
+  "updated_at": "2026-09-09T22:03:40Z",
+  "workflow_status": "shipped"
+}

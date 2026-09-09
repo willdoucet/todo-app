@@ -1,0 +1,19 @@
+{
+  "branch": "mealboard-main-page-updates",
+  "completed": "2026-04-15",
+  "completed_approx": true,
+  "created_at": "2026-09-09T22:10:06Z",
+  "implementation_status": "shipped",
+  "key": "plan:mealboard-main-page-updates",
+  "kind": "plan",
+  "note": "backfilled at framework migration; branch merged before the registry existed",
+  "note_path": null,
+  "plan_kind": "feature",
+  "plan_mode": "feature",
+  "plan_path": ".agents/plans/features/mealboard-main-page-updates/mealboard-main-page-updates-plan-20260415-164719.md",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "updated_at": "2026-09-09T22:10:06Z",
+  "workflow_status": "shipped"
+}

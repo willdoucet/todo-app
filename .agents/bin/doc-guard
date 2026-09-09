@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""Doc-map enforcement: code changes in documented areas must come with their docs.
+
+Usage:
+    doc-guard --commit-msg <msgfile>     commit-msg hook: inspect staged files + message trailers
+    doc-guard --range <base>..<head>     CI/PR mode: every commit in the range, then the range as a whole
+    doc-guard --staged --dry-run         report what a commit of the index would do (never exits 1)
+    doc-guard --worktree [--dry-run]     branch commits + index + working tree vs the base branch;
+                                         exit 1 when an owning doc is untouched (review gate)
+    doc-guard --explain <path> [...]     print the doc-map owners of one or more paths (or `-` for stdin)
+    doc-guard --inventory                every tracked file grouped by owning (doc, section); unmapped last
+
+Trailers recognised in a commit message (one per line):
+    Docs: n/a - <reason>     no doc impact; the reason is required
+    Docs: later              feature branch only; never satisfies in --range mode
+
+Decision by config `doc_guard_mode`:
+    ci-only    the hook always passes silently (enforcement happens in --range mode)
+    strict     fail when an owning doc is untouched and there is no `Docs: n/a` trailer
+    pr-strict  as strict, but `Docs: later` also passes when not on the base branch
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _lib  # noqa: E402
+
+NA_RE = re.compile(r"^\s*Docs:\s*n/a\s*(?:-\s*(.*))?$", re.IGNORECASE)
+LATER_RE = re.compile(r"^\s*Docs:\s*later\s*$", re.IGNORECASE)
+
+FIX_HINT = """
+Fix one of:
+  - run /update-docs and stage the doc changes
+  - add a trailer:  Docs: n/a - <reason>      (no doc impact, recorded in history)
+  - add a trailer:  Docs: later               (feature branch only; CI requires the PR to resolve it)"""
+
+
+# --------------------------------------------------------------------------
+# Git and message parsing
+# --------------------------------------------------------------------------
+
+
+def changed_paths(name_status: str) -> list[str]:
+    """Added/modified/renamed/copied paths from `--name-status` output. Deleted paths are dropped."""
+    out = []
+    for line in name_status.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0]
+        if status.startswith("D"):
+            continue
+        out.append(parts[-1])  # renames/copies: the new path is last
+    return out
+
+
+def staged_paths(root: Path) -> list[str]:
+    return changed_paths(_lib.git(root, "diff", "--cached", "--name-status"))
+
+
+def worktree_paths(root: Path) -> list[str]:
+    """Paths changed vs HEAD (staged + unstaged) plus untracked files."""
+    out = changed_paths(_lib.git(root, "diff", "HEAD", "--name-status"))
+    untracked = _lib.git(root, "ls-files", "--others", "--exclude-standard")
+    out += [l for l in untracked.splitlines() if l.strip()]
+    return sorted(set(out))
+
+
+def commit_paths(root: Path, sha: str) -> list[str]:
+    return changed_paths(_lib.git(root, "show", "--name-status", "--format=", sha))
+
+
+def commit_message(root: Path, sha: str) -> str:
+    return _lib.git(root, "log", "-1", "--format=%B", sha)
+
+
+def commit_subject(root: Path, sha: str) -> str:
+    return _lib.git(root, "log", "-1", "--format=%s", sha)
+
+
+def parse_trailers(message: str) -> dict:
+    """{'na': bool, 'na_reason': str|None, 'na_missing_reason': bool, 'later': bool}"""
+    out = {"na": False, "na_reason": None, "na_missing_reason": False, "later": False}
+    for line in message.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        m = NA_RE.match(line)
+        if m:
+            reason = (m.group(1) or "").strip()
+            if reason:
+                out["na"] = True
+                out["na_reason"] = reason
+            else:
+                out["na_missing_reason"] = True
+            continue
+        if LATER_RE.match(line):
+            out["later"] = True
+    return out
+
+
+# --------------------------------------------------------------------------
+# Doc map evaluation
+# --------------------------------------------------------------------------
+
+
+def evaluate(cfg: dict, paths: list[str]) -> dict:
+    """Map changed paths onto owning docs.
+
+    Returns {"owners": {(doc, section): [paths]}, "touched": {doc}, "unmapped_dirs": [dir]}.
+    """
+    dm = cfg.get("doc_map", {})
+    exempt = dm.get("exempt", [])
+    mentioned = " ".join(" ".join(r.get("paths", [])) for r in dm.get("rules", [])) + " " + " ".join(exempt)
+    owners: dict[tuple[str, str], list[str]] = {}
+    unmapped: list[str] = []
+    for path in paths:
+        rules = _lib.doc_owners(cfg, path)
+        for rule in rules:
+            owners.setdefault((rule["doc"], rule.get("section", "")), []).append(path)
+        if rules or _lib.glob_match(path, exempt):
+            continue
+        top, sep, _rest = path.partition("/")
+        if sep and f"{top}/" not in mentioned and top not in unmapped:
+            unmapped.append(top)
+    all_docs = {rule["doc"] for rule in dm.get("rules", []) if rule.get("doc")}
+    touched = {doc for doc in all_docs if _lib.doc_rel(cfg, doc) in paths}
+    return {"owners": owners, "touched": touched, "unmapped_dirs": unmapped}
+
+
+def missing_docs(ev: dict) -> dict[tuple[str, str], list[str]]:
+    return {key: paths for key, paths in ev["owners"].items() if key[0] not in ev["touched"]}
+
+
+def print_unmapped(ev: dict) -> None:
+    for top in ev["unmapped_dirs"]:
+        print(f"doc-guard: note: unmapped area '{top}/' — add it to doc_map.rules or doc_map.exempt", file=sys.stderr)
+
+
+def fmt_missing(cfg: dict, missing: dict, indent: str = "  ") -> list[str]:
+    rows = []
+    for (doc, section), paths in sorted(missing.items()):
+        for path in sorted(set(paths)):
+            rows.append((path, _lib.doc_rel(cfg, doc), section))
+    if not rows:
+        return []
+    width = max(len(r[0]) for r in rows)
+    return [f"{indent}{path:<{width}}  -> {doc}  ({section})" if section else f"{indent}{path:<{width}}  -> {doc}" for path, doc, section in rows]
+
+
+# --------------------------------------------------------------------------
+# Modes
+# --------------------------------------------------------------------------
+
+
+def run_commit_msg(root: Path, cfg: dict, msgfile: Path) -> int:
+    mode = cfg["doc_guard_mode"]
+    if mode == "ci-only":
+        return 0
+    ev = evaluate(cfg, staged_paths(root))
+    print_unmapped(ev)
+    missing = missing_docs(ev)
+    if not missing:
+        return 0
+    trailers = parse_trailers(_lib.read_text(msgfile) if msgfile.is_file() else "")
+    if trailers["na"]:
+        return 0
+    if mode == "pr-strict" and trailers["later"] and not _lib.on_base_branch(root, cfg):
+        return 0
+    print("doc-guard: staged changes touch documented areas whose docs are not staged")
+    print()
+    print("\n".join(fmt_missing(cfg, missing)))
+    if trailers["na_missing_reason"]:
+        print()
+        print("  (found `Docs: n/a` without a reason — a reason is required)")
+    if trailers["later"] and mode == "strict":
+        print()
+        print("  (`Docs: later` is not accepted in strict mode)")
+    elif trailers["later"]:
+        print()
+        print("  (`Docs: later` is only accepted on a feature branch)")
+    print(FIX_HINT)
+    return 1
+
+
+def run_dry_run(root: Path, cfg: dict) -> int:
+    mode = cfg["doc_guard_mode"]
+    ev = evaluate(cfg, staged_paths(root))
+    print_unmapped(ev)
+    missing = missing_docs(ev)
+    print(f"doc-guard: mode={mode} branch={_lib.current_branch(root) or '?'} base={_lib.base_branch(root, cfg)}")
+    if not ev["owners"]:
+        print("doc-guard: staged changes touch no documented areas")
+        return 0
+    if ev["touched"]:
+        print("doc-guard: docs staged: " + ", ".join(sorted(_lib.doc_rel(cfg, d) for d in ev["touched"])))
+    if not missing:
+        print("doc-guard: would pass")
+        return 0
+    verb = "would pass (ci-only)" if mode == "ci-only" else "would block without a `Docs:` trailer"
+    print(f"doc-guard: {verb}; owning docs not staged:")
+    print("\n".join(fmt_missing(cfg, missing)))
+    return 0
+
+
+def run_range(root: Path, cfg: dict, rng: str) -> int:
+    shas = [s for s in _lib.git(root, "log", "--format=%H", "--no-merges", rng).splitlines() if s]
+    if not shas:
+        print(f"doc-guard: no commits in {rng}")
+        return 0
+    per_commit: list[dict] = []
+    docs_touched_anywhere: set[str] = set()
+    for sha in shas:
+        ev = evaluate(cfg, commit_paths(root, sha))
+        trailers = parse_trailers(commit_message(root, sha))
+        docs_touched_anywhere |= ev["touched"]
+        per_commit.append({"sha": sha, "ev": ev, "trailers": trailers, "missing": {} if trailers["na"] else missing_docs(ev)})
+    for c in per_commit:
+        print_unmapped(c["ev"])
+
+    failing = []
+    for c in per_commit:
+        unresolved = {key: paths for key, paths in c["missing"].items() if key[0] not in docs_touched_anywhere}
+        if unresolved:
+            failing.append((c, unresolved))
+    if not failing:
+        return 0
+
+    print(f"doc-guard: {len(failing)} commit(s) in {rng} touch documented areas whose docs are not updated in the range")
+    for c, unresolved in failing:
+        print()
+        print(f"  {c['sha'][:7]}  {commit_subject(root, c['sha'])}")
+        print("\n".join(fmt_missing(cfg, unresolved, indent="    ")))
+        if c["trailers"]["later"]:
+            print("    (`Docs: later` does not satisfy CI — the PR must resolve it)")
+        if c["trailers"]["na_missing_reason"]:
+            print("    (`Docs: n/a` needs a reason)")
+    print()
+    print("Fix one of:")
+    print("  - add a commit to this branch that updates the doc(s) above")
+    print("  - reword the commit with a trailer:  Docs: n/a - <reason>")
+    return 1
+
+
+def run_worktree(root: Path, cfg: dict, dry_run: bool) -> int:
+    """Everything on this branch that is not on the base branch, committed or not."""
+    base = _lib.base_branch(root, cfg)
+    try:
+        merge_base = _lib.git(root, "merge-base", base, "HEAD")
+    except _lib.FrameworkError:
+        merge_base = None
+    paths: set[str] = set()
+    docs_touched: set[str] = set()
+    if merge_base:
+        for sha in [s for s in _lib.git(root, "log", "--format=%H", "--no-merges", f"{merge_base}..HEAD").splitlines() if s]:
+            ev = evaluate(cfg, commit_paths(root, sha))
+            docs_touched |= ev["touched"]
+            if not parse_trailers(commit_message(root, sha))["na"]:
+                paths.update(p for ps in ev["owners"].values() for p in ps)
+    wt = worktree_paths(root)
+    ev_wt = evaluate(cfg, wt)
+    docs_touched |= ev_wt["touched"]
+    paths.update(p for ps in ev_wt["owners"].values() for p in ps)
+    print_unmapped(ev_wt)
+    ev = evaluate(cfg, sorted(paths))
+    ev["touched"] = docs_touched
+    missing = missing_docs(ev)
+    print(f"doc-guard: worktree vs {base} branch={_lib.current_branch(root) or '?'}")
+    if not ev["owners"]:
+        print("doc-guard: no documented areas changed")
+        return 0
+    if docs_touched:
+        print("doc-guard: docs changed: " + ", ".join(sorted(_lib.doc_rel(cfg, d) for d in docs_touched)))
+    if not missing:
+        print("doc-guard: pass")
+        return 0
+    print("doc-guard: documented areas changed whose owning docs are untouched:")
+    print("\n".join(fmt_missing(cfg, missing)))
+    print()
+    print("Run /update-docs, or justify with a `Docs: n/a - <reason>` trailer on the commit.")
+    return 0 if dry_run else 1
+
+
+def explain_one(cfg: dict, path: str) -> None:
+    dm = cfg.get("doc_map", {})
+    if _lib.glob_match(path, dm.get("exempt", [])):
+        print(f"{path}: exempt")
+        return
+    owners = _lib.doc_owners(cfg, path)
+    if not owners:
+        print(f"{path}: unmapped (no doc_map rule)")
+        return
+    for rule in owners:
+        section = f"  ({rule['section']})" if rule.get("section") else ""
+        print(f"{path} -> {_lib.doc_rel(cfg, rule['doc'])}{section}")
+
+
+def run_explain(cfg: dict, paths: list[str]) -> int:
+    if paths == ["-"]:
+        paths = [l.strip() for l in sys.stdin.read().splitlines() if l.strip()]
+    for path in paths:
+        explain_one(cfg, path)
+    return 0
+
+
+def run_inventory(root: Path, cfg: dict) -> int:
+    """Every tracked file grouped by owning (doc, section). Used by /update-docs --full."""
+    tracked = [l for l in _lib.git(root, "ls-files").splitlines() if l.strip()]
+    ev = evaluate(cfg, tracked)
+    for (doc, section), paths in sorted(ev["owners"].items()):
+        print(f"{_lib.doc_rel(cfg, doc)}  ({section})" if section else _lib.doc_rel(cfg, doc))
+        for path in sorted(set(paths)):
+            print(f"  {path}")
+    exempt = cfg.get("doc_map", {}).get("exempt", [])
+    mapped = {p for ps in ev["owners"].values() for p in ps}
+    unmapped = [p for p in tracked if p not in mapped and not _lib.glob_match(p, exempt)]
+    if unmapped:
+        print("unmapped")
+        for path in unmapped:
+            print(f"  {path}")
+    return 0
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(prog="doc-guard")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--commit-msg", metavar="MSGFILE")
+    mode.add_argument("--range", metavar="BASE..HEAD")
+    mode.add_argument("--staged", action="store_true")
+    mode.add_argument("--worktree", action="store_true")
+    mode.add_argument("--explain", metavar="PATH", nargs="+")
+    mode.add_argument("--inventory", action="store_true")
+    ap.add_argument("--dry-run", action="store_true")
+    return ap.parse_args(argv)
+
+
+def main() -> int:
+    args = parse_args(sys.argv[1:])
+    root = _lib.repo_root()
+    cfg = _lib.load_config(root)
+    if args.explain:
+        return run_explain(cfg, args.explain)
+    if args.inventory:
+        return run_inventory(root, cfg)
+    if args.range:
+        return run_range(root, cfg, args.range)
+    if args.staged:
+        return run_dry_run(root, cfg)
+    if args.worktree:
+        return run_worktree(root, cfg, args.dry_run)
+    return run_commit_msg(root, cfg, Path(args.commit_msg))
+
+
+if __name__ == "__main__":
+    _lib.run_main(main)

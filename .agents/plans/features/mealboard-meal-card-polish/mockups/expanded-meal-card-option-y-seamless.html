@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Expanded MealCard — Option Y: Seamless</title>
+<style>
+  :root {
+    --warm-cream: #FAF7F2;
+    --warm-beige: #F5F0E8;
+    --warm-sand: #EBE5DA;
+    --card-bg: #FFFDFB;
+    --card-border: #E8E2D9;
+    --text-primary: #3D3833;
+    --text-secondary: #6B645A;
+    --text-muted: #9A9287;
+    --terracotta-50: #FEF3F0;
+    --terracotta-500: #D97452;
+    --terracotta-600: #C4613F;
+    --sage-50: #F4F7F4;
+    --sage-100: #E5EDE6;
+    --sage-200: #C8DBC9;
+    --sage-600: #588D5E;
+    --red-50: #FEF2F2;
+    --red-100: #FEE2E2;
+    --red-600: #DC2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--warm-cream); color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px; padding: 32px 24px; line-height: 1.5;
+  }
+  .frame { max-width: 1080px; margin: 0 auto; }
+  h1.caption {
+    font-size: 13px; font-weight: 500; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 6px;
+  }
+  h2.title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0 0 24px; }
+  .week-strip {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: 16px; padding: 18px;
+  }
+  .day { display: flex; flex-direction: column; gap: 10px; }
+  .day-header {
+    text-align: center; padding: 4px 0 6px;
+    border-bottom: 1px solid var(--card-border); cursor: default; user-select: none;
+  }
+  .day-name {
+    font-size: 11px; font-weight: 600; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .day-num { font-size: 20px; font-weight: 600; color: var(--text-primary); line-height: 1; margin-top: 2px; }
+  .day-num.today {
+    display: inline-block; color: var(--terracotta-600);
+    background: var(--terracotta-50); border-radius: 999px; padding: 2px 10px;
+  }
+  .day-prep { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+  .slot-label {
+    font-size: 10px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em; padding: 0 2px;
+  }
+  .slot { display: flex; flex-direction: column; gap: 8px; }
+  .meal-card {
+    background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: 12px; overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: box-shadow 150ms ease;
+  }
+  .meal-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+  .meal-card.cooked { background: var(--sage-50); border-color: var(--sage-200); }
+  .body {
+    padding: 12px 8px 8px;
+    min-height: 100px;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center;
+  }
+  .meal-card .name {
+    font-size: 15px; font-weight: 500; color: var(--text-primary); line-height: 1.2;
+  }
+  .meal-card.cooked .name { color: var(--sage-600); text-decoration: line-through; }
+  .meta {
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    font-size: 12px; color: var(--text-muted); margin-top: 4px;
+  }
+  .meta svg { width: 12px; height: 12px; }
+  .avatars { display: flex; margin-bottom: 6px; }
+  .avatar {
+    width: 20px; height: 20px; border-radius: 999px;
+    border: 2px solid var(--card-bg); margin-left: -4px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 10px; font-weight: 600;
+  }
+  .avatar:first-child { margin-left: 0; }
+  .cooked-badge {
+    margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--sage-600);
+  }
+  /* === Action zone — Option Y: seamless, no separator === */
+  .action-zone {
+    padding: 0 0 8px;
+    display: flex; justify-content: center; gap: 8px;
+    /* Expanded: */
+    max-height: 48px;
+    opacity: 1;
+    transition: max-height 180ms ease-out, opacity 120ms ease-out 60ms;
+  }
+  .action-zone.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding-bottom: 0;
+  }
+  .action-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 999px;
+    background: var(--sage-50);
+    color: var(--sage-600);
+    border: none;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .action-btn:hover { background: var(--sage-100); }
+  .action-btn.delete { background: var(--red-50); color: var(--red-600); }
+  .action-btn.delete:hover { background: var(--red-100); }
+  .action-btn svg { width: 16px; height: 16px; }
+  .annotations {
+    margin: 28px auto 0; max-width: 720px;
+    background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: 12px; padding: 16px 18px;
+  }
+  .annotations h3 {
+    margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-primary);
+  }
+  .annotations ul { margin: 0; padding-left: 20px; }
+  .annotations li {
+    font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;
+  }
+  .annotations code {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px; background: var(--warm-beige);
+    padding: 1px 5px; border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+  <h1 class="caption">Expanded recipe MealCard · Option Y · Seamless</h1>
+  <h2 class="title">Wednesday Dinner — top card hovered (expanded), neighbors collapsed</h2>
+
+  <div class="week-strip">
+    <div class="day">
+      <div class="day-header">
+        <div class="day-name">Tue</div>
+        <div class="day-num">14</div>
+        <div class="day-prep">25 min prep</div>
+      </div>
+      <div class="slot-label">Dinner</div>
+      <div class="slot">
+        <div class="meal-card">
+          <div class="body">
+            <div class="name">Tikka Masala</div>
+            <div class="meta">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              35m
+            </div>
+          </div>
+          <div class="action-zone collapsed"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day">
+      <div class="day-header">
+        <div class="day-name">Wed</div>
+        <span class="day-num today">15</span>
+        <div class="day-prep">95 min prep</div>
+      </div>
+      <div class="slot-label">Dinner</div>
+      <div class="slot">
+
+        <!-- THE EXPANDED VARIANT UNDER TEST -->
+        <div class="meal-card" style="box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+          <div class="body">
+            <div class="avatars">
+              <div class="avatar" style="background:#5E9E6B">M</div>
+              <div class="avatar" style="background:#D4915A">S</div>
+              <div class="avatar" style="background:#5A80B0">L</div>
+            </div>
+            <div class="name">Mom's Lasagna</div>
+            <div class="meta">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              45m
+            </div>
+          </div>
+          <div class="action-zone">
+            <button type="button" class="action-btn" aria-label="Mark as cooked">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </button>
+            <button type="button" class="action-btn delete" aria-label="Delete meal">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="meal-card">
+          <div class="body">
+            <div class="name">Garden Salad</div>
+            <div class="meta">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              10m
+            </div>
+          </div>
+          <div class="action-zone collapsed"></div>
+        </div>
+
+        <div class="meal-card cooked">
+          <div class="body">
+            <div class="name">Banana Bread</div>
+            <div class="meta">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              55m
+            </div>
+            <div class="cooked-badge">✓ Cooked</div>
+          </div>
+          <div class="action-zone collapsed"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day">
+      <div class="day-header">
+        <div class="day-name">Thu</div>
+        <div class="day-num">16</div>
+        <div class="day-prep">15 min prep</div>
+      </div>
+      <div class="slot-label">Dinner</div>
+      <div class="slot">
+        <div class="meal-card">
+          <div class="body">
+            <div class="name">Tacos</div>
+            <div class="meta">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              15m
+            </div>
+          </div>
+          <div class="action-zone collapsed"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotations">
+    <h3>Option Y — Seamless (the buttons-belong-to-the-meal approach)</h3>
+    <ul>
+      <li><b>Body:</b> same <code>min-h-[100px]</code>, padding-bottom shrinks slightly to make room for action zone.</li>
+      <li><b>Action zone:</b> NO divider, NO background change. Buttons appear directly below the meta row.</li>
+      <li><b>Buttons:</b> 32×32 circles in sage / red — same as Option X.</li>
+      <li><b>Animation:</b> <code>max-height 0 → 48px</code> over 180ms; padding-bottom expands with it.</li>
+      <li><b>Cooked badge:</b> stays in the body above the buttons.</li>
+      <li><b>Mood:</b> minimal chrome. The buttons feel attached to the meal — actions for THIS meal, not a separate region. Subtraction default.</li>
+      <li><b>Risk:</b> on stacked cards with the card body fairly empty (just a name), the buttons can feel like they're floating in space — less anchored than with a divider.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

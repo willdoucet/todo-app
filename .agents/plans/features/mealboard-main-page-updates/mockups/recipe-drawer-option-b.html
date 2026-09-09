@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drawer Option B — Sticky hero, floating name</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --warm-cream: #FAF7F2; --warm-beige: #F5F0E8; --warm-sand: #EBE5DA;
+    --card-bg: #FFFDFB; --card-border: #E8E2D9;
+    --terracotta-50: #FEF3F0; --terracotta-100: #FCE4DE; --terracotta-200: #FAC9BD;
+    --terracotta-500: #D97452; --terracotta-600: #C4613F; --terracotta-700: #A34E32;
+    --peach-100: #FFE8DF;
+    --text-primary: #3D3833; --text-secondary: #6B645A; --text-muted: #9A9287;
+  }
+  body { background: var(--warm-cream); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text-primary); margin: 0; }
+  .bg-warm-cream { background: var(--warm-cream); } .bg-warm-beige { background: var(--warm-beige); }
+  .bg-warm-sand { background: var(--warm-sand); } .bg-card-bg { background: var(--card-bg); }
+  .border-card-border { border-color: var(--card-border); }
+  .bg-terracotta-50 { background: var(--terracotta-50); } .bg-terracotta-100 { background: var(--terracotta-100); }
+  .bg-terracotta-500 { background: var(--terracotta-500); } .text-terracotta-500 { color: var(--terracotta-500); }
+  .text-terracotta-600 { color: var(--terracotta-600); } .text-terracotta-700 { color: var(--terracotta-700); }
+  .border-terracotta-200 { border-color: var(--terracotta-200); } .bg-peach-100 { background: var(--peach-100); }
+  .text-text-primary { color: var(--text-primary); } .text-text-secondary { color: var(--text-secondary); } .text-text-muted { color: var(--text-muted); }
+  .gradient-placeholder { background: linear-gradient(135deg, var(--terracotta-50), var(--terracotta-100)); }
+  .demo-photo { background: linear-gradient(135deg, #8B3A1F 0%, #C4613F 40%, #D97452 70%, #F0A080 100%); position: relative; }
+  .demo-photo::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(circle at 30% 40%, rgba(255,220,180,0.35) 0%, transparent 40%), radial-gradient(circle at 70% 60%, rgba(0,0,0,0.15) 0%, transparent 35%); }
+</style>
+</head>
+<body>
+
+<div class="flex" style="height: 100vh;">
+
+  <!-- LEFT: No image (placeholder) -->
+  <div class="flex-1 border-r-2 border-dashed border-card-border relative overflow-hidden bg-warm-cream">
+    <div class="absolute top-2 left-2 px-2 py-1 bg-card-bg rounded text-xs font-semibold border border-card-border z-20">State: no image (placeholder)</div>
+
+    <aside class="absolute top-0 right-0 h-full w-full max-w-[480px] bg-card-bg border-l border-card-border shadow-2xl flex flex-col">
+      <!-- Sticky hero: gradient + letter, name overlay -->
+      <div class="relative flex-shrink-0">
+        <div class="w-full h-[180px] gradient-placeholder"></div>
+        <button class="absolute top-4 right-4 w-9 h-9 rounded-full bg-warm-sand/90 hover:bg-warm-beige flex items-center justify-center text-text-secondary text-lg" aria-label="Close">✕</button>
+        <div class="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-card-bg via-card-bg/90 to-transparent">
+          <h2 class="text-xl font-semibold text-text-primary">Spaghetti Bolognese</h2>
+          <div class="flex gap-2 mt-2 flex-wrap">
+            <span class="text-xs px-2 py-0.5 bg-card-bg/90 rounded-full text-text-secondary">⏲ 15m prep</span>
+            <span class="text-xs px-2 py-0.5 bg-card-bg/90 rounded-full text-text-secondary">⏲ 30m cook</span>
+            <span class="text-xs px-2 py-0.5 bg-card-bg/90 rounded-full text-text-secondary">👥 4</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6">
+        <div class="flex gap-2 mb-5">
+          <button class="flex-1 px-4 py-2.5 bg-warm-sand hover:bg-warm-beige text-text-secondary rounded-lg text-sm font-medium transition-colors">Edit recipe</button>
+          <button class="px-4 py-2.5 border border-terracotta-200 hover:bg-terracotta-50 text-terracotta-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5" aria-label="Favorite">
+            <span class="text-base">❤</span> Favorite
+          </button>
+        </div>
+        <p class="text-sm text-text-secondary mb-5">Classic Italian comfort food. Slow-simmered meat sauce over al dente pasta.</p>
+        <h3 class="text-base font-semibold mb-3">Ingredients</h3>
+        <ul class="space-y-1.5 text-sm mb-6">
+          <li class="flex"><span class="text-text-muted mr-3">•</span>1 lb ground beef</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>2 cloves garlic, minced</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>1 onion, diced</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>28 oz crushed tomatoes</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>1 lb spaghetti</li>
+        </ul>
+        <h3 class="text-base font-semibold mb-3">Instructions</h3>
+        <ol class="space-y-3 text-sm mb-6">
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">1.</span>Heat olive oil in large skillet over medium. Add onion, cook 5 minutes.</li>
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">2.</span>Add garlic and beef, brown 7–8 minutes, breaking up meat.</li>
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">3.</span>Add tomatoes, simmer 20 minutes. Season to taste.</li>
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">4.</span>Cook spaghetti per package. Toss with sauce. Serve.</li>
+        </ol>
+      </div>
+    </aside>
+  </div>
+
+  <!-- RIGHT: With image -->
+  <div class="flex-1 relative overflow-hidden bg-warm-cream">
+    <div class="absolute top-2 left-2 px-2 py-1 bg-card-bg rounded text-xs font-semibold border border-card-border z-20">State: with uploaded image</div>
+
+    <aside class="absolute top-0 right-0 h-full w-full max-w-[480px] bg-card-bg border-l border-card-border shadow-2xl flex flex-col">
+      <div class="relative flex-shrink-0">
+        <div class="w-full h-[180px] demo-photo"></div>
+        <button class="absolute top-4 right-4 w-9 h-9 rounded-full bg-card-bg/90 hover:bg-warm-beige flex items-center justify-center text-text-primary text-lg" aria-label="Close">✕</button>
+        <div class="absolute bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-card-bg via-card-bg/90 to-transparent">
+          <h2 class="text-xl font-semibold text-text-primary">Spaghetti Bolognese</h2>
+          <div class="flex gap-2 mt-2 flex-wrap">
+            <span class="text-xs px-2 py-0.5 bg-card-bg/90 rounded-full text-text-secondary">⏲ 15m prep</span>
+            <span class="text-xs px-2 py-0.5 bg-card-bg/90 rounded-full text-text-secondary">⏲ 30m cook</span>
+            <span class="text-xs px-2 py-0.5 bg-card-bg/90 rounded-full text-text-secondary">👥 4</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6">
+        <div class="flex gap-2 mb-5">
+          <button class="flex-1 px-4 py-2.5 bg-warm-sand hover:bg-warm-beige text-text-secondary rounded-lg text-sm font-medium transition-colors">Edit recipe</button>
+          <button class="px-4 py-2.5 bg-terracotta-500 hover:bg-terracotta-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5" aria-label="Favorited">
+            <span class="text-base">❤</span> Favorited
+          </button>
+        </div>
+        <p class="text-sm text-text-secondary mb-5">Classic Italian comfort food. Slow-simmered meat sauce over al dente pasta.</p>
+        <h3 class="text-base font-semibold mb-3">Ingredients</h3>
+        <ul class="space-y-1.5 text-sm mb-6">
+          <li class="flex"><span class="text-text-muted mr-3">•</span>1 lb ground beef</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>2 cloves garlic, minced</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>1 onion, diced</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>28 oz crushed tomatoes</li>
+          <li class="flex"><span class="text-text-muted mr-3">•</span>1 lb spaghetti</li>
+        </ul>
+        <h3 class="text-base font-semibold mb-3">Instructions</h3>
+        <ol class="space-y-3 text-sm mb-6">
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">1.</span>Heat olive oil in large skillet over medium. Add onion, cook 5 minutes.</li>
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">2.</span>Add garlic and beef, brown 7–8 minutes, breaking up meat.</li>
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">3.</span>Add tomatoes, simmer 20 minutes. Season to taste.</li>
+          <li class="flex"><span class="font-semibold text-terracotta-600 mr-3">4.</span>Cook spaghetti per package. Toss with sauce. Serve.</li>
+        </ol>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-card-bg px-4 py-2 rounded-lg shadow-lg text-xs font-medium text-text-primary border border-card-border">
+  <strong>Option B:</strong> Sticky hero — 180px hero pinned, name + metadata overlay, body scrolls independently
+</div>
+</body>
+</html>
