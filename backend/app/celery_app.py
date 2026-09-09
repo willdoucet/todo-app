@@ -52,5 +52,9 @@ celery_app.conf.update(
             "task": "app.tasks.hard_delete_expired_soft_deletes",
             "schedule": 3600.0,  # Every hour — sweeps items with deleted_at > 24h
         },
+        "sweep-abandoned-uploads": {
+            "task": "app.tasks.sweep_abandoned_uploads",
+            "schedule": 3600.0,  # Every hour — deletes uploads unadopted >24h (M7)
+        },
     },
 )

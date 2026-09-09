@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from datetime import date
 from . import models, schemas
+from .services import asset_lifecycle
 
 
 async def get_responsibilities(
@@ -42,6 +43,8 @@ async def create_responsibility(
     """Create a new responsibility."""
     db_responsibility = models.Responsibility(**responsibility.model_dump())
     db.add(db_responsibility)
+    # Adopt the icon (referenced=true) atomically with the insert.
+    await asset_lifecycle.adopt(db, db_responsibility.icon_url)
     await db.commit()
     return await get_responsibility(db, db_responsibility.id)
 
@@ -51,15 +54,30 @@ async def update_responsibility(
     responsibility_id: int,
     responsibility: schemas.ResponsibilityUpdate,
 ):
+    # Capture the previous icon before the update, for asset cleanup.
+    old_icon = (
+        await db.execute(
+            select(models.Responsibility.icon_url).where(
+                models.Responsibility.id == responsibility_id
+            )
+        )
+    ).scalar_one_or_none()
+
+    values = responsibility.model_dump(exclude_unset=True)
     stmt = (
         update(models.Responsibility)
         .where(models.Responsibility.id == responsibility_id)
-        .values(**responsibility.model_dump(exclude_unset=True))
+        .values(**values)
     )
     result = await db.execute(stmt)
     if result.rowcount == 0:
         return None
+    # `icon_url` unchanged if it wasn't in the payload → old == new, no cleanup.
+    new_icon = values.get("icon_url", old_icon)
+    await asset_lifecycle.adopt(db, new_icon)
     await db.commit()
+    # Post-commit: reclaim the replaced icon (only if it actually changed).
+    await asset_lifecycle.release_if_replaced(db, old_icon, new_icon)
     return await get_responsibility(db, responsibility_id)
 
 
@@ -68,8 +86,11 @@ async def delete_responsibility(db: AsyncSession, responsibility_id: int):
     # First check if responsibility exists
     responsibility = await get_responsibility(db, responsibility_id)
     if responsibility:
+        old_icon = responsibility.icon_url
         await db.delete(responsibility)
         await db.commit()
+        # Post-commit: reclaim the icon object + manifest row.
+        await asset_lifecycle.release(db, old_icon)
         return True
     return False
 

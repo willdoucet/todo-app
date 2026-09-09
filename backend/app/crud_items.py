@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from . import models, schemas
+from .services import asset_lifecycle
 
 
 HARD_DELETE_SOAK_HOURS = 24
@@ -51,8 +52,22 @@ async def hard_delete_expired_soft_deletes_async(db: AsyncSession) -> dict:
     )
     expired_ids = [row[0] for row in expired_res.all()]
     items_deleted = 0
+    # Managed image URLs to reclaim AFTER commit (RecipeDetail cascade-deletes
+    # with the Item, so capture image_url before the delete runs).
+    asset_urls: list[str] = []
 
     if expired_ids:
+        icon_rows = await db.execute(
+            select(models.Item.icon_url).where(models.Item.id.in_(expired_ids))
+        )
+        asset_urls.extend(u for (u,) in icon_rows.all() if u)
+        image_rows = await db.execute(
+            select(models.RecipeDetail.image_url).where(
+                models.RecipeDetail.item_id.in_(expired_ids)
+            )
+        )
+        asset_urls.extend(u for (u,) in image_rows.all() if u)
+
         # Step 2a: delete soft-hidden meal_entries that reference expired items
         await db.execute(
             delete(models.MealEntry).where(
@@ -94,6 +109,11 @@ async def hard_delete_expired_soft_deletes_async(db: AsyncSession) -> dict:
     user_undo_entries_deleted = undo_del.rowcount or 0
 
     await db.commit()
+
+    # Post-commit: reclaim the hard-deleted items' managed image objects.
+    for url in asset_urls:
+        await asset_lifecycle.release(db, url)
+
     return {
         "items_deleted": items_deleted,
         "user_undo_entries_deleted": user_undo_entries_deleted,
@@ -248,6 +268,11 @@ async def create_item(db: AsyncSession, payload: schemas.ItemCreate) -> models.I
         )
         db.add(detail)
 
+    # Adopt the icon + recipe image (referenced=true) atomically with the insert.
+    await asset_lifecycle.adopt(db, item.icon_url)
+    if payload.item_type == schemas.ItemType.RECIPE:
+        await asset_lifecycle.adopt(db, payload.recipe_detail.image_url)
+
     await db.commit()
     return await get_item(db, item.id)  # re-fetch with eager loads populated
 
@@ -259,6 +284,10 @@ async def update_item(
     item = await get_item(db, item_id)
     if item is None:
         return None
+
+    # Capture previous managed image URLs before mutation (asset cleanup).
+    old_icon = item.icon_url
+    old_image = item.recipe_detail.image_url if item.recipe_detail else None
 
     # --- Update scalar fields on Item ---
     item_fields = payload.model_dump(
@@ -292,7 +321,16 @@ async def update_item(
         for key, value in patch.items():
             setattr(detail, key, value)
 
+    # Adopt the (possibly new) managed images atomically with the update.
+    new_icon = item.icon_url
+    new_image = item.recipe_detail.image_url if item.recipe_detail else None
+    await asset_lifecycle.adopt(db, new_icon)
+    await asset_lifecycle.adopt(db, new_image)
+
     await db.commit()
+    # Post-commit: reclaim replaced icon/image objects (only if they changed).
+    await asset_lifecycle.release_if_replaced(db, old_icon, new_icon)
+    await asset_lifecycle.release_if_replaced(db, old_image, new_image)
     return await get_item(db, item_id)
 
 

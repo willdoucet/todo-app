@@ -735,6 +735,38 @@ Audit surface is intentionally one folder. Production secret loading runs in lif
 {"filename": "photo_123456.jpg", "url": "/uploads/photo_123456.jpg"}
 ```
 
+### M7 storage layer (PR1)
+
+Object storage is abstracted behind `app/storage/` — a `StorageBackend` protocol
+(`put`/`get`/`delete`) with `LocalDiskBackend` (dev/test/prod-through-PR1) and
+`R2Backend` (boto3, enabled in PR2 via `STORAGE_BACKEND=r2`). `get_storage()`
+selects by env, defaulting to `local`.
+
+A new `assets` table is the upload manifest: PK `key` (`{subdir}/{uuid}.{ext}` —
+also the R2 object key and the tail of `/uploads/{key}`), `content_type`,
+`size_bytes`, `referenced` (bool), `created_at`, indexed `(referenced, created_at)`.
+The four managed subdirs (keep these exact names for PR2's key allowlist —
+they match the pre-M7 URL contract): `item-icons`, `family_photos`,
+`responsibility_icons`, `recipe_images`. Stock icons stay `stock_icons/*`
+(unmanaged, no assets row). `get_storage()` accepts only `local`/`r2`
+(unknown values raise).
+
+Upload flow (`app/uploads.py::store_upload`): magic-byte validate (PNG/JPEG/WebP
+only — **GIF now rejected**; icons 1 MB / photos 5 MB) → `storage.put` → INSERT
+`assets(referenced=false)`, with a compensating `storage.delete` on DB failure.
+`app/services/asset_lifecycle.py` wires adopt (flip `referenced` on entity
+create/update, in-txn; **400 if the managed key has no assets row**) and
+release (delete object + drop row, post-commit; **keep an unreferenced row
+if storage delete fails so the sweep can retry**) into
+the responsibilities / family_members / items(+recipe image) write paths, plus a
+`stock_icons/*` carve-out (never deleted) and an hourly abandoned-upload sweep
+(Celery beat). **PR1 keeps the `/uploads/*` StaticFiles mount and local-disk prod
+writes**; the R2 flip + cookie-authed read proxy + mount removal are PR2.
+
+Env vars: `STORAGE_BACKEND` (`local`|`r2`, default `local`), `SQLALCHEMY_ECHO`
+(`true` opts into SQL logging; default off). R2 (PR2): `R2_ENDPOINT`,
+`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
+
 ---
 
 ## 3. Code Organization
