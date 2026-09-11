@@ -166,8 +166,11 @@ expression to the original `(http.request.uri.path matches "^/auth/") and
 
 ## Transform Rules — origin lock (Modify Request Header)
 
-Status: **PENDING — not yet created.** The operator creates it in step 2 of the
-rollout below; change this line to `active (YYYY-MM-DD)` when it is live.
+Status: **active (2026-09-11)** — deployed in the `mealy.dev` zone and verified
+end to end that day: through Cloudflare, `/uploads/<key>` → 401 and
+`/auth/status` → 200 with the `mealy.dev` CORS header; straight to the Fly IP
+(`curl --resolve`) → 421; a `Host: api.mealy.dev/healthz?` spoof aimed at a real
+route → 421 at the origin (400 at the edge); `/healthz` → 200 by both paths.
 
 Dashboard path (post-2025 redesign; there is no longer a "Transform Rules →
 Modify Request Header" submenu): select the **`mealy.dev` zone** (this is a
@@ -226,11 +229,15 @@ they can be done before the pull request merges.
    Transform Rule. Create the rule above (see the dashboard path at the top of
    this section), paste the value, Deploy.
 3. Store the same value as a Fly secret (this restarts the machines on the
-   current image). Pipe it through stdin so the value never lands in the `fly`
-   process's arguments (visible in `ps`); then clear the clipboard:
+   current image). Keep the value out of the `fly` process's arguments (visible
+   in `ps`) — `printf` is a shell builtin — and collapse stray whitespace, so a
+   trailing blank line cannot emit a SECOND, empty `ORIGIN_VERIFY_SECRET=`
+   assignment. That one wins, blanks the secret, and the app then refuses to
+   boot at all:
    ```bash
-   pbpaste | sed 's/^/ORIGIN_VERIFY_SECRET=/' | fly secrets import -a mealy-app-prod
+   printf 'ORIGIN_VERIFY_SECRET=%s\n' "$(pbpaste | tr -d '[:space:]')" | fly secrets import -a mealy-app-prod
    ```
+   Then clear the clipboard:
    ```bash
    pbcopy < /dev/null
    ```
@@ -245,7 +252,15 @@ they can be done before the pull request merges.
    new machine's lifespan raises and the deploy fails its health check rather
    than serving on a bad secret. On the single web machine that means a
    crash-loop until the secret is set, so do not skip the presence check above.
-5. Verify from outside, never by hammering `/auth/login`:
+5. Verify from outside, never by hammering `/auth/login`. First confirm the
+   machines finished restarting — `fly secrets import` triggers a restart, and
+   checking during that window still hits the OLD secret and reports a false
+   failure:
+   ```bash
+   fly status -a mealy-app-prod
+   ```
+   Wait for every `web` machine to show a fresh `LAST UPDATED` and passing
+   checks, then:
    - Straight to the origin is rejected (expect `HTTP/2 421`):
      ```bash
      curl -si --resolve api.mealy.dev:443:66.241.124.153 https://api.mealy.dev/uploads/x | head -1
@@ -265,15 +280,42 @@ they can be done before the pull request merges.
 
    Then set this section's Status line to active.
 
-If real traffic gets 421 after step 4, the dashboard value and the Fly secret
-differ. Neither can be read back, so repeat steps 1–3 with a fresh value. The
-alternative is redeploying the previous image, which is safe for this change
-because it does not touch `fly.toml`.
+If real traffic gets 421 after step 4, either the Fly secret and the rule's
+value differ, or Cloudflare is not applying the rule at all. From outside the
+two are indistinguishable — both checks return the same 421 body by design — so
+work through them in this order:
+
+1. Force Fly to match what Cloudflare actually has. The rule's **Value** field
+   is readable in the dashboard: copy it, then re-run rollout step 3. This is
+   what fixed the 2026-09-11 rollout, where the two sides had drifted apart.
+   Wait for the restart, then re-verify.
+2. If it still 421s, the value is provably identical on both sides and the rule
+   is not being applied: check that it is **Deployed** rather than saved as a
+   draft, is a **Request** (not Response) header rule, sits in the `mealy.dev`
+   zone, and that its expression matches.
+3. Break-glass: redeploying the previous image restores service and reopens the
+   bypass. Safe for this change because it does not touch `fly.toml`.
 
 ### Rotation
 
-Repeat rollout steps 1–3 with a new value, running the `fly secrets set`
+Repeat rollout steps 1–3 with a new value, running the `fly secrets import`
 immediately after saving the dashboard rule. Between the two, requests carry the
 new value while the app still expects the old one, so expect a short burst of
-421s. There is one web machine and `fly secrets set` restarts it anyway, so
-accepting two values during a rotation would not remove the gap.
+421s. `fly secrets import` restarts the web machines anyway, so accepting two
+values during a rotation would not remove the gap.
+
+### Gotchas when setting or rotating the secret
+
+Three traps, all hit during the 2026-09-11 rollout:
+
+- **The clipboard collision.** A command using `pbpaste` reads the clipboard when
+  it RUNS, not when you paste it — so copying the command itself overwrites the
+  value you meant to use, and the header is set to the command text. Paste the
+  command into the terminal first, then copy the value, then press Enter.
+- **Verify only after the restart finishes.** `fly secrets import` restarts the
+  machines; a check run during that window still hits the old secret and looks
+  like a failure. Confirm `LAST UPDATED` moved in `fly status` first.
+- **A 421 never says which check failed.** The host check and the origin-header
+  check return an identical body on purpose, so "rule not applied" and "values
+  differ" look the same from outside. Use the ordered recovery above instead of
+  guessing.
