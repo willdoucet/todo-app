@@ -11,7 +11,7 @@ approved by /office-hours on 2026-04-21 and reviewed (CEO, Eng x3, Adversarial) 
 [prod-contract-freeze-plan-20260421-182714.md](../../features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md).
 This file is the epic: it defines the milestones and never executes.
 
-Status: ACTIVE (M1 to M6 done, M7 in progress, M8 not started)
+Status: ACTIVE (M1–M5 and M7 shipped, M6 subsumed, M8 not started)
 
 ## Goal
 
@@ -50,7 +50,29 @@ Status per milestone is derived from the registry; see `IMPLEMENTATION_PLAN.md` 
 
 M8 ships: a manual release runbook is committed, smoke and rollback checklists exist, the
 operator password-rotation CLI works over `fly ssh console`, a backup-restore dry-run has been
-executed against a scratch Postgres, and `fly scale show` confirms `web=1, worker=1, beat=1`.
+executed against a scratch Postgres, and the two criteria below are met.
+
+Both were added 2026-09-11, from what the origin-lock rollout exposed
+(`infra/cloudflare-state.md`, LESSONS.md → *A Host-header check does not stop direct-to-origin
+bypass*):
+
+- **Process-group counts are reconciled, not merely checked.** `fly scale show` must agree with
+  `fly.toml` and the docs. Production runs `web=2` today, not the `web=1` this milestone
+  assumed (`worker=1` and `beat=1` are correct). Nothing pins the count: `fly.toml` sets
+  `min_machines_running = 1`, which is a floor, not a cap. M8 either scales `web` back to 1, or
+  keeps 2 deliberately and updates `fly.toml`, TECH_STACK, and this criterion to match. Each web
+  VM is 1024 MB (sized for argon2), so running 2 doubles that spend; a second machine also
+  widens the window in which a restart leaves two machines briefly holding different secret
+  values, which is what made the 2026-09-11 rollout hard to diagnose. `beat=1` is the invariant
+  that must not change — a second beat double-fires the iCloud sync schedule.
+- **The production host gate records which check rejected a request.** One log line per
+  rejection naming the failed check (host vs origin-verify, absent vs mismatched), never the
+  secret value, and with the 421 response body unchanged so the two failure modes stay
+  indistinguishable to a caller. They are currently indistinguishable to the operator as well:
+  during the origin-lock rollout, a drifted secret and a mis-deployed Cloudflare rule looked
+  identical from outside, and telling them apart cost a production experiment. This is one line
+  on an existing gate for operability — not the broader structured-logging story deferred
+  below.
 
 ## Deferred to v1.1
 
