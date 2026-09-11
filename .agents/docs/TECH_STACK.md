@@ -349,7 +349,7 @@ Chosen and shipped in the v1 productionization epic ([plan](../plans/features/pr
 | Database | Fly Postgres | Managed PostgreSQL 16; `asyncpg` with `ssl=` (see LESSONS.md) |
 | Redis | Upstash | Celery broker + result backend over `rediss://` |
 | File Storage | Cloudflare R2 | User uploads (photos, icons) — provisioned in M2; **cutover is M7 PR2, pending merge** (`infra/r2-cutover-runbook.md`); see Object storage below |
-| DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, Access Application 1 until M7's teardown; `infra/cloudflare-state.md` |
+| DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, Browser Cache TTL "Respect Existing Headers" (private media relies on it); Access Application 1 removed at M7's cutover (2026-09-11); `infra/cloudflare-state.md` |
 | SSL | Auto-provisioned | Let's Encrypt via Fly (API) and Vercel (frontend); Cloudflare terminates at the edge |
 
 **Deployment Options:**

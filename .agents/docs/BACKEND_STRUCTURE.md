@@ -804,7 +804,7 @@ Two test artifacts pin the gate from both ends:
 
 #### Production host gate
 
-A FastAPI middleware in `app/main.py` rejects direct Fly-hostname traffic for any non-`/healthz` path when `APP_ENV=production`. Cloudflare Access + the `/auth/*` WAF rule are load-bearing through M5 PR1's soak window; PR2 removes Cloudflare Access. The host gate stays through PR2 and beyond. Configured via `PUBLIC_API_HOST=api.mealy.dev`. Disabled in dev/test so contributors can use any Host header. Returns `421 Misdirected Request` on rejection.
+A FastAPI middleware in `app/main.py` rejects direct Fly-hostname traffic for any non-`/healthz` path when `APP_ENV=production`. Cloudflare Access stayed on the API host until the M7 cutover and was removed 2026-09-11; the `/auth/*` WAF rule remains. The host gate stays. Configured via `PUBLIC_API_HOST=api.mealy.dev`. Disabled in dev/test so contributors can use any Host header. Returns `421 Misdirected Request` on rejection.
 
 #### Auth subsystem layout (`app/auth/`)
 
