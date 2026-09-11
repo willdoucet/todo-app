@@ -33,7 +33,9 @@
 | **CalendarEvent** | Manual + synced calendar events | `date`, `start_time`/`end_time` (HH:MM), `source` (MANUAL/ICLOUD/GOOGLE), `sync_status`, FK→Calendar |
 | **Calendar** | Individual iCloud calendars/reminder lists | `calendar_url`, `name`, `color`, `is_todo`, FK→CalendarIntegration (cascade) |
 | **CalendarIntegration** | External calendar connections | `provider`, `email`, `encrypted_password`, `status`, `reminders_status`, `sync_range_*_days` |
+| **MealSlotType** | User-configurable meal slots (Breakfast/Lunch/Dinner/Snack by default) | `name`, `sort_order`, `color`, `icon`, `is_default`, `is_active`, `default_participants` JSON |
 | **AppSettings** | Singleton app config | `timezone` (IANA name, default UTC) |
+| **Asset** | M7 upload manifest — one row per stored object | `key` PK (`{subdir}/{uuid4}.{ext}`), `content_type` (authoritative on read), `size_bytes`, `referenced`, `created_at`; index `(referenced, created_at)` |
 | **User** | Singleton household login (M3 — 0 or 1 rows in v1) | `email` (CITEXT, unique), `password_hash` (argon2id PHC), `session_version` (bumped on operator password rotation), timestamps |
 | **RefreshToken** | Append-only refresh-token rotation chain (M3) | `user_id` FK CASCADE, `token_hash` BYTEA (32-byte SHA-256, unique), `successor_id` self-FK SET NULL (rotation chain pointer, `use_alter=True`), `issued_at`, `expires_at`, `superseded_at`, `revoked_at` |
 
@@ -404,6 +406,32 @@ The mealboard uses `meal_entries`, not a separate `meal_plans` table (that name 
 
 **FK RESTRICT rationale (Eng Review #3 Issue 3):** The `meal_entries.item_id` FK is `ON DELETE RESTRICT` so a raw `DELETE FROM items` fails loudly instead of silently wiping meal history. The supported deletion path is the soft-delete flow: `items.deleted_at` is set and the matching `meal_entries.soft_hidden_at` are set in the same transaction. The hourly `hard_delete_expired_soft_deletes` Celery task (Chunk 6) runs a cascade-in-code transaction with an assertion gate that fails if any active meal_entry still references an expired item.
 
+#### meal_slot_types
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY, AUTO | Unique identifier |
+| `name` | VARCHAR | NOT NULL | Slot label (Breakfast, Lunch, …) |
+| `sort_order` | INTEGER | NOT NULL, DEFAULT 0 | Row order in the planner swimlane grid |
+| `color` | VARCHAR | NULLABLE | Hex color for badge / swimlane |
+| `icon` | VARCHAR | NULLABLE | Emoji or icon name |
+| `is_default` | BOOLEAN | NOT NULL, DEFAULT false | One of the four seeded defaults (restored by `POST /meal-slot-types/reset`) |
+| `is_active` | BOOLEAN | NOT NULL, DEFAULT true | Inactive slots are hidden from the planner but keep their entries |
+| `default_participants` | JSON | NULLABLE | Array of `family_members.id`; `[]` = everyone |
+| `created_at` | TIMESTAMP | DEFAULT now() | Creation timestamp |
+| `updated_at` | TIMESTAMP | NULLABLE | Last update timestamp |
+
+`meal_entries.meal_slot_type_id` is `ON DELETE RESTRICT`: a slot with entries is soft-deleted (`is_active=false`) rather than removed.
+
+#### meal_entry_participants
+
+Junction table for per-person meals (`MealEntry.participants` M:N `FamilyMember`). No ORM class — a `Table` in `models.py`.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `meal_entry_id` | INTEGER | PK, FK → meal_entries.id ON DELETE CASCADE | |
+| `family_member_id` | INTEGER | PK, FK → family_members.id ON DELETE CASCADE | |
+
 #### calendar_integrations
 
 | Column | Type | Constraints | Description |
@@ -511,6 +539,46 @@ The mealboard uses `meal_entries`, not a separate `meal_plans` table (that name 
 
 ---
 
+#### users (M3)
+
+Singleton household login — 0 or 1 rows in v1. Registration is gated by `HOUSEHOLD_ACCESS_KEY` and a "no existing account" check.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | BIGINT | PRIMARY KEY | |
+| `email` | CITEXT | NOT NULL, UNIQUE | Case-insensitive uniqueness at the DB, not app-side lowercasing |
+| `password_hash` | TEXT | NOT NULL | argon2id PHC string |
+| `session_version` | INTEGER | NOT NULL, DEFAULT 0 | Bumped on logout / operator password rotation; embedded in every access JWT and checked on every protected request |
+| `created_at` / `updated_at` | TIMESTAMPTZ | NOT NULL | |
+
+#### refresh_tokens (M3)
+
+Append-only rotation chain. The plaintext lives only in the `__Host-refresh` cookie; this table stores its SHA-256.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | BIGINT | PRIMARY KEY | |
+| `user_id` | BIGINT | FK → users.id ON DELETE CASCADE, NOT NULL | |
+| `token_hash` | BYTEA(32) | NOT NULL, UNIQUE (`ix_refresh_tokens_token_hash`) | SHA-256 of the cookie value; one indexed lookup per refresh |
+| `successor_id` | BIGINT | FK → refresh_tokens.id ON DELETE SET NULL, NULLABLE (`use_alter=True`) | Rotation chain pointer, walked during the 60 s grace window |
+| `issued_at` / `expires_at` | TIMESTAMPTZ | NOT NULL | 30-day TTL |
+| `superseded_at` | TIMESTAMPTZ | NULLABLE | Set on rotation; classifies in-grace vs past-grace |
+| `revoked_at` | TIMESTAMPTZ | NULLABLE | Set by logout and any `session_version` bump |
+
+#### assets (M7)
+
+Upload manifest. See "M7 storage layer" under Code Organization for the write/adopt/release lifecycle.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `key` | TEXT | PRIMARY KEY | `{subdir}/{uuid4}.{ext}` — simultaneously the storage object key and the tail of `/uploads/{key}` |
+| `content_type` | TEXT | NOT NULL | Magic-byte-derived at upload; the single authority on read |
+| `size_bytes` | INTEGER | NOT NULL | |
+| `referenced` | BOOLEAN | NOT NULL, DEFAULT false | Flipped true when an entity column adopts the key; `false` rows older than 24 h are swept |
+| `created_at` | TIMESTAMP | NOT NULL, DEFAULT now() | |
+
+Index `ix_assets_referenced_created_at (referenced, created_at)` backs the hourly abandoned-upload sweep.
+
 ## 2. API Endpoints
 
 ### Base URL
@@ -555,6 +623,7 @@ Development: http://localhost:8000
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/responsibilities` | List all responsibilities |
+| GET | `/responsibilities/completions` | Completions for a date (`?date=YYYY-MM-DD`), used by the daily schedule view |
 | GET | `/responsibilities/{id}` | Get single responsibility |
 | POST | `/responsibilities` | Create responsibility |
 | PATCH | `/responsibilities/{id}` | Update responsibility |
@@ -608,6 +677,16 @@ POST /items
 Food item payloads swap `recipe_detail` for `food_item_detail: {category, shopping_quantity, shopping_unit}`. Pydantic enforces:
 - `item_type='recipe'` requires `recipe_detail` present and `food_item_detail` absent (and vice versa)
 - `icon_emoji` and `icon_url` cannot both be set (XOR, mirrors the DB CHECK constraint)
+
+#### Meal Slot Types (`/meal-slot-types`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/meal-slot-types/` | List all slot types, active and inactive, ordered by `sort_order` |
+| POST | `/meal-slot-types/` | Create a custom slot type |
+| PATCH | `/meal-slot-types/{id}` | Rename / recolor / reorder / toggle `is_active` / set `default_participants` |
+| DELETE | `/meal-slot-types/{id}` | Soft-delete (`is_active=false`) when entries reference it, hard-delete when none do |
+| POST | `/meal-slot-types/reset` | Restore the four seeded defaults (Breakfast / Lunch / Dinner / Snack) |
 
 ### Meal Entries
 
@@ -686,6 +765,8 @@ Post-refactor, meal entries reference items via a single `item_id` field (the ol
 | POST | `/auth/refresh` | Rotate the refresh cookie. Cases A/B/C documented in `app/auth/service.py`: Case A = fresh cookie → new cookie + new access token; Case B = superseded within 60s grace → access token only, NO Set-Cookie; Case C = past grace → 401. Row-locked (SELECT FOR UPDATE) for serialization across concurrent refreshes. Cookie unknown / expired / revoked / past grace / chain-corrupt all return byte-identical `401 {"detail": "refresh_failed"}`. |
 | POST | `/auth/logout` | Bearer-token-required (CSRF defense — cookie-only logout is rejected). Validates the access JWT against live `users.session_version` BEFORE any mutation. Bumps `users.session_version` to invalidate already-minted access JWTs, then revokes ALL active refresh tokens for the user. Returns 204 with `Set-Cookie: __Host-refresh=; Max-Age=0` to clear the browser cookie. Stale bearer after operator password rotation returns 401 and does NOT revoke any newly-issued valid refresh token. |
 | GET | `/auth/status` | Public — no auth. Returns `{"account_exists": bool}`. Drives the M4 portal's "Create account" toggle. No version / hostname / config leakage. |
+| GET | `/` | Public — sanity message only (`{"message": "To-Do + Recipe API is running!"}`). |
+| GET | `/healthz` | Public — shallow `{"status": "ok"}` for Fly's HTTP check; deliberately no DB/Redis probe so a dependency flap does not take the app down when `min_machines_running=1`. Exempt from the production host gate. |
 
 **Endpoint contract notes:**
 - All auth-related failures return `401`; only body-shape failures return `422` (Pydantic).
@@ -803,10 +884,18 @@ backend/
 │   │   ├── sync_base.py      # Shared sync helpers (credential loading, status tracking)
 │   │   ├── sync_engine.py    # Two-way calendar sync (pull, push, move, conflict resolution)
 │   │   ├── reminders_sync_engine.py  # Two-way reminders sync (VTODO pull/push)
-│   │   └── shopping_sync.py  # Mealboard meal-entry → shopping-task aggregation
+│   │   ├── shopping_sync.py  # Mealboard meal-entry → shopping-task aggregation
+│   │   ├── recipe_extractor.py # AI recipe import pipeline (fetch → clean → recipe-scrapers → Claude)
+│   │   └── ai_client.py      # Anthropic client wrapper (import + suggest-icon)
 │   │
 │   ├── utils/
-│   │   └── encryption.py     # Fernet encrypt/decrypt for stored passwords
+│   │   ├── encryption.py     # Fernet encrypt/decrypt for stored passwords
+│   │   └── url_safety.py     # SSRF guard for recipe-import URLs
+│   │
+│   ├── constants/
+│   │   ├── units.py          # Predefined unit system for ingredient aggregation
+│   │   ├── irregulars.py     # Irregular plural map for ingredient-name canonicalization
+│   │   └── import_errors.py  # Recipe-import error codes shared with the frontend
 │   │
 │   ├── auth/                 # M3 first-party auth subsystem (audit-surface package)
 │   │   ├── __init__.py       # Re-exports `router` + `get_current_user`

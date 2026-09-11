@@ -10,7 +10,7 @@ has no snippet, draft one in the same shape and offer it back to the templates d
 one line a reviewer can answer yes or no. When a review finds a repeatable class of bug, add a
 check to the matching snippet, not a paragraph to LESSONS.md. -->
 
-Stack: FastAPI · SQLAlchemy 2 (async) · Alembic · PostgreSQL 16 · React 19 · Tailwind CSS v4 · pytest · Vitest · Docker Compose · GitHub Actions
+Stack: FastAPI · SQLAlchemy 2 (async) · Alembic · Pydantic v2 · Celery · Redis · PostgreSQL 16 · React 19 · Vite 7 · Tailwind CSS v4 · TanStack Query · React Router 7 · Vitest · pytest · Playwright · Docker Compose · GitHub Actions
 
 ## Categories
 

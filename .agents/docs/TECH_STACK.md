@@ -16,116 +16,125 @@
 
 ## 1. Frontend Dependencies
 
+Versions below are the resolved entries in `frontend/package-lock.json` (what actually installs); the semver ranges that *allow* them live in `frontend/package.json`.
+
 ### Core Framework
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `react` | ^19.2.0 | UI framework |
-| `react-dom` | ^19.2.0 | React DOM renderer |
-| `react-router-dom` | ^7.12.0 | Client-side routing |
-| `vite` | ^7.2.4 | Build tool and dev server |
+| `react` | 19.2.3 | UI framework |
+| `react-dom` | 19.2.3 | React DOM renderer |
+| `react-router-dom` | 7.12.0 | Client-side routing |
+| `vite` | 7.3.1 | Build tool and dev server |
 
 ### UI Libraries
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `tailwindcss` | ^4.1.18 | Utility-first CSS framework |
-| `@tailwindcss/vite` | ^4.1.18 | Vite plugin for Tailwind |
-| `@headlessui/react` | ^2.2.9 | Unstyled accessible UI components (modals, dialogs) |
-| `@heroicons/react` | ^2.2.0 | SVG icon library |
+| `tailwindcss` | 4.1.18 | Utility-first CSS framework |
+| `@tailwindcss/vite` | 4.1.18 | Vite plugin for Tailwind |
+| `@headlessui/react` | 2.2.9 | Unstyled accessible UI components (modals, dialogs) |
+| `@heroicons/react` | 2.2.0 | SVG icon library |
+| `emoji-mart` | 5.6.0 | Emoji picker (lazy-loaded in `components/shared/EmojiPicker.jsx`) |
+| `@emoji-mart/data` | 1.2.1 | Emoji dataset for `emoji-mart` |
+| `@formkit/auto-animate` | 0.9.0 | Drop-in list/mount animations |
 
 ### Data & State
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `axios` | ^1.13.2 | HTTP client for API calls |
-| `@tanstack/react-query` | ^5.90.19 | Server state management (available, not fully integrated) |
+| `axios` | 1.13.2 | HTTP client for API calls |
+| `@tanstack/react-query` | 5.90.19 | Server state management (available, not fully integrated) |
 
 ### Utilities
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `react-swipeable` | ^7.0.2 | Touch swipe gestures |
+| `react-swipeable` | 7.0.2 | Touch swipe gestures |
 
 ### Dev Dependencies
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `@vitejs/plugin-react` | ^5.1.1 | React plugin for Vite |
-| `@types/react` | ^19.2.5 | TypeScript types for React |
-| `@types/react-dom` | ^19.2.3 | TypeScript types for React DOM |
-| `eslint` | ^9.39.1 | JavaScript linter |
-| `@eslint/js` | ^9.39.1 | ESLint JavaScript rules |
-| `eslint-plugin-react-hooks` | ^7.0.1 | React Hooks linting rules |
-| `eslint-plugin-react-refresh` | ^0.4.24 | React Refresh linting |
-| `globals` | ^16.5.0 | Global variables for ESLint |
-| `prettier` | ^3.8.1 | Code formatter |
+| `@vitejs/plugin-react` | 5.1.2 | React plugin for Vite |
+| `@types/react` | 19.2.9 | TypeScript types for React |
+| `@types/react-dom` | 19.2.3 | TypeScript types for React DOM |
+| `eslint` | 9.39.2 | JavaScript linter |
+| `@eslint/js` | 9.39.2 | ESLint JavaScript rules |
+| `eslint-plugin-react-hooks` | 7.0.1 | React Hooks linting rules |
+| `eslint-plugin-react-refresh` | 0.4.26 | React Refresh linting |
+| `globals` | 16.5.0 | Global variables for ESLint |
+| `prettier` | 3.8.1 | Code formatter |
+| `knip` | 6.4.0 | Dead-code / unused-export detection (`npm run hygiene`) |
 
 ### Testing
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `vitest` | ^2.0.0 | Test runner |
-| `@vitest/coverage-v8` | ^2.0.0 | Code coverage |
-| `@testing-library/react` | ^16.0.0 | React testing utilities |
-| `@testing-library/jest-dom` | ^6.4.0 | Jest DOM matchers |
-| `@testing-library/user-event` | ^14.5.0 | User event simulation |
-| `jsdom` | ^24.0.0 | DOM environment for tests |
-| `msw` | ^2.3.0 | API mocking (Mock Service Worker) |
+| `vitest` | 2.1.9 | Test runner |
+| `@vitest/coverage-v8` | 2.1.9 | Code coverage |
+| `@testing-library/react` | 16.3.2 | React testing utilities |
+| `@testing-library/jest-dom` | 6.9.1 | Jest DOM matchers |
+| `@testing-library/user-event` | 14.6.1 | User event simulation |
+| `jsdom` | 24.1.3 | DOM environment for tests |
+| `msw` | 2.12.7 | API mocking (Mock Service Worker) |
+| `@playwright/test` | 1.49.0 | Visual-regression runner; pinned to match the `mcr.microsoft.com/playwright` base image ARG in `frontend/Dockerfile` |
 
 ---
 
 ## 2. Backend Dependencies
 
+Versions below are the resolved entries in `backend/uv.lock`; the lower-bound constraints that *allow* them live in `backend/pyproject.toml`.
+
 ### Core Framework
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `fastapi` | >=0.128.0 | Async web framework |
-| `uvicorn` | >=0.40.0 | ASGI server |
-| `pydantic` | >=2.12.5 | Data validation and serialization |
+| `fastapi` | 0.128.0 | Async web framework |
+| `uvicorn` | 0.40.0 | ASGI server |
+| `pydantic` | 2.12.5 | Data validation and serialization |
 
 ### Database
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `sqlalchemy` | >=2.0.45 | ORM and database toolkit |
-| `asyncpg` | >=0.31.0 | Async PostgreSQL driver |
-| `psycopg[binary]` | >=3.2.0 | PostgreSQL adapter |
-| `greenlet` | >=3.3.0 | Async support for SQLAlchemy |
-| `alembic` | >=1.18.0 | Database migrations |
+| `sqlalchemy` | 2.0.45 | ORM and database toolkit |
+| `asyncpg` | 0.31.0 | Async PostgreSQL driver |
+| `psycopg[binary]` | 3.3.2 | PostgreSQL adapter |
+| `greenlet` | 3.3.0 | Async support for SQLAlchemy |
+| `alembic` | 1.18.0 | Database migrations |
 
 ### Background Jobs & Messaging
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `celery[redis]` | >=5.4 | Distributed task queue with Redis broker |
-| `redis` | >=5.0 | Redis client for Celery broker/backend |
+| `celery[redis]` | 5.6.2 | Distributed task queue with Redis broker |
+| `redis` | 6.4.0 | Redis client for Celery broker/backend |
 
 ### Calendar Integration
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `caldav` | >=1.4 | CalDAV protocol client (iCloud calendar access) |
-| `icalendar` | >=6.1 | ICS/iCalendar parsing and generation |
-| `cryptography` | >=44.0 | Fernet encryption for stored app-specific passwords |
+| `caldav` | 2.2.6 | CalDAV protocol client (iCloud calendar access) |
+| `icalendar` | 6.3.2 | ICS/iCalendar parsing and generation |
+| `cryptography` | 46.0.5 | Fernet encryption for stored app-specific passwords |
 
 ### AI & Web Extraction
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `anthropic` | >=0.40 | Anthropic Python SDK for Claude API (AI recipe extraction + suggest-icon) |
-| `recipe-scrapers` | >=15.0 | Recipe structured data extraction from 631+ cooking sites |
-| `beautifulsoup4` | >=4.12 | HTML cleaning before LLM extraction |
-| `httpx` | >=0.27 | HTTP client for fetching web pages (prod dep; also used by the test suite) |
+| `anthropic` | 0.96.0 | Anthropic Python SDK for Claude API (AI recipe extraction + suggest-icon) |
+| `recipe-scrapers` | 15.11.0 | Recipe structured data extraction from 631+ cooking sites |
+| `beautifulsoup4` | 4.14.3 | HTML cleaning before LLM extraction |
+| `httpx` | 0.28.1 | HTTP client for fetching web pages (prod dep; also used by the test suite) |
 
 ### Auth (M3)
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `argon2-cffi` | >=23.0 | OWASP-recommended password hashing for the singleton household login |
-| `PyJWT` | >=2.8 | HS256 JWT encode/decode for short-lived access tokens |
-| `email-validator` | >=2.0 | Backs Pydantic's `EmailStr` field on `RegisterIn` / `LoginIn` |
+| `argon2-cffi` | 25.1.0 | OWASP-recommended password hashing for the singleton household login |
+| `PyJWT` | 2.12.1 | HS256 JWT encode/decode for short-lived access tokens |
+| `email-validator` | 2.3.0 | Backs Pydantic's `EmailStr` field on `RegisterIn` / `LoginIn` |
 
 Related env vars: `JWT_SECRET_KEY` (required at runtime in production — must be ≥32 chars and pass the placeholder deny-list), `HOUSEHOLD_ACCESS_KEY` (required at runtime in production — gates first-run register), `APP_ENV` (set to `production` to enable the production host gate + fail-closed secret validation), `PUBLIC_API_HOST` (used by the host gate to identify the legitimate public API domain in production).
 
@@ -135,29 +144,30 @@ Build note: the `Dockerfile` builder stage installs `libxml2-dev`, `libxslt-dev`
 
 ### Utilities
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `python-multipart` | >=0.0.22 | File upload handling |
-| `boto3` | >=1.35 | S3-compatible client for Cloudflare R2 object storage (M7). `R2Backend` selected via `STORAGE_BACKEND=r2`; default `local` keeps dev/test on disk. |
-| `tzdata` | >=2024.1 | IANA timezone database (required for `zoneinfo` on slim Docker images) |
+| `python-multipart` | 0.0.22 | File upload handling |
+| `boto3` | 1.43.90 | S3-compatible client for Cloudflare R2 object storage (M7). `R2Backend` selected via `STORAGE_BACKEND=r2`; default `local` keeps dev/test on disk. |
+| `tzdata` | 2025.3 | IANA timezone database (required for `zoneinfo` on slim Docker images) |
 
 ### Development
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `ipykernel` | >=7.1.0 | Jupyter notebook support |
+| `ipykernel` | 7.1.0 | Jupyter notebook support |
 
 ### Testing
 
-| Package | Version | Purpose |
+| Package | Locked version | Purpose |
 |---------|---------|---------|
-| `pytest` | >=8.0 | Test framework |
-| `pytest-asyncio` | >=0.23 | Async test support |
-| `pytest-cov` | >=4.1 | Code coverage |
-| `httpx` | >=0.27 | Async HTTP client for tests |
-| `factory-boy` | >=3.3 | Test data factories |
-| `testcontainers[postgres]` | >=4.0 | Containerized test databases |
-| `moto[s3]` | >=5.0 | In-process S3 mock (`@mock_aws`) for `R2Backend` tests — keeps the docker-compose test stack R2-free (M7) |
+| `pytest` | 9.0.2 | Test framework |
+| `pytest-asyncio` | 1.3.0 | Async test support |
+| `pytest-cov` | 7.0.0 | Code coverage |
+| `httpx` | 0.28.1 | Async HTTP client for tests |
+| `factory-boy` | 3.3.3 | Test data factories |
+| `testcontainers[postgres]` | 4.14.1 | Containerized test databases |
+| `aiosqlite` | 0.22.1 | Async SQLite driver for isolated unit-level DB tests |
+| `moto[s3]` | 5.2.3 | In-process S3 mock (`@mock_aws`) for `R2Backend` tests — keeps the docker-compose test stack R2-free (M7) |
 
 ---
 
@@ -167,9 +177,9 @@ Build note: the `Dockerfile` builder stage installs `libxml2-dev`, `libxslt-dev`
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| `uv` | Latest | Python package manager (NOT pip) |
-| `npm` | >=18.0 | JavaScript package manager |
-| Node.js | >=18.0 | JavaScript runtime |
+| `uv` | 0.5.24 (pinned in `backend/Dockerfile`) | Python package manager (NOT pip) |
+| `npm` | bundled with Node 20 | JavaScript package manager |
+| Node.js | 20 (`node:20-slim` in `frontend/Dockerfile`; `node-version: '20'` in CI). Vite 7 requires ≥ 20.19 | JavaScript runtime |
 | Python | >=3.12 | Python runtime |
 
 ### Containerization
@@ -219,8 +229,22 @@ celery_beat:
   depends_on: redis
 
 frontend:
-  build: ./frontend
+  build:
+    context: ../frontend
+    target: dev         # Multi-target: 'dev' (Vite HMR) | 'preview' (vite preview) | 'visual-test' (Playwright)
   ports: "5173:5173"
+
+# --profile visual-test (off by default; see development-commands.md)
+api-test:
+  build: { context: ., target: dev }   # NO bind-mount for app/ — bakes the backend in at build time
+  # DATABASE_URL → todo_app_test; runs alembic upgrade head + seeds on boot
+
+frontend-preview:
+  build: { context: ../frontend, target: preview, args: { VITE_API_BASE_URL: http://api-test:8000 } }
+  ports: "4173:4173"
+
+frontend-visual:
+  build: { context: ../frontend, target: visual-test }   # Playwright + Chromium, pinned base image
 ```
 
 **Multi-target Dockerfile:** The backend Dockerfile has three stages:
@@ -237,6 +261,8 @@ TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/todo_app_test
 UPLOAD_DIR=/app/uploads
 REDIS_URL=redis://redis:6379/0
 FERNET_KEY=<base64-encoded-fernet-key>   # For encrypting stored iCloud passwords
+ANTHROPIC_API_KEY=<optional>             # AI recipe import (/items/import-from-url) + suggest-icon; empty disables
+AI_MODEL_NAME=claude-haiku-4-5-20251001  # Model for the above (compose default)
 STORAGE_BACKEND=local                    # local | r2 (unknown values raise; r2 is PR2)
 SQLALCHEMY_ECHO=false                    # true opts into SQL logging; default off
 ```
@@ -254,6 +280,7 @@ VITE_API_BASE_URL=http://localhost:8000
 | Redis | 6379 | Celery broker and result backend |
 | FastAPI | 8000 | Backend API |
 | Vite Dev | 5173 | Frontend development |
+| Vite Preview | 4173 | `frontend-preview` (visual-test profile only) |
 
 ### CI/CD Pipeline
 
@@ -290,15 +317,19 @@ jobs:
     - Deploy to hosting platform
 ```
 
-### Production Deployment (Planned)
+### Production Deployment (live since M2, 2026-05-01)
+
+Chosen and shipped in the v1 productionization epic ([plan](../plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md), M2 deploy skeleton PR #26). Railway, Render and Supabase were considered and not chosen.
 
 | Component | Service | Purpose |
 |-----------|---------|---------|
-| Frontend | Vercel / Fly.io | Static hosting with CDN |
-| Backend | Fly.io / Railway | Container hosting |
-| Database | Managed PostgreSQL | Fly.io Postgres / Railway / Supabase |
-| File Storage | S3 / Cloudflare R2 | User uploads (photos, icons) |
-| SSL | Auto-provisioned | HTTPS for all traffic |
+| Frontend | Vercel | `mealy.dev` — static SPA with CDN; git-integration auto-deploys |
+| Backend | Fly.io (`mealy-app-prod`, region `sjc`) | `api.mealy.dev` — `web` (uvicorn), `worker` (Celery), `beat` (scheduler) process groups; `backend/fly.toml` |
+| Database | Fly Postgres | Managed PostgreSQL 16; `asyncpg` with `ssl=` (see LESSONS.md) |
+| Redis | Upstash | Celery broker + result backend over `rediss://` |
+| File Storage | Cloudflare R2 | User uploads (photos, icons) — provisioned in M2; cutover is M7 (`prod-r2-storage`) |
+| DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, Access Application 1 until M7's teardown; `infra/cloudflare-state.md` |
+| SSL | Auto-provisioned | Let's Encrypt via Fly (API) and Vercel (frontend); Cloudflare terminates at the edge |
 
 **Deployment Options:**
 
@@ -350,7 +381,7 @@ jobs:
 
 ```
 Development: http://localhost:8000
-Production: TBD
+Production:  https://api.mealy.dev   # Fly.io behind Cloudflare; PUBLIC_API_HOST gate rejects other hosts (421)
 ```
 
 ### Content Types
@@ -360,13 +391,17 @@ Production: TBD
 
 ### Authentication
 
-**Current:** None (single-household mode)
-**Planned:** JWT Bearer tokens in Authorization header
+**Current (since M3–M5, May 2026):** one shared household login. 15-minute HS256 JWT access
+token in `Authorization: Bearer`, 30-day `__Host-refresh` cookie with 60-second rotation grace,
+every non-`/auth/*` route on the `protected` router. Details:
+[BACKEND_STRUCTURE.md → Auth](./BACKEND_STRUCTURE.md).
 
 ### Rate Limiting
 
-**Current:** None
-**Planned:** TBD for production
+**Current:** Cloudflare WAF rule *Mealy api-auth burst limit* — `/auth/*` capped at
+**5 requests / 10 s / IP** (block 10 s), the free-tier ceiling. Verified 2026-05-01; intent
+recorded in [`infra/cloudflare-state.md`](../../infra/cloudflare-state.md). No app-layer rate
+limiting.
 
 ---
 
@@ -409,10 +444,13 @@ todo-app/
 │   ├── vite.config.js        # Vite configuration
 │   ├── src/
 │   │   ├── index.css         # Global styles + Tailwind
-│   │   ├── main.jsx          # React entry point
-│   │   ├── App.jsx           # Root component + routes
-│   │   ├── pages/            # Route-level components
-│   │   ├── components/       # Reusable UI components
+│   │   ├── main.jsx          # React entry point (binds the data router)
+│   │   ├── RootLayout.jsx    # Root layout + providers
+│   │   ├── lib/              # api.js, apiBase.js, queryClient.js, router.jsx, auth/
+│   │   ├── pages/            # Route-level page shells
+│   │   ├── components/       # Feature directories + shared/
+│   │   ├── hooks/            # Reusable hooks
+│   │   ├── constants/        # familyColors, foodEmojis, units, …
 │   │   └── contexts/         # React context providers
 │   └── tests/                # Frontend tests
 │
@@ -432,7 +470,8 @@ todo-app/
 │   │   └── routes/           # API endpoints
 │   └── tests/                # Backend tests
 │
-├── CLAUDE.md                 # AI assistant instructions
+├── AGENTS.md                 # Project rules for every AI harness (CLAUDE.md imports it)
+├── infra/                    # cloudflare-state.md
 └── .agents/docs/             # Documentation (framework docs set)
     ├── PRD.md
     ├── APP_FLOW.md
@@ -440,5 +479,9 @@ todo-app/
     ├── FRONTEND_GUIDELINES.md
     ├── FRONTEND_STRUCTURE.md
     ├── BACKEND_STRUCTURE.md
-    └── IMPLEMENTATION_PLAN.md
+    ├── IMPLEMENTATION_PLAN.md
+    ├── LESSONS.md
+    ├── TODOS.md
+    ├── development-commands.md
+    └── REVIEW_CHECKLIST.md
 ```

@@ -16,7 +16,7 @@ Exceptions (host-side by design):
 
 ```bash
 cd backend
-docker-compose up              # Start all services (db, api, frontend) — uses dev target
+docker-compose up              # Start the default stack (db, redis, api, celery_worker, celery_beat, frontend) — dev targets
 docker-compose up --build      # Rebuild and start
 docker-compose down            # Stop all services
 ```
@@ -39,7 +39,7 @@ Without `JWT_SECRET_KEY` and `HOUSEHOLD_ACCESS_KEY`, every protected route retur
 **Multi-target Dockerfile** (`backend/Dockerfile`):
 - `builder` — python:3.12-slim + uv 0.5.24, installs prod deps only, copies app code
 - `dev` (extends builder) — adds test extras (`uv sync --extra test`), keeps uv available, runs with `--reload`
-- `prod` — slim image from builder, non-root `appuser`, no test deps, copies stock icons for uploads
+- `prod` — slim image from builder, non-root `appuser`, no test deps, bundled stock icons at `/app/stock_icons_src`
 
 **Docker Compose** (`backend/docker-compose.yml`):
 - `db` — postgres:16, healthcheck, `init-test-db.sh` creates `todo_app_test` DB on first run
@@ -49,6 +49,7 @@ Without `JWT_SECRET_KEY` and `HOUSEHOLD_ACCESS_KEY`, every protected route retur
 - `celery_beat` — same image as api, runs `celery -A app.celery_app beat`
 - `frontend` — builds from `../frontend`, Vite dev on 5173, anonymous volume for `node_modules`
 - `TEST_DATABASE_URL` points to `todo_app_test` DB for isolated integration tests
+- `--profile visual-test` only: `api-test` (dev image, NO `app/` bind-mount, `DATABASE_URL` → `todo_app_test`, migrates + seeds on boot), `frontend-preview` (`preview` target, `vite preview` on 4173, `VITE_API_BASE_URL` baked to `http://api-test:8000`), `frontend-visual` (Playwright + Chromium, pinned base image). See Visual regression below.
 
 ## Frontend (via Docker)
 
@@ -56,6 +57,7 @@ Without `JWT_SECRET_KEY` and `HOUSEHOLD_ACCESS_KEY`, every protected route retur
 cd backend
 docker-compose exec frontend npm run build      # Production build
 docker-compose exec frontend npm run lint       # ESLint
+docker-compose exec frontend npm run hygiene    # knip — unused files / exports / dependencies
 ```
 
 ## Database Migrations (via Docker)

@@ -8,7 +8,7 @@
 
 1. [Current State](#1-current-state)
 2. [Phase 1: Calendar Dashboard](#2-phase-1-calendar-dashboard)
-3. [Phase 2: CI/CD & Deployment](#3-phase-2-cicd--deployment)
+3. [Phase 2: v1 Productionization](#3-phase-2-v1-productionization)
 4. [Phase 3: Data & State Improvements](#4-phase-3-data--state-improvements)
 5. [Phase 4: User Experience Polish](#5-phase-4-user-experience-polish)
 6. [Phase 5: Future Features](#6-phase-5-future-features)
@@ -26,7 +26,7 @@
 | Tasks | CRUD API | Full UI (create, complete, delete) | Unit + Integration |
 | Responsibilities | CRUD API + completions | Daily view + edit mode | Unit + Integration |
 | Recipes | CRUD API | Catalog view + form (integrated) | Unit + Integration |
-| Meal Plans | **Being overhauled** — MealPlan renamed to MealEntry, new MealSlotType + FoodItem models. See [mealboard overhaul plan](../plans/features/mealboard-main-page-updates/mealboard-main-page-updates-plan-20260402-164137.md) | Calendar view + add modal (being replaced by swimlane layout) | Unit + Integration |
+| Mealboard (meal entries, slot types, food items) | Unified `Item` model (recipes + food items), user-configurable `meal_slot_types`, per-person `meal_entries`, soft-delete + undo, shopping-list aggregation via Celery, AI recipe import from URL | Swimlane planner, mobile day view, Recipes/Food Items catalog, settings for slots — shipped Phases 3.5–3.9 (April 2026) | Unit + Integration + Component + Visual regression |
 | Calendar Events | CRUD API (date-range, source restrictions) | Full calendar UI (18 components, click-to-edit) | Integration + Component |
 | iCloud Calendar Sync | CalDAV + Celery + sync engine | Settings UI + EventFormModal updates | Unit + Integration + Component |
 | Task Model (priority, subtasks, sections) | Priority (0-9), parent_id, section_id, Sections CRUD | Priority flags, section headers, subtask tree | Unit + Integration + Component |
@@ -40,13 +40,13 @@
 1. **Missing Features**
    - iCloud Calendar sync - **built** (CalDAV + Celery + two-way sync); Google Calendar sync - not started
    - iCloud Reminders sync - **built** (CalDAV VTODO + Celery + two-way sync with subtask resolution)
-   - CI/CD pipeline for production deployment - not started
+   - Production deployment — **live since M2 (2026-05-01)** on Fly.io + Vercel; CI on every PR. CD (auto-deploy) deferred to v1.1; v1 ships via the M8 manual runbook
    - Recipe Finder (AI-powered) - placeholder only
    - ~~Auto-generate shopping list from meal plan ingredients~~ — **addressed by mealboard overhaul** (ingredient aggregation with unit conversion, async Celery sync)
    - Notifications/reminders
 
-2. **Active Overhaul**
-   - **Mealboard overhaul** is the next major feature — flexible meal slots, per-person meals, food items, swimlane UI, shopping list auto-sync. See [mealboard-main-page-updates plan](../plans/features/mealboard-main-page-updates/mealboard-main-page-updates-plan-20260402-164137.md).
+2. **Active work**
+   - **Phase 2 — v1 Productionization** (epic `v1-productionization`): M7 private object storage on Cloudflare R2 is implemented and in pre-landing review on `prod-r2-storage`; M8 launch runbook is next. The mealboard overhaul that used to sit here shipped in April (Phases 3.5–3.9 below).
 
 3. **Polish Items**
    - Loading states
@@ -195,13 +195,15 @@
 
 ### Visual regression test infrastructure
 
-Shipped separately on `mealboard-visual-regression` (merged 2026-04-21, commit `ceb324c`). Plan: [`.agents/plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md`](../plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md). Introduced `frontend-preview` + `frontend-visual` + `api-test` docker-compose services under `profiles: [visual-test]`, a `visual-tests` parallel CI job, and 4 canonical-state specs. Geometric-first (bbox deltas across hover/rest/exit) rather than pixel screenshots. M5 PR #1 preserved this by updating `globalSetup.js` to login-or-register against `api-test`, and using Playwright `context.route()` to intercept `/auth/refresh` in the test browser. No env flag, no production code branches for bypass.
+Shipped separately on `mealboard-visual-regression` (merged 2026-04-21, commit `ceb324c`). Plan: [`.agents/plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md`](../plans/features/mealboard-visual-regression/mealboard-visual-regression-plan-20260420-210508.md). Introduced `frontend-preview` + `frontend-visual` + `api-test` docker-compose services under `profiles: [visual-test]`, a `visual-tests` parallel CI job, and 4 canonical-state specs. Geometric-first (bbox deltas across hover/rest/exit) rather than pixel screenshots. M5 PR #1 preserved this by updating `global-setup.js` to login-or-register against `api-test`, and using Playwright `context.route()` to intercept `/auth/refresh` in the test browser. No env flag, no production code branches for bypass.
 
 ---
 
 ## 4. Phase 3: Data & State Improvements
 
 **Goal:** Improve data fetching patterns and state management.
+
+**Status:** in-progress — Step 2.2 (centralized API client) shipped in M4 (`lib/api.js`, PR #33, 2026-05-04); Step 2.1 (React Query) partial — `lib/queryClient.js` + the `/auth/*` surface use TanStack Query, the 28 imperative entity callers do not yet (deferred, see FRONTEND_STRUCTURE.md → HTTP/data fetching).
 
 > Note: This phase can run in parallel with Calendar and CI/CD work.
 
@@ -213,7 +215,7 @@ Shipped separately on `mealboard-visual-regression` (merged 2026-04-21, commit `
 - All components with API calls
 
 **Tasks:**
-- [ ] Set up QueryClientProvider in main.jsx
+- [x] Set up QueryClientProvider (mounted in `RootLayout.jsx`, M4)
 - [ ] Create custom hooks for each entity:
   - `useRecipes()`, `useRecipe(id)`
   - `useMealPlans(startDate, endDate)`
@@ -246,10 +248,10 @@ export function useCreateRecipe() {
 **Files to create:**
 - `frontend/src/lib/api.js`
 
-**Tasks:**
-- [ ] Create axios instance with base URL
-- [ ] Add request/response interceptors
-- [ ] Centralize error handling
+**Tasks:** — shipped in M4 (`frontend/src/lib/api.js`)
+- [x] Create axios instance with base URL
+- [x] Add request/response interceptors (Bearer injection + single-flight refresh on 401)
+- [x] Centralize error handling (401 → one-shot redirect via `lib/auth/redirect.js`)
 - [ ] Add request timeout
 
 ```javascript
@@ -289,7 +291,7 @@ api.interceptors.response.use(
 - Desktop: modal removed entirely
 - "Crisp Defined" visual treatment with bordered action area, round checkboxes, inset expansion panel
 
-**Status:** Plan approved + CEO reviewed. Ready for implementation.
+**Status:** shipped 2026-04-02 (PR #18)
 
 ---
 
@@ -322,7 +324,7 @@ api.interceptors.response.use(
 - **Shopping list auto-sync** via Celery with aggregation key + unique constraint for concurrency safety
 - **Participant resolution** eagerly materialized at write time for simpler queries
 
-**Status:** Phases 1-4 complete (4 commits). Aggregation rework, UX polish, and initial recipes redesign executed in session.
+**Status:** shipped 2026-04-04 (commits `90cb121`…`e6d34ea` on `master`); aggregation rework, UX polish, and the initial recipes redesign followed on the same branch through PR #19 (2026-04-15)
 
 ---
 
@@ -341,7 +343,7 @@ api.interceptors.response.use(
 - View preference persistence in localStorage
 - Shared `recipeGradients.js` utility
 
-**Status:** Plan approved (office hours + CEO review EXPANSION). Eng review required.
+**Status:** shipped 2026-04-15 (PR #19)
 
 ---
 
@@ -360,7 +362,7 @@ api.interceptors.response.use(
 - **New: icon upload** — `icon_url` column on `food_items`, `/uploads/food-item-icon` route, file + URL + XOR emoji/icon toggle, MIME allow-list (PNG/JPEG/WebP — SVG disallowed for security), 1MB max, 512x512 max dimensions, reusable `<ItemIcon>` component.
 - **New: emoji picker** — `@emoji-mart/react` replacing hand-rolled picker (gated on bundle size ≤250KB gzipped + keyboard a11y match), with Recently Used section enabled.
 - **New: soft-delete + 15s undo** — `deleted_at` columns on recipes + food_items, `soft_hidden_at` on meal_entries, merged undo toast (Gmail-style "N items deleted. Undo all"), Celery beat hard-delete job runs hourly for entries > 24h, feature-flag gated (`MEALBOARD_SOFT_DELETE_ENABLED`).
-- **New: AI icon suggest** — `/food-items/suggest-icon` endpoint, Claude Haiku call, permanent DB cache (`icon_suggestions` table keyed by lowercased name), prompt-injection-hardened (instruction-like keywords stripped from input, defensive system prompt), 400ms debounce on the form field, feature-flag gated (`MEALBOARD_AI_SUGGEST_ENABLED`).
+- **New: AI icon suggest** — `/items/suggest-icon` endpoint (moved from `/food-items/` in the Chunk 0 Item-model refactor), Claude Haiku call, permanent DB cache (`icon_suggestions` table keyed by lowercased name), prompt-injection-hardened (instruction-like keywords stripped from input, defensive system prompt), 400ms debounce on the form field, feature-flag gated (`MEALBOARD_AI_SUGGEST_ENABLED`).
 - **New: delight adds** — auto-focus + scroll to first form validation error (generic hook), keyboard shortcut hints footer (⌘S save, Esc cancel) wired on all three form modals, cooked-state scale-pulse animation on MealCard.
 - **New: query layer** — `active_only()` SQLAlchemy mixin so every SELECT on recipes/food_items/meal_entries filters soft-deleted rows without repetition.
 
@@ -378,7 +380,7 @@ api.interceptors.response.use(
 
 **New observability:** Counters for `icon_upload.*`, `claude_suggest.cache_hit/miss/latency/failure`, `soft_delete.scheduled/undone`, `hard_delete.completed`. Structured logs with `user_id` + `entity_id` + `op` at entry/exit of soft-delete, undo, hard-delete, upload, suggest.
 
-**Status:** Plan approved (office hours + CEO review EXPANSION 2026-04-13). Eng review required. Review report in plan file.
+**Status:** shipped 2026-04-15 (PRs #19, #20) — includes the unified Item-model refactor (Chunk 0, `34111af`)
 
 **Prerequisite chunk in this batch — Unified Item Model Refactor (Chunk 0):** The 2026-04-13 CEO review follow-up promoted the Item model unification from a deferred P1 TODO into the first chunk of this batch. All subsequent chunks now operate on the unified `Item` model with `item_type` discriminators. Schema: `items` table with shared lifecycle fields (name, icon_emoji, icon_url, tags, is_favorite, deleted_at) + `recipe_details` and `food_item_details` tables keyed by `item_id`. `meal_entries.recipe_id` and `meal_entries.food_item_id` collapse into a single `meal_entries.item_id FK`. Data-preserving migration backfills existing recipes and food items into the new schema atomically. Frontend uses thin wrappers (`RecipeCard`, `FoodItemCard`) over shared bases (`ItemCardBase`, `ItemFormBase`). See plan Chunk 0.1-0.8 for full spec. Net effort: adds ~2 weeks human upfront but halves every subsequent chunk.
 
@@ -400,11 +402,11 @@ api.interceptors.response.use(
 - **Frontend** — Tab switcher (Manual/From URL) in RecipeFormBody, `RecipeUrlImport` component (4 states: input/loading/preview/error), `useRecipeImport` polling hook, clipboard paste detection
 - **New deps** — `anthropic`, `recipe-scrapers`, `beautifulsoup4`, `httpx` (moved from test to prod)
 
-**Status:** Plan approved (office hours + CEO review EXPANSION 2026-04-16). Eng review required.
+**Status:** shipped 2026-04-17 (PR #21)
 
 ---
 
-### Phase 3.8: Mealboard Meal-Card Polish (Active — Plan Approved)
+### Phase 3.8b: Mealboard Meal-Card Polish
 
 **Goal:** Five small UX improvements to the weekly mealboard: expand-on-hover action reveal, remove redundant view-recipe button, in-place 5-second undo after delete, drop servings metadata, fix text-cursor on day-header row.
 **Branch:** `mealboard-meal-card-polish`
@@ -417,7 +419,7 @@ api.interceptors.response.use(
 - **Sweeper extension** — second pass for user-undo entries with 15s grace period.
 - **Observability** — structured logs for soft_delete / undo_success / undo_failed / undo_sync_add_failed.
 
-**Status:** Plan approved + CEO review CLEAR (HOLD SCOPE, 2026-04-17). Eng review required before implementation.
+**Status:** shipped 2026-04-20 (PR #22); hover-expand swimlane fix followed in PR #23 (2026-04-21)
 
 ---
 
@@ -496,11 +498,11 @@ function RecipeCardSkeleton() {
 **Description:** Set meals to repeat weekly/monthly.
 
 **Database changes:**
-- [ ] Add `recurrence` column to meal_plans (NULL, WEEKLY, BIWEEKLY, MONTHLY)
+- [ ] Add `recurrence` column to `meal_entries` (NULL, WEEKLY, BIWEEKLY, MONTHLY)
 - [ ] Add `recurrence_end_date` column
 
 **Backend tasks:**
-- [ ] Modify meal plan creation to handle recurrence
+- [ ] Modify meal entry creation to handle recurrence
 - [ ] Create background job to generate future instances
 - [ ] Handle deletion of recurring series
 
@@ -532,7 +534,7 @@ function RecipeCardSkeleton() {
 2. ~~**Phase 1.4** - iCloud Calendar Integration~~ ✅ Complete (CalDAV + Celery + two-way sync + 57 new tests)
 3. ~~**Phase 1.6** - Task Model Enhancement~~ ✅ Complete (priority, subtasks, sections, sync metadata)
 4. ~~**Phase 1.7** - iCloud Reminders Sync~~ ✅ Complete (CalDAV VTODO + Celery + two-way sync + 26 new tests)
-5. **Phase 2** - CI/CD & Deployment (users can access the app)
+5. **Phase 2** - v1 Productionization (deployed since M2, 2026-05-01; auth live since M5; M7 storage in review; M8 launch runbook remaining)
 
 ### High Priority (v1 Polish)
 
@@ -544,7 +546,7 @@ function RecipeCardSkeleton() {
 
 7. **Phase 1.5** - Google Calendar Integration
 8. ~~**Phase 5.1** - Auto-generate Shopping List from Recipes~~ (superseded by Phase 3.6 Mealboard Overhaul)
-9. **Phase 3.2** - Centralize API Client
+9. ~~**Phase 3.2** - Centralize API Client~~ ✅ shipped in M4 (`lib/api.js`)
 
 ### Lower Priority (Future)
 
@@ -573,11 +575,11 @@ function RecipeCardSkeleton() {
 ### Test Commands
 
 ```bash
-# Frontend (via Docker — 321 tests)
+# Frontend (via Docker — 547 tests, 57 files)
 docker-compose exec frontend npm run test:run        # Run all tests
 docker-compose exec frontend npm run test:coverage   # With coverage
 
-# Backend (via Docker — 325 tests)
+# Backend (via Docker — 890 tests)
 docker-compose exec api uv run pytest                      # All tests
 docker-compose exec api uv run pytest tests/unit -v        # Unit tests only
 docker-compose exec api uv run pytest tests/integration -v # Integration tests
