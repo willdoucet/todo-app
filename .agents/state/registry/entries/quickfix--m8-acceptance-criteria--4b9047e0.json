@@ -1,0 +1,19 @@
+{
+  "branch": "quickfix/m8-acceptance-criteria",
+  "commit": "8245813",
+  "completed": "2026-09-11",
+  "created_at": "2026-09-11T21:43:36Z",
+  "implementation_status": "shipped",
+  "key": "quickfix:m8-acceptance-criteria",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/48",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Record the web-scale drift and the gate diagnostic log line in M8's acceptance criteria",
+  "updated_at": "2026-09-11T21:45:45Z",
+  "workflow_status": "shipped"
+}
