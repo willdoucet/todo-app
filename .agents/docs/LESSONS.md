@@ -223,6 +223,13 @@ def run_async(coro):
 - **Before treating a console error as a real bug, always:** (1) `grep` the current source for the symbol the error references — if absent, it's stale; (2) reload the page fresh and capture a new error trace; (3) check the line number against `wc -l` of the file.
 - Fixed 2026-04-19 after the `mealboard-meal-card-polish` handover: three stack traces of `handleViewRecipe is not defined` were HMR artifacts from Chunk-1 edits; the committed code had no such reference.
 
+### Parse API timestamps as UTC — they arrive without a timezone
+
+Datetime columns are `timestamp without time zone` holding UTC, and Pydantic serializes them with no offset (`2026-09-11T20:07:34`). `new Date(thatString)` reads it as **local** time, so every derived duration is off by the viewer's UTC offset — west of Greenwich, a recent timestamp lands in the future and "5 minutes ago" renders as "just now".
+
+- Append `Z` when the string carries no offset before constructing a `Date` (`ICloudSettings.jsx: parseServerTime`), or anchor the countdown on the client clock where that is honest (`MealPlannerView.jsx` undo window).
+- Test fixtures must use the API's real shape. `new Date().toISOString()` adds the `Z` that production never sends, which is exactly why this went unnoticed — and pin a non-UTC `process.env.TZ` in the test, or the assertion passes in UTC CI either way.
+
 ### Single-delete invariant for meal entries (regression test)
 
 - Deleting ONE meal card must remove EXACTLY ONE card from the swimlane grid. Covered by `frontend/tests/components/mealboard/MealPlannerView.delete.test.jsx`: happy-path undo flow, mixed-version fallback (no `undo_token` in response), and rapid sequential delete (F3 regression for the timer-cancel race).
@@ -265,6 +272,8 @@ def run_async(coro):
 | 2026-04-19 | `crud_items.py:undo_soft_delete_item` restore cascade | Restoring a soft-deleted Item cleared `soft_hidden_at` on cascade-hidden meal_entries but left `undo_token` populated. Live rows must have `undo_token=NULL` per the state-machine invariant documented in `crud_meal_entries.py`. No user-visible corruption (CAS guard prevents accidental undo of live rows), but a latent foot-gun | Added `undo_token=None` to the restore UPDATE's `.values()` |
 | 2026-09-11 | Cloudflare Access Application 1 (edge, `api.mealy.dev`) | Operator could not log in at mealy.dev; the console showed a CORS error on `api.mealy.dev/auth/status`. The Access session for `api.mealy.dev` had lapsed (Access sessions are per hostname, 24h here), so Access answered the SPA's XHR with a 302 to its login page on `mealyapp.cloudflareaccess.com`, which carries no CORS headers. The app's own CORS config was correct | Workaround: open any `api.mealy.dev` URL in a tab to re-authenticate. Fixed for good by removing Application 1 at the M7 cutover. When a browser CORS error hides the real response, `curl -i` the URL with an `Origin` header first — a 3xx or 5xx from the edge is the usual cause |
 | 2026-09-11 | `app/main.py:production_host_gate` | The gate compared only the client-written `Host` header. Fly holds a cert for `api.mealy.dev`, so `curl --resolve` to the Fly IP reached the app and skipped the Cloudflare `/auth/*` rate limit — the only brute-force and argon2-CPU control on login | Gate also requires `X-Origin-Verify` (set by a Cloudflare Transform Rule) to match the `ORIGIN_VERIFY_SECRET` Fly secret; production refuses to boot without it. Regression tests in `tests/integration/auth/test_host_gate.py` and `tests/unit/test_origin_verify_bootstrap.py` |
+| 2026-09-11 | Fly `worker` process group (`mealy-app-prod`) | The Celery worker machine had been stopped since at least the end of May — 103 days. iCloud calendar and reminder sync, the soft-delete purge, and the abandoned-upload sweep never ran; 32,136 scheduled jobs queued in Upstash. Nothing surfaced it: web stayed healthy, beat kept queueing, and the M7 deploy updated the stopped machine without starting it | Purged the queue and started the machine. `[[restart]] policy = "always"` on `worker` and `beat`; a `fly status` "every process group started" check in the cutover runbook; a sync-freshness dot in `ICloudSettings.jsx` so the next outage is visible in the app |
+| 2026-09-11 | `ICloudSettings.jsx:relativeTime` | "Last synced" was off by the viewer's UTC offset. `last_sync_at` is a `timestamp without time zone` serialized without a `Z`, and `new Date()` read it as local time — in PDT a sync from five hours ago rendered "just now", which would have made the new freshness dot lie | `parseServerTime` appends `Z` when the string carries no offset. Tests use the API's no-`Z` shape with `process.env.TZ` pinned to `America/Los_Angeles`; the old fixtures used `toISOString()`, whose `Z` hid the bug |
 
 ## Fly Postgres + asyncpg setup
 
@@ -360,6 +369,16 @@ That request carries the same `Host` as a Cloudflare-proxied one, so a gate comp
 - Verify a lock by going around the edge (the `--resolve` curl), not only through it.
 
 Discovered 2026-09-11 during the M7 R2 cutover smoke checks. Rollout and rotation: `infra/cloudflare-state.md` → *Transform Rules — origin lock*.
+
+## `fly deploy` leaves an already-stopped machine stopped
+
+A deploy updates every machine's image, but a machine that was stopped beforehand stays stopped — no `start` event, no app log line beyond "Configuring firecracker". Nothing in `fly deploy`'s output says a process group is down, and a process group with no `[[services]]` (the Celery `worker` and `beat`) has no health check to fail either.
+
+- **After every deploy, run `fly status -a <app>` and confirm every process group is `started`.** `fly scale show` is not a substitute: it counts machines, including stopped ones.
+- Give background process groups `[[restart]] policy = "always"`. The default is `on-failure`, which leaves the machine down after a clean exit or a platform-initiated stop.
+- A dead worker is silent by construction: the API keeps serving, beat keeps queueing, and the jobs pile up in Redis. Surface it in the UI (see the sync-freshness dot in `ICloudSettings.jsx`), because no log line arrives to tell you.
+
+Discovered 2026-09-11 during the M7 cutover: the `worker` machine had been stopped since at least the end of May. 32,136 scheduled jobs had queued in Upstash (103 days' worth), and iCloud sync plus the soft-delete purge had been dead that entire time.
 
 ## Celery beat schedule file location under non-root containers
 

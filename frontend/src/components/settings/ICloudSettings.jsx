@@ -404,11 +404,7 @@ function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
           <p className="text-xs text-text-muted dark:text-gray-400">
             {memberName} &middot; {integration.calendars?.length || integration.selected_calendars?.length || 0} calendar{(integration.calendars?.length || integration.selected_calendars?.length || 0) !== 1 ? 's' : ''}
           </p>
-          {integration.last_sync_at && (
-            <p className="text-xs text-text-muted dark:text-gray-400 mt-0.5">
-              Last synced {relativeTime(integration.last_sync_at)}
-            </p>
-          )}
+          <LastSynced timestamp={integration.last_sync_at} />
           {integration.status === 'ERROR' && integration.last_error && (
             <p className="text-xs text-red-600 dark:text-red-400 mt-1">
               {integration.last_error}
@@ -451,11 +447,7 @@ function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
                 <p className="text-xs text-text-muted dark:text-gray-400">
                   {integration.reminder_lists?.length || 0} list{(integration.reminder_lists?.length || 0) !== 1 ? 's' : ''}
                 </p>
-                {integration.reminders_last_sync_at && (
-                  <p className="text-xs text-text-muted dark:text-gray-400 mt-0.5">
-                    Last synced {relativeTime(integration.reminders_last_sync_at)}
-                  </p>
-                )}
+                <LastSynced timestamp={integration.reminders_last_sync_at} />
                 {integration.reminders_status === 'ERROR' && integration.reminders_last_error && (
                   <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                     {integration.reminders_last_error}
@@ -536,10 +528,66 @@ function IntegrationCard({ integration, onSync, onDisconnect, onRefresh }) {
   )
 }
 
+// Both sync schedules run every 10 minutes (app/celery_app.py beat_schedule), so
+// three missed cycles means the Celery worker or beat is not running. That is a
+// silent failure otherwise: the app keeps working while nothing syncs.
+const SYNC_STALE_AFTER_MS = 30 * 60 * 1000
+
+/**
+ * Parse a timestamp from the API.
+ *
+ * `last_sync_at` is a `timestamp without time zone` column holding UTC, which
+ * serializes with no offset (`2026-09-11T20:07:34`). `new Date()` reads that
+ * form as LOCAL time, so every relative time was skewed by the viewer's offset
+ * — in PDT a sync from five hours ago rendered "just now". Same naive-UTC trap
+ * as the meal-planner undo window (MealPlannerView.jsx).
+ */
+function parseServerTime(value) {
+  if (!value) return null
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value)
+  const parsed = new Date(hasZone ? value : `${value}Z`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+/**
+ * "Last synced N min ago" with a freshness dot. Red plus the words "sync
+ * overdue" once the schedule has clearly stopped running — the dot's color is
+ * never the only signal.
+ */
+function LastSynced({ timestamp }) {
+  if (!parseServerTime(timestamp)) return null
+
+  const overdue = syncIsOverdue(timestamp)
+
+  return (
+    <p
+      className={`text-xs mt-0.5 flex items-center gap-1.5 ${
+        overdue ? 'text-red-600 dark:text-red-400' : 'text-text-muted dark:text-gray-400'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${
+          overdue ? 'bg-red-500 dark:bg-red-400' : 'bg-green-500 dark:bg-green-400'
+        }`}
+      />
+      Last synced {relativeTime(timestamp)}
+      {overdue && ' · sync overdue'}
+    </p>
+  )
+}
+
+/** True once the sync schedule has clearly stopped running. Reads the clock at
+ *  render, like `relativeTime` — the card re-renders on the integrations poll. */
+function syncIsOverdue(isoString) {
+  const then = parseServerTime(isoString)
+  return then ? Date.now() - then.getTime() > SYNC_STALE_AFTER_MS : false
+}
+
 function relativeTime(isoString) {
-  if (!isoString) return 'never'
+  const then = parseServerTime(isoString)
+  if (!then) return 'never'
   const now = new Date()
-  const then = new Date(isoString)
   const diffMs = now - then
   const diffMin = Math.floor(diffMs / 60000)
 

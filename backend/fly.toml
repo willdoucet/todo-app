@@ -36,13 +36,31 @@ primary_region = "sjc"
   # though the edge is HTTPS — producing http:// Location headers that
   # browsers block as Mixed Content from an HTTPS frontend.
   web = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"
-  worker = "celery -A app.celery_app worker --loglevel=info --concurrency=2"
+  # --without-gossip/--without-mingle/--without-heartbeat: all three coordinate
+  # a multi-worker cluster (peer discovery, state sync, liveness events). We run
+  # exactly one worker, so they buy nothing and cost Redis commands — the
+  # heartbeat alone publishes every 2s against Upstash, which bills per command
+  # and whose own Celery guidance warns that "Celery workers poll Redis
+  # continuously, even when there is no queue activity".
+  worker = "celery -A app.celery_app worker --loglevel=info --concurrency=2 --without-gossip --without-mingle --without-heartbeat"
   # Beat must be exactly one process — multiple beat instances would fire
   # the iCloud sync schedule N times every 10 min and corrupt task state.
   # Singleton invariant enforced via `fly scale count beat=1` post-deploy.
   # --schedule writes the shelve DB to /tmp because /app is owned by root
   # in the prod image (USER appuser cannot write the default cwd location).
   beat = "celery -A app.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule"
+
+# Both background groups must come back on their own. The default policy is
+# `on-failure`, which leaves a machine stopped after a clean exit or a
+# platform-initiated stop — and `fly deploy` updates an already-stopped machine
+# without starting it, so a deploy does not heal it either. On 2026-09-11 the
+# worker was found stopped since at least the end of May: 32,136 scheduled jobs
+# had queued in Redis, and iCloud sync plus the soft-delete purge had been dead
+# for ~103 days with nothing surfacing it. Web needs no entry here — its health
+# check and `min_machines_running = 1` already keep it up.
+[[restart]]
+  policy = "always"
+  processes = ["worker", "beat"]
 
 [[services]]
   protocol = "tcp"

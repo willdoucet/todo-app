@@ -345,9 +345,9 @@ Chosen and shipped in the v1 productionization epic ([plan](../plans/features/pr
 | Component | Service | Purpose |
 |-----------|---------|---------|
 | Frontend | Vercel | `mealy.dev` — static SPA with CDN; git-integration auto-deploys |
-| Backend | Fly.io (`mealy-app-prod`, region `sjc`) | `api.mealy.dev` — `web` (uvicorn), `worker` (Celery), `beat` (scheduler) process groups; `backend/fly.toml` |
+| Backend | Fly.io (`mealy-app-prod`, region `sjc`) | `api.mealy.dev` — `web` (uvicorn), `worker` (Celery), `beat` (scheduler) process groups; `backend/fly.toml`. `worker` and `beat` carry `[[restart]] policy = "always"` so a stopped machine comes back on its own |
 | Database | Fly Postgres | Managed PostgreSQL 16; `asyncpg` with `ssl=` (see LESSONS.md) |
-| Redis | Upstash | Celery broker + result backend over `rediss://` |
+| Redis | Upstash | Celery broker + result backend over `rediss://`. Upstash bills per command and a Celery worker polls even when idle, so the worker runs `--without-gossip --without-mingle --without-heartbeat` (single-worker deployment: those only coordinate a cluster) |
 | File Storage | Cloudflare R2 | User uploads (photos, icons) — provisioned in M2; **cutover executed 2026-09-11** (M7 PR2, #44; execution log in `infra/r2-cutover-runbook.md`); see Object storage below |
 | DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, origin-lock Transform Rule (sets the `X-Origin-Verify` header the host gate requires), Browser Cache TTL "Respect Existing Headers" (private media relies on it); Access Application 1 removed at M7's cutover (2026-09-11); `infra/cloudflare-state.md` |
 | SSL | Auto-provisioned | Let's Encrypt via Fly (API) and Vercel (frontend); Cloudflare terminates at the edge |

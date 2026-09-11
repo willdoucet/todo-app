@@ -243,13 +243,23 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Priority:** P3
 **Depends on:** Nothing — can be done anytime.
 
-## P2 — iCloud sync silent-failure detection widget
+## P2 — iCloud sync silent-failure detection widget  ✅ DONE (quickfix `worker-outage-hardening`, 2026-09-11)
+> **Status (2026-09-11): DONE.** `ICloudSettings.jsx` already rendered "Last synced X ago" for calendars and reminders, so the quickfix added the freshness dot (red plus "sync overdue" past 30 minutes — three 10-minute beat cycles) and fixed the naive-UTC parse that made every such timestamp read as "just now" west of Greenwich. Shipped the day a 103-day worker outage was found, which is exactly the failure this predicted. **Gap left open:** the indicator is iCloud-specific and only visible on the Settings page — see the follow-up TODO below.
+
 **What:** Add a small "last successful iCloud sync" indicator to the Settings page (or a dedicated admin dashboard panel): timestamp + red/green status dot. Sourced from the existing `CalendarIntegration`/`CloudIntegration` model's last-sync timestamp, updated by the Celery sync task on success.
 **Why:** iCloud calendar + reminders sync runs every 10 min via Celery beat → worker. If Upstash Redis has a transient outage, the Celery worker crash-loops, or the iCloud CalDAV endpoint starts 401'ing, sync silently stops — no error surfaces to the operator. Pre-production ("app is off when I'm not using it") this was fine. Post-launch (v1 productionization plan `prod-contract-freeze`) it's a slow-burn reliability bug: the operator won't notice until calendar drift compounds a week later.
 **Context:** Added by CEO review of `.agents/plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md` (2026-04-21, Section 8 observability gap). Plan explicitly defers structured logging/alerting/Sentry to v1.1 — this is the smallest observability investment that catches the highest-probability silent-failure mode. Implementation pointers: `backend/app/services/icloud_sync.py` already records sync success; surface via `GET /integrations/icloud/status` (or reuse existing endpoint), render in `ICloudSettings.jsx` next to the existing connection state.
 **Effort:** S (human: ~2 hrs / CC: ~30 min)
 **Priority:** P2
 **Depends on:** v1 productionization complete (no point before the app is accessible to the household).
+
+## P2 — Background-job health signal that does not depend on iCloud
+**What:** A "background jobs last ran" signal that is true whenever the Celery worker is alive, independent of any integration. Smallest shape: the worker writes a timestamp on every periodic task completion (Redis key, or a one-row table), the API exposes it (e.g. on the existing app-settings or a small `/health/jobs` read), and Settings renders it with the same freshness dot as the iCloud line. Optionally assert it in the deploy runbook alongside `fly status`.
+**Why:** The 2026-09-11 outage ran 103 days undetected. The sync-freshness dot shipped that day only helps when iCloud is connected and somebody opens Settings — a household that never connects iCloud gets no signal at all, and neither does an unattended deploy. The worker also runs the soft-delete purge and the abandoned-upload sweep, both of which fail just as silently.
+**Context:** Follow-up to the widget TODO above (see LESSONS.md, "`fly deploy` leaves an already-stopped machine stopped"). The periodic tasks are in `backend/app/tasks.py`; the schedule is `beat_schedule` in `backend/app/celery_app.py` (two 10-minute jobs, two hourly). A Redis key avoids a migration but dies with the broker; a table survives it and is queryable from the API without touching Redis. Where to start: decide the store, then write the timestamp from a `task_postrun` signal so no task has to remember to do it. Too big for a quickfix — it adds an endpoint and a data store, so it needs a plan.
+**Effort:** S (human: ~half day / CC: ~1 hr)
+**Priority:** P2
+**Depends on:** Nothing — the quickfix's dot is in place and covers the iCloud-connected case.
 
 ## P2 — Wire knip Into CI
 **What:** Add `npm run hygiene` (knip) as a step in `.github/workflows/test.yml` so dead code is caught automatically on every PR.
