@@ -3,6 +3,7 @@ from fastapi import APIRouter, FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pathlib import Path
+import hmac
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
@@ -92,10 +93,37 @@ def _initialize_storage_backend() -> None:
     get_storage()
 
 
+_ORIGIN_VERIFY_HEADER = "x-origin-verify"
+_ORIGIN_VERIFY_MIN_LENGTH = 32
+
+
+def _initialize_origin_verify() -> None:
+    """Lifespan startup hook for the Cloudflare origin lock.
+
+    In production, `production_host_gate` admits a request only when its
+    `X-Origin-Verify` header matches `ORIGIN_VERIFY_SECRET`, the value a
+    Cloudflare Transform Rule adds (`infra/cloudflare-state.md`). With the
+    secret missing the gate fails closed per request: `/healthz` stays green,
+    Fly keeps the machine, and every real request 421s. Crash the boot instead
+    so the deploy fails and the previous image keeps serving. The error names
+    the variable, never its value.
+    """
+    if os.getenv("APP_ENV") != "production":
+        return
+
+    secret = os.getenv("ORIGIN_VERIFY_SECRET", "").strip()
+    if len(secret) < _ORIGIN_VERIFY_MIN_LENGTH:
+        raise RuntimeError(
+            f"ORIGIN_VERIFY_SECRET must be set to at least "
+            f"{_ORIGIN_VERIFY_MIN_LENGTH} characters when APP_ENV=production"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _initialize_auth_config()
     _initialize_storage_backend()
+    _initialize_origin_verify()
     yield
 
 
@@ -151,24 +179,48 @@ app.add_middleware(
 )
 
 
-# Production host gate — reject direct Fly-hostname traffic for any
-# non-/healthz path. Cloudflare Access + the /auth/* WAF rule are
-# load-bearing through M5; if a caller can hit *.fly.dev directly, both
-# are bypassed (Adversarial review run 2). The gate is a no-op outside
+def _origin_verified(request: Request) -> bool:
+    expected = os.getenv("ORIGIN_VERIFY_SECRET", "").strip()
+    # An unset secret must never match an absent header ("" == "").
+    if not expected:
+        return False
+    presented = request.headers.get(_ORIGIN_VERIFY_HEADER, "")
+    # Compare bytes: compare_digest raises TypeError on non-ASCII str, which
+    # would turn a forged header into a 500 instead of a 421.
+    return hmac.compare_digest(presented.encode(), expected.encode())
+
+
+# Production host gate — admit a non-/healthz request only if it came through
+# Cloudflare, whose /auth/* WAF rate limit is the only brute-force control on
+# login (infra/cloudflare-state.md). Two checks, both required:
+#
+# 1. Host must be PUBLIC_API_HOST. Turns away *.fly.dev traffic (Adversarial
+#    review run 2), but the client writes the Host header: Fly holds a cert
+#    for api.mealy.dev, so `curl --resolve api.mealy.dev:443:<fly-ip>` passed
+#    this check alone and skipped Cloudflare entirely (found 2026-09-11).
+# 2. X-Origin-Verify must match ORIGIN_VERIFY_SECRET, which a Cloudflare
+#    Transform Rule sets on every request for the API host. Only the edge
+#    can add it, so it proves the request came through Cloudflare.
+#
+# Both failures return the same 421 body. The gate is a no-op outside
 # production so dev / test can continue to use arbitrary Host headers.
 @app.middleware("http")
 async def production_host_gate(request: Request, call_next):
     if os.getenv("APP_ENV") != "production":
         return await call_next(request)
 
-    # /healthz must remain reachable for Fly's TCP health checks.
-    if request.url.path == "/healthz":
+    # /healthz must remain reachable for Fly's TCP health checks. Match on
+    # scope["path"] — the value the router dispatches on — NOT request.url.path,
+    # which Starlette builds from the client's Host header: a Host of
+    # "api.mealy.dev/healthz?" makes request.url.path read "/healthz" while the
+    # request still routes to /auth/login, skipping the gate entirely.
+    if request.scope["path"] == "/healthz":
         return await call_next(request)
 
     allowed = os.getenv("PUBLIC_API_HOST", "").strip().lower()
     # Strip port; Host headers may carry one (e.g. ``api.mealy.dev:443``).
     incoming = request.headers.get("host", "").strip().lower().split(":")[0]
-    if not allowed or incoming != allowed:
+    if not allowed or incoming != allowed or not _origin_verified(request):
         return JSONResponse(
             status_code=421,
             content={"detail": "host_not_allowed"},

@@ -153,7 +153,9 @@ full minute window if a brute-forcer rebursts after each 10-second block
 clears (~30/min worst case). The app has **no app-layer rate limiting** — M3
 shipped without the middleware once planned here, so this edge rule is the
 only control (the argon2 dummy-hash note in `app/auth/passwords.py` records
-the resulting DoS-amplification exposure). Verified working 2026-05-01 via
+the resulting DoS-amplification exposure). It only governs traffic that passes
+through this zone — see *Transform Rules — origin lock* below for what stops
+callers going around it. Verified working 2026-05-01 via
 `slice6-rate-limit-burst-test.sh`
 (first 5 of 10 returned 404 from Fly origin, last 5 returned 429 from
 Cloudflare).
@@ -161,3 +163,117 @@ Cloudflare).
 Revisit if upgrading to Cloudflare Pro/Business — at that point, swap
 expression to the original `(http.request.uri.path matches "^/auth/") and
 (http.host eq "api.mealy.dev")` with 10-req/1-min/1-min-duration semantics.
+
+## Transform Rules — origin lock (Modify Request Header)
+
+Status: **PENDING — not yet created.** The operator creates it in step 2 of the
+rollout below; change this line to `active (YYYY-MM-DD)` when it is live.
+
+Dashboard path (post-2025 redesign; there is no longer a "Transform Rules →
+Modify Request Header" submenu): select the **`mealy.dev` zone** (this is a
+zone-level feature, not account-level) → **Rules → Overview** (older accounts:
+**Rules → Transform Rules**) → **Create rule → Request Header Transform Rule**.
+
+Rule name: Mealy origin lock
+When incoming requests match: **Custom filter expression**
+  `(http.host eq "api.mealy.dev")`
+  (Expression Builder equivalent: Field `Hostname`, Operator `equals`, Value
+  `api.mealy.dev`.)
+Then → Modify request header: **Set static**
+  - Header name: `X-Origin-Verify`
+  - Value: the `ORIGIN_VERIFY_SECRET` Fly secret. **Never written in this file,
+    in git, or in a chat transcript.**
+Deploy.
+
+Free plan: allowed (10 transform rules total; this uses 1). The only Free
+limitation is no regex in expressions — not needed here, `eq` is exact match.
+API fallback if the rule type is not visible in the dashboard:
+`PUT /zones/{zone_id}/rulesets/phases/http_request_late_transform/entrypoint`
+with a single `rewrite` rule whose `action_parameters.headers` sets
+`X-Origin-Verify` to `{"operation":"set","value":"<secret>"}`.
+
+Why: the Fly origin accepted connections that skip Cloudflare. Fly holds its
+own certificate for `api.mealy.dev` (the `_acme-challenge.api` record above), so
+`curl --resolve api.mealy.dev:443:<fly-ip> https://api.mealy.dev/...` reached the
+app with the right `Host` header and never touched this zone: no WAF rate limit
+on `/auth/*`, and no Transform Rule. `production_host_gate`
+(`backend/app/main.py`) now also requires this header to match
+`ORIGIN_VERIFY_SECRET` (constant-time compare) and returns 421 otherwise;
+`/healthz` stays exempt for Fly's checks. Found 2026-09-11 during the M7 cutover
+smoke checks.
+
+Why a secret header and not an allowlist of Cloudflare's IP ranges: every
+Cloudflare customer's traffic leaves from those ranges, so another tenant can
+reach our origin from a Cloudflare IP through their own zone with their WAF
+off. They cannot know this value. Authenticated Origin Pulls (mTLS) is not an
+option because Fly's proxy terminates TLS before the app sees the connection.
+
+"Set static" overwrites any `X-Origin-Verify` a client sends, so the header
+cannot be injected through the zone. Cloudflare reserves header names starting
+`cf-` and `x-cf-`; do not rename it to one.
+
+### Rollout
+
+Order matters: deploying the code before the rule exists locks the household
+out. Steps 1–3 are harmless on the current release (it ignores the header), so
+they can be done before the pull request merges.
+
+1. Generate the secret straight to the clipboard; it is never printed:
+   ```bash
+   python3 -c "import secrets; print(secrets.token_urlsafe(32), end='')" | pbcopy
+   ```
+2. In the `mealy.dev` zone: Rules → Overview → Create rule → Request Header
+   Transform Rule. Create the rule above (see the dashboard path at the top of
+   this section), paste the value, Deploy.
+3. Store the same value as a Fly secret (this restarts the machines on the
+   current image). Pipe it through stdin so the value never lands in the `fly`
+   process's arguments (visible in `ps`); then clear the clipboard:
+   ```bash
+   pbpaste | sed 's/^/ORIGIN_VERIFY_SECRET=/' | fly secrets import -a mealy-app-prod
+   ```
+   ```bash
+   pbcopy < /dev/null
+   ```
+   Clipboard-history tools and Universal Clipboard can retain the value; exclude
+   it there too.
+4. Confirm the secret reached Fly BEFORE deploying — names only, never values:
+   ```bash
+   fly secrets list -a mealy-app-prod | grep ORIGIN_VERIFY_SECRET
+   ```
+   Then deploy the code. In production the app refuses to boot without an
+   `ORIGIN_VERIFY_SECRET` of at least 32 characters: if step 3 was skipped the
+   new machine's lifespan raises and the deploy fails its health check rather
+   than serving on a bad secret. On the single web machine that means a
+   crash-loop until the secret is set, so do not skip the presence check above.
+5. Verify from outside, never by hammering `/auth/login`:
+   - Straight to the origin is rejected (expect `HTTP/2 421`):
+     ```bash
+     curl -si --resolve api.mealy.dev:443:66.241.124.153 https://api.mealy.dev/uploads/x | head -1
+     ```
+   - Through Cloudflare still reaches the app (expect `401` and
+     `{"detail":"unauthorized"}`):
+     ```bash
+     curl -si https://api.mealy.dev/uploads/x
+     ```
+   - `https://api.mealy.dev/healthz` returns 200, and you can log in at
+     `https://mealy.dev`.
+   - The `/healthz` exemption cannot be spoofed via the Host header (expect
+     `421`), aimed at a real route:
+     ```bash
+     curl -si --resolve api.mealy.dev:443:66.241.124.153 -H 'Host: api.mealy.dev/healthz?' https://api.mealy.dev/ | head -1
+     ```
+
+   Then set this section's Status line to active.
+
+If real traffic gets 421 after step 4, the dashboard value and the Fly secret
+differ. Neither can be read back, so repeat steps 1–3 with a fresh value. The
+alternative is redeploying the previous image, which is safe for this change
+because it does not touch `fly.toml`.
+
+### Rotation
+
+Repeat rollout steps 1–3 with a new value, running the `fly secrets set`
+immediately after saving the dashboard rule. Between the two, requests carry the
+new value while the app still expects the old one, so expect a short burst of
+421s. There is one web machine and `fly secrets set` restarts it anyway, so
+accepting two values during a rotation would not remove the gap.

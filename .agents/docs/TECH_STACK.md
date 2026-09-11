@@ -136,7 +136,7 @@ Versions below are the resolved entries in `backend/uv.lock`; the lower-bound co
 | `PyJWT` | 2.12.1 | HS256 JWT encode/decode for short-lived access tokens |
 | `email-validator` | 2.3.0 | Backs Pydantic's `EmailStr` field on `RegisterIn` / `LoginIn` |
 
-Related env vars: `JWT_SECRET_KEY` (required at runtime in production — must be ≥32 chars and pass the placeholder deny-list), `HOUSEHOLD_ACCESS_KEY` (required at runtime in production — gates first-run register), `APP_ENV` (set to `production` to enable the production host gate + fail-closed secret validation), `PUBLIC_API_HOST` (used by the host gate to identify the legitimate public API domain in production).
+Related env vars: `JWT_SECRET_KEY` (required at runtime in production — must be ≥32 chars and pass the placeholder deny-list), `HOUSEHOLD_ACCESS_KEY` (required at runtime in production — gates first-run register), `APP_ENV` (set to `production` to enable the production host gate + fail-closed secret validation), `PUBLIC_API_HOST` (used by the host gate to identify the legitimate public API domain in production), `ORIGIN_VERIFY_SECRET` (required at runtime in production — ≥32 chars; the host gate also requires a matching `X-Origin-Verify` header, which Cloudflare's origin-lock Transform Rule adds).
 
 Related env vars: `ANTHROPIC_API_KEY` (required at runtime for `/items/import-from-url` worker + `/items/suggest-icon`), `AI_MODEL_NAME` (default `claude-haiku-4-5-20251001`). Both are read by `app/services/ai_client.py`.
 
@@ -268,7 +268,7 @@ SQLALCHEMY_ECHO=false                    # true opts into SQL logging; default o
 STOCK_ICONS_DIR=/app/stock_icons_src     # Bundled stock icons; served by the media read route
 ```
 
-**Production-only (Fly)** — `APP_ENV=production`, `PUBLIC_API_HOST`, `CORS_ALLOW_ORIGINS`,
+**Production-only (Fly)** — `APP_ENV=production`, `PUBLIC_API_HOST`, `ORIGIN_VERIFY_SECRET`, `CORS_ALLOW_ORIGINS`,
 and the four R2 credentials (`R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
 `R2_BUCKET_NAME`) are set as Fly secrets. (The SQLAlchemy engine pool is not env-tunable —
 `app/database.py` uses the SQLAlchemy defaults plus `pool_pre_ping` and `pool_recycle`.) `STORAGE_BACKEND=r2` is the one exception: it lives in `backend/fly.toml` `[env]`
@@ -349,7 +349,7 @@ Chosen and shipped in the v1 productionization epic ([plan](../plans/features/pr
 | Database | Fly Postgres | Managed PostgreSQL 16; `asyncpg` with `ssl=` (see LESSONS.md) |
 | Redis | Upstash | Celery broker + result backend over `rediss://` |
 | File Storage | Cloudflare R2 | User uploads (photos, icons) — provisioned in M2; **cutover is M7 PR2, pending merge** (`infra/r2-cutover-runbook.md`); see Object storage below |
-| DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, Browser Cache TTL "Respect Existing Headers" (private media relies on it); Access Application 1 removed at M7's cutover (2026-09-11); `infra/cloudflare-state.md` |
+| DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, origin-lock Transform Rule (sets the `X-Origin-Verify` header the host gate requires), Browser Cache TTL "Respect Existing Headers" (private media relies on it); Access Application 1 removed at M7's cutover (2026-09-11); `infra/cloudflare-state.md` |
 | SSL | Auto-provisioned | Let's Encrypt via Fly (API) and Vercel (frontend); Cloudflare terminates at the edge |
 
 **Deployment Options:**
@@ -428,7 +428,7 @@ image reads in production.
 
 ```
 Development: http://localhost:8000
-Production:  https://api.mealy.dev   # Fly.io behind Cloudflare; PUBLIC_API_HOST gate rejects other hosts (421)
+Production:  https://api.mealy.dev   # Fly.io behind Cloudflare; host + origin-header gate rejects anything that skipped Cloudflare (421)
 ```
 
 ### Content Types
@@ -449,7 +449,9 @@ cookie-authenticated because `<img>` cannot send a Bearer header. Details:
 **Current:** Cloudflare WAF rule *Mealy api-auth burst limit* — `/auth/*` capped at
 **5 requests / 10 s / IP** (block 10 s), the free-tier ceiling. Verified 2026-05-01; intent
 recorded in [`infra/cloudflare-state.md`](../../infra/cloudflare-state.md). No app-layer rate
-limiting.
+limiting (a P2 in [TODOS.md](./TODOS.md)). The rule only sees traffic that passes through
+Cloudflare; the production host gate's origin-header check is what stops callers going around
+it ([BACKEND_STRUCTURE.md → Production host gate](./BACKEND_STRUCTURE.md)).
 
 ---
 

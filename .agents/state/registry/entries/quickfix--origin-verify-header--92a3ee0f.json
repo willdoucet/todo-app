@@ -1,0 +1,19 @@
+{
+  "branch": "quickfix/origin-verify-header",
+  "commit": "8f841b6",
+  "completed": "2026-09-11",
+  "created_at": "2026-09-11T20:01:15Z",
+  "implementation_status": "shipped",
+  "key": "quickfix:origin-verify-header",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/46",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Lock the Fly origin to Cloudflare with a shared-secret header",
+  "updated_at": "2026-09-11T20:30:12Z",
+  "workflow_status": "shipped"
+}
