@@ -2,7 +2,7 @@
 
 Canonical intent file for all Cloudflare dashboard state during M2-M7. The
 dashboard config itself is not in git (real drift detection via API or
-Terraform is M8 runbook scope, tracked in `.claude/IMPLEMENTATION_PLAN.md`).
+Terraform is M8 runbook scope, tracked in `.agents/docs/IMPLEMENTATION_PLAN.md`).
 This file is the diff-able intent — update in the same commit that changes
 the dashboard. Slice 7 manually reconciles file vs. live dashboard.
 
@@ -112,9 +112,11 @@ equivalent for our threat model. The 5-per-10-seconds threshold is
 strictly stricter than the plan's 10-per-minute target on the leading
 burst (5 in 10s vs 10 in 60s) and only modestly more permissive over a
 full minute window if a brute-forcer rebursts after each 10-second block
-clears (~30/min worst case). M3's FastAPI middleware adds finer-grained
-app-layer rate-limiting that can match the original 10/min/IP semantics
-exactly. Verified working 2026-05-01 via `slice6-rate-limit-burst-test.sh`
+clears (~30/min worst case). The app has **no app-layer rate limiting** — M3
+shipped without the middleware once planned here, so this edge rule is the
+only control (the argon2 dummy-hash note in `app/auth/passwords.py` records
+the resulting DoS-amplification exposure). Verified working 2026-05-01 via
+`slice6-rate-limit-burst-test.sh`
 (first 5 of 10 returned 404 from Fly origin, last 5 returned 429 from
 Cloudflare).
 

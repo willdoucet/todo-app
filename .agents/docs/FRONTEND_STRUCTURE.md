@@ -32,6 +32,7 @@ frontend/src/
 │   ├── api.js            # Shared axios instance + request/response interceptors (Bearer + 401 refresh)
 │   ├── queryClient.js    # createQueryClient() — QueryCache/MutationCache route 401s to redirect helper
 │   ├── router.jsx        # createBrowserRouter + ProtectedOutlet + rootAuthLoader
+│   ├── *.test.js         # Co-located tests for api, apiBase, queryClient
 │   └── auth/
 │       ├── tokenStore.js       # Module-scope in-memory token + pub/sub
 │       ├── useAuth.js          # useSyncExternalStore wrapper over tokenStore
@@ -40,10 +41,12 @@ frontend/src/
 │       ├── returnTo.js         # isSafeReturnTo / safeReturnTo open-redirect defense
 │       ├── queries.js          # TanStack Query hooks for /auth/status, login, register, logout
 │       ├── HydrateFallback.jsx # Boot-time spinner shown while rootAuthLoader runs
-│       └── BootErrorScreen.jsx # errorElement for non-401 refresh failures (revalidate to retry)
+│       ├── BootErrorScreen.jsx # errorElement for non-401 refresh failures (revalidate to retry)
+│       └── *.test.js(x)        # Co-located tests for every module above except BootErrorScreen
 │
 ├── pages/
 │   ├── AuthPortalPage.jsx      # /auth — login + setup forms, discriminated by /auth/status
+│   ├── AuthPortalPage.test.jsx # Portal tests
 │   ├── FamilyMembersPage.jsx   # Settings page shell (now also mounts AccountSection logout)
 │   ├── ListsPage.jsx           # Lists page shell
 │   ├── MealboardPage.jsx       # Mealboard shell + nested routes
@@ -54,9 +57,9 @@ frontend/src/
 │   ├── family-members/     # Family member management (1 file — see Section 7)
 │   ├── layout/             # App shell chrome (4 files — see Section 8)
 │   ├── lists/              # Task list UI (11 files — see Section 6)
-│   ├── mealboard/          # Mealboard UI + helpers (26 files — see Section 3)
+│   ├── mealboard/          # Mealboard UI + helpers (27 files — see Section 3)
 │   ├── responsibilities/   # Responsibilities UI (5 files — see Section 5)
-│   ├── settings/           # Settings surfaces (8 files — see Section 4)
+│   ├── settings/           # Settings surfaces (9 files — see Section 4)
 │   └── shared/             # Cross-cutting UI + providers (10 files — see Section 9)
 │
 ├── contexts/
@@ -69,7 +72,15 @@ frontend/src/
 │   ├── useFormShortcut.js   # Cmd/Ctrl+S form submit helper
 │   ├── useItems.js          # Unified Item-model CRUD hook for mealboard
 │   ├── useMediaQuery.js     # Responsive breakpoint hook
-│   └── usePageTitle.js      # Sets document title
+│   ├── usePageTitle.js      # Sets document title
+│   └── useRecipeImport.js   # POST /items/import-from-url + poll /items/import-status/{task_id}
+│
+├── constants/
+│   ├── familyColors.js      # 10-color family-member palette + getFirstUnusedColor (see FRONTEND_GUIDELINES)
+│   ├── foodEmojis.js        # Emoji auto-suggest map for food items
+│   ├── importErrors.js      # Recipe-import error codes ↔ user copy (mirrors backend/app/constants/import_errors.py)
+│   ├── recipeGradients.js   # Fallback gradient set for recipe cards without an image
+│   └── units.js             # Predefined unit system (mirrors backend/app/constants/units.py)
 │
 └── assets/
     └── react.svg
@@ -83,6 +94,7 @@ Tests are split between:
 ```
 frontend/tests/visual/
 ├── fixtures/
+│   ├── auth-base.js       # Playwright `test` extended with the cached token and the /auth/refresh intercept
 │   ├── geometric.js       # expectStableAcrossHover, expectDeltaOnHover, waitForMealboardReady, bboxOf, PX_TOLERANCE, DELTA_TOLERANCE
 │   ├── seed.js            # Idempotent API-based seed of 3 canonical VRT items + meal entries for the current week
 │   └── global-setup.js    # Playwright globalSetup — runs seedKnownWeek() once per job
@@ -144,7 +156,7 @@ The data router routes the index of the protected layout directly to `components
 
 `/mealboard/shopping` no longer has its own view; direct hits redirect to `/lists`.
 
-### Files (27 total: 1 page shell + 26 mealboard files)
+### Files (28 total: 1 page shell + 27 mealboard files)
 
 | File | Location | Purpose |
 |------|----------|---------|
@@ -172,6 +184,7 @@ The data router routes the index of the protected layout directly to `components
 | `ItemIcon.jsx` | `components/mealboard/` | Shared item icon renderer (emoji, image, or fallback) |
 | `ToolbarCount.jsx` | `components/mealboard/` | Reusable count badge/label for catalog toolbars |
 | `RecipeImageUpload.jsx` | `components/mealboard/` | Recipe image input/upload control |
+| `RecipeUrlImport.jsx` | `components/mealboard/` | Paste-a-URL recipe import: kicks off `useRecipeImport`, renders the AI preview card, pre-fills `ItemFormModal` on confirm |
 | `UnitCombobox.jsx` | `components/mealboard/` | Ingredient unit picker |
 | `itemDeleteCopy.jsx` | `components/mealboard/` | Shared delete-confirm copy helpers for item deletion |
 | `RecipeFinderView.jsx` | `components/mealboard/` | Placeholder “coming soon” recipe finder screen |

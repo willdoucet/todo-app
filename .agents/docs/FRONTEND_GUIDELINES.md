@@ -182,29 +182,22 @@ Using Tailwind's default spacing scale (1 unit = 0.25rem = 4px):
 
 ### Custom Breakpoints
 
-Defined in `index.css` for specific features:
+None. There are no custom `@media` rules or `@theme` breakpoint overrides in `index.css`; every
+surface uses the standard set above. The mealboard's own transitions, for reference:
 
-| Breakpoint | Min Width | Usage |
-|------------|-----------|-------|
-| Mealboard Nav | 1200px | Show left panel navigation |
-| Right Panel | 1525px | Show meal planner right panel |
+| Surface | Breakpoint | Below | At and above |
+|---|---|---|---|
+| Planner grid | `md` 768px | `MobileDayView` (one day, swipe) | `SwimlaneGrid` (rows = slot types, columns = days) |
+| `MealCard` meta, `ItemDetailDrawer` | `md` 768px | collapsed meta; bottom sheet | full meta; side drawer |
+| Mealboard nav + planner header | `xl` 1280px | `MealboardNav` dropdown | `MealboardNav` sidebar |
+| App sidebar | `sm` 640px | bottom bar | left rail |
 
 ### Implementation
 
-```css
-/* Mealboard calendar - vertical on mobile, 7-column grid on desktop */
-.meal-calendar {
-  display: flex;
-  flex-direction: column;
-}
-
-@media (min-width: 768px) {
-  .meal-calendar {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-  }
-}
-```
+Responsive behaviour is expressed with Tailwind prefixes on the element (`hidden md:grid`,
+`md:hidden`), never with handwritten `@media` blocks — that keeps every breakpoint greppable
+and lets `useMediaQuery` (`hooks/useMediaQuery.js`) mirror the same values in JS where a
+component must switch behaviour, not just layout.
 
 ---
 
@@ -270,14 +263,10 @@ className={`... ${isCompleted ? 'bg-sage-50 dark:bg-green-900/20 border-sage-200
 </span>
 ```
 
-**Meal category colors:**
-```javascript
-const CATEGORY_COLORS = {
-  BREAKFAST: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  LUNCH: 'bg-sage-100 text-sage-700 dark:bg-green-900/30 dark:text-green-400',
-  DINNER: 'bg-peach-100 text-terracotta-700 dark:bg-orange-900/30 dark:text-orange-400'
-}
-```
+**Meal slot colours** are data, not a static map: each `meal_slot_types` row carries its own
+`color` (hex, chosen in Settings), and the swimlane header / badge reads it from the row. The
+only static colour map left is the food-category stripe on catalog cards
+(`CATEGORY_COLORS` in `components/mealboard/ItemCard.jsx`, keyed by food category).
 
 ### Sidebar Navigation Item
 
@@ -316,9 +305,14 @@ Using Headless UI `Dialog`:
 Dark mode uses class-based toggling via `DarkModeContext`:
 
 ```jsx
-// Toggle dark class on document root
-document.documentElement.classList.toggle('dark')
+// DarkModeContext: read localStorage('darkMode') on mount, then keep the
+// root class and storage in step on every change
+document.documentElement.classList.add('dark')     // or .remove('dark')
+localStorage.setItem('darkMode', 'true')
 ```
+
+`index.css` declares the variant as `@custom-variant dark (&:where(.dark, .dark *));`, so
+`dark:` utilities key off that root class rather than `prefers-color-scheme`.
 
 ### Color Mapping
 
@@ -348,7 +342,8 @@ className="bg-card-bg dark:bg-gray-800 text-text-primary dark:text-gray-100"
 
 ### Icon Library
 
-Using inline SVGs with Tailwind classes. Standard sizes:
+Two sources, both sized with Tailwind classes: `@heroicons/react` (outline set — navigation,
+toolbars, form controls) and hand-inlined SVGs where a glyph is not in Heroicons. Standard sizes:
 
 | Class | Usage |
 |-------|-------|
@@ -373,19 +368,33 @@ Icons inherit color from text (`currentColor`), so apply color via parent's `tex
 
 ### Defined Keyframes
 
-In `index.css`:
+All in `index.css`, inside `@layer base` — Tailwind v4 tree-shakes unlayered custom `@keyframes`
+unless a generated utility references them (see LESSONS.md). Custom animation classes are
+`@utility` directives for the same reason (`swimlane-enter`, `meal-card-enter`, `bounce-in`,
+`tag-pill-enter`).
+
+| Keyframe | Used for |
+|---|---|
+| `fade-in` | Generic mount fade (4px rise) |
+| `scale-in` | Checkmark / badge pop |
+| `swimlane-enter`, `meal-card-enter` | Planner grid and card entrance |
+| `bounce-in`, `scale-pop` | Emphasis on add / cooked toggle |
+| `recipe-card-enter`, `recipe-row-enter`, `tag-pill-enter` | Catalog grid / list / tag-filter entrance |
+| `view-crossfade` | Recipes ↔ Food Items tab switch |
+| `undo-countdown`, `undo-bar-shrink` | Soft-delete undo card timer |
+| `meal-card-cooked-pulse` / `-dark` | One-shot pulse when a meal is marked cooked (light / dark variants) |
 
 ```css
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes scale-in {
-  from { transform: scale(0); }
-  to { transform: scale(1); }
+@layer base {
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  /* … */
 }
 ```
+
+Every animated element pairs its class with `motion-reduce:` so `prefers-reduced-motion` is honored.
 
 ### Transition Utilities
 
@@ -442,8 +451,8 @@ Minimum touch target size: 44x44px for mobile. Use `p-2` or larger on icon butto
 ```
 frontend/src/
 ├── components/
-│   ├── [SharedComponent].jsx    # Reusable across features
-│   ├── calendar/                # Calendar dashboard (18 components)
+│   ├── shared/                  # Reusable across features (ConfirmDialog, ToastProvider, …)
+│   ├── calendar/                # Calendar dashboard (20 files)
 │   │   ├── CalendarPage.jsx     # Orchestrator with modal + edit state
 │   │   ├── CalendarItem.jsx     # Row item with click + checkbox toggle
 │   │   └── ...

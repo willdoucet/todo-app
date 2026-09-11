@@ -159,6 +159,13 @@
           ".github/workflows/**"
         ],
         "section": "CI/CD Pipeline"
+      },
+      {
+        "paths": [
+          "frontend/src/constants/**"
+        ],
+        "doc": "FRONTEND_STRUCTURE.md",
+        "section": "Directory Overview"
       }
     ]
   },

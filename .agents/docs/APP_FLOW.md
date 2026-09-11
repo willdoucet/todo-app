@@ -19,7 +19,7 @@
 
 | Route | Page Component | Purpose |
 |-------|----------------|---------|
-| `/` | `CalendarDashboard` | Home screen with unified calendar view |
+| `/` | `CalendarPage` (`components/calendar/`) | Home screen with unified calendar view |
 | `/lists` | `ListsPage` | Task management with list sidebar |
 | `/responsibilities` | `ResponsibilitiesPage` | Daily routines and recurring tasks |
 | `/settings` | `FamilyMembersPage` | Manage household members, timezone, and calendar integrations |
@@ -624,6 +624,11 @@ Shopping items are no longer added directly from the Mealboard UI — they appea
 
 ### API Error States
 
+> **Target copy — not yet implemented as written.** Today a 401 triggers a silent one-shot
+> redirect to `/auth?return_to=…` (`lib/auth/redirect.js`), and other failures surface as toasts
+> carrying the API's `detail` string via `ToastProvider`. The messages below are the intended
+> user-facing wording for a future error-handling pass (IMPLEMENTATION_PLAN.md → Phase 4).
+
 | Error Type | User Message | Recovery Action |
 |------------|--------------|-----------------|
 | Network Error | "Unable to connect. Check your internet." | Retry button |
@@ -633,6 +638,10 @@ Shopping items are no longer added directly from the Mealboard UI — they appea
 | 500 Server Error | "Something went wrong. Please try again." | Retry button |
 
 ### Form Validation
+
+> Rows whose message is quoted with a status code (409, 422) are real backend strings and match
+> the code verbatim. The remaining generic messages are **target copy** — the forms currently
+> rely on HTML `required`/`maxLength` attributes and the API's `detail` string.
 
 | Field | Validation | Error Message |
 |-------|------------|---------------|
@@ -669,5 +678,5 @@ Shopping items are no longer added directly from the Mealboard UI — they appea
 | Delete member with tasks | Block or reassign? | Currently: Block | Future: Dialog with options |
 | Complete responsibility twice | Allow toggle? | Yes - removes completion | |
 | Add meal without recipe | Allow custom name? | Yes - custom_meal_name field | |
-| Delete recipe with meal plans | Cascade or preserve? | Preserve meal, null recipe_id | |
+| Delete recipe with meal entries | Cascade or preserve? | Cascade soft-hide: item `deleted_at` + entries `soft_hidden_at` in one transaction, merged undo toast, hard-delete after 24 h (item-model refactor, 2026-04) | |
 | Upload invalid file | Reject silently or message? | Show error message | |

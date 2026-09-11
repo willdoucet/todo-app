@@ -33,9 +33,9 @@
 
 ### Project Status
 
-- **Current state:** Personal project with functional MVP
-- **Target state:** Deployed web application accessible to friends and families
-- **Tech stack:** FastAPI backend, React 19 frontend, PostgreSQL database
+- **Current state:** Deployed at `mealy.dev` (frontend) / `api.mealy.dev` (API) since 2026-05-01, behind a single shared household login. v1 productionization is 6 of 8 milestones done: M7 (private object storage) in review, M8 (launch runbook) next — see [IMPLEMENTATION_PLAN.md → Phase 2](./IMPLEMENTATION_PLAN.md).
+- **Target state:** v1 launch complete; a second household gets its own deployment (single-tenant by design).
+- **Tech stack:** FastAPI backend, React 19 frontend, PostgreSQL database — on Fly.io, Vercel, Upstash Redis and Cloudflare R2 ([TECH_STACK.md](./TECH_STACK.md))
 
 ---
 
@@ -312,7 +312,7 @@ New "Mealboard" card section on the main app Settings page. Two-column layout:
 - Notes: Optional, max 500 characters
 - Servings: Optional integer, overrides recipe default (only for recipe items)
 - Sort Order: Integer, ordering within a slot on a day
-- Must have exactly one of: recipe_id, food_item_id, or custom_meal_name
+- Must have at least one of: `item_id` (a recipe or food item) or `custom_meal_name` — DB CHECK `meal_entries_item_or_custom_check`
 
 ---
 
@@ -335,7 +335,7 @@ New "Mealboard" card section on the main app Settings page. Two-column layout:
 | Filter Favorites | View only favorite recipes | Filter dropdown in Recipes view |
 | Sort Recipes | Sort by name, date added, cook time | Sort options in recipe catalog |
 | Edit Recipe | Modify any recipe field | Changes persist |
-| Delete Recipe | Remove recipe (meal entries keep reference) | Recipe removed, meal_entry.recipe_id set to NULL, displays "Unnamed meal" |
+| Delete Recipe | Soft-delete recipe and cascade-hide its meal entries | Item `deleted_at` + entries `soft_hidden_at` set together; merged undo toast ("Recipe + N meals deleted. Undo") for 15 s; hard-deleted after 24 h. See §10 Recipe & Meal Rules. |
 
 #### Ingredient Structure
 
@@ -421,7 +421,7 @@ Categories: Produce, Protein, Dairy, Pantry, Frozen, Bakery, Beverages, Other
 
 ---
 
-### 5.7 User Authentication (Planned for v1 productionization)
+### 5.7 User Authentication (shipped M3–M5, May 2026)
 
 **Purpose:** Secure one shared login per deployment. The app is single-tenant by design — each household runs its own deployment, so there is no cross-household isolation layer or public signup in v1.
 
@@ -627,11 +627,10 @@ CalendarEvent
 
 **Primary: Cloud Hosted (Recommended)**
 
-Users simply visit the web app URL. Options being evaluated:
-- **Fly.io** - Container-based, good free tier
-- **Railway** - Simple deployment, PostgreSQL included
-- **Render** - Similar to Railway
-- **Vercel + Supabase** - Frontend on Vercel, backend/DB on Supabase
+Users simply visit the web app URL. Chosen and live since M2 (2026-05-01): **Vercel** (frontend)
++ **Fly.io** (API, worker, beat) + **Fly Postgres** + **Upstash Redis** + **Cloudflare** (DNS, R2,
+WAF). Considered and not chosen: ~~Railway~~, ~~Render~~, ~~Vercel + Supabase~~. Details and
+rationale: [TECH_STACK.md → Production Deployment](./TECH_STACK.md).
 
 **Secondary: Self-Hosted**
 
@@ -652,13 +651,13 @@ Push/PR → GitHub Actions
 
 #### Deployment Checklist for v1
 
-- [ ] CI: Tests run on all PRs
+- [x] CI: Tests run on all PRs (backend, frontend, visual, migration jobs — `.github/workflows/test.yml`)
 - [ ] CI: Linting enforced
-- [ ] CD: Auto-deploy to staging on PR merge
-- [ ] CD: Manual promotion to production
-- [ ] Hosting: Production environment live
-- [ ] Hosting: Managed PostgreSQL
-- [ ] Hosting: File storage configured
+- [ ] CD: Auto-deploy to staging on PR merge — **deferred to v1.1**; v1 ships via the M8 manual runbook
+- [ ] CD: Manual promotion to production — the M8 runbook is this step
+- [x] Hosting: Production environment live (2026-05-01)
+- [x] Hosting: Managed PostgreSQL (Fly Postgres)
+- [ ] Hosting: File storage configured — Cloudflare R2 provisioned in M2; cutover is M7 (`prod-r2-storage`)
 - [ ] Monitoring: Basic health checks
 - [ ] Monitoring: Error tracking (Sentry or equivalent)
 
@@ -738,9 +737,9 @@ Push/PR → GitHub Actions
 | Requirement | Description |
 |-------------|-------------|
 | Web Accessible | No command-line interaction for end users |
-| Multi-tenant | Support multiple households |
+| Single-tenant per deployment | One household per instance. A second household runs its own deployment (own Fly app, DB, Redis, R2 bucket, Vercel project) — see §5.7 and §11. |
 | CI/CD | Automated testing and deployment |
-| Hosting | Cloud provider (TBD: Fly.io, Railway, etc.) |
+| Hosting | Fly.io (API) + Vercel (frontend) + Cloudflare (edge) — live since M2 |
 | Database | Managed PostgreSQL |
 | File Storage | Cloud storage for uploads (S3 or equivalent) |
 
@@ -1071,86 +1070,17 @@ class CalendarEventSource:
 
 ## Appendix A: API Endpoints
 
-### Tasks
-- `GET /tasks` - List tasks (filter by list_id)
-- `GET /tasks/{id}` - Get task
-- `POST /tasks` - Create task
-- `PATCH /tasks/{id}` - Update task
-- `DELETE /tasks/{id}` - Delete task
+The endpoint tables live in one place — [BACKEND_STRUCTURE.md → 2. API Endpoints](./BACKEND_STRUCTURE.md)
+— and are reconciled against the live route table by `/update-docs`. This appendix used to carry
+a copy; it drifted (it still listed `/recipes` and `/food-items` four months after the unified
+`/items` API replaced them). Resource index, for orientation only:
 
-### Lists
-- `GET /lists` - List all lists
-- `GET /lists/{id}` - Get list
-- `POST /lists` - Create list
-- `PATCH /lists/{id}` - Update list
-- `DELETE /lists/{id}` - Delete list
-
-### Family Members
-- `GET /family-members` - List all members
-- `GET /family-members/{id}` - Get member
-- `POST /family-members` - Create member
-- `PATCH /family-members/{id}` - Update member
-- `DELETE /family-members/{id}` - Delete member
-
-### Responsibilities
-- `GET /responsibilities` - List responsibilities (filter by assigned_to)
-- `GET /responsibilities/completions` - Get completions for date
-- `GET /responsibilities/{id}` - Get responsibility
-- `POST /responsibilities` - Create responsibility
-- `PATCH /responsibilities/{id}` - Update responsibility
-- `DELETE /responsibilities/{id}` - Delete responsibility
-- `POST /responsibilities/{id}/complete` - Toggle completion
-
-### Recipes
-- `GET /recipes` - List recipes (filter by favorites_only)
-- `GET /recipes/{id}` - Get recipe
-- `POST /recipes` - Create recipe
-- `PATCH /recipes/{id}` - Update recipe
-- `DELETE /recipes/{id}` - Delete recipe
-
-### Meal Slot Types
-- `GET /meal-slot-types` - List all slot types (active + inactive)
-- `POST /meal-slot-types` - Create custom slot type
-- `PATCH /meal-slot-types/{id}` - Update slot type (rename, recolor, reorder, toggle active)
-- `DELETE /meal-slot-types/{id}` - Soft-delete if entries exist, hard-delete if none
-- `POST /meal-slot-types/reset` - Restore default slot types (B/L/D/Snack)
-
-### Food Items
-- `GET /food-items` - List food items (supports ?search=, ?category= filters)
-- `POST /food-items` - Create food item
-- `PATCH /food-items/{id}` - Update food item
-- `DELETE /food-items/{id}` - Delete food item (ON DELETE SET NULL on meal entries)
-
-### Meal Entries
-- `GET /meal-entries` - List meal entries (requires start_date, end_date; optional family_member_id filter)
-- `POST /meal-entries` - Create meal entry (triggers shopping list sync via Celery)
-- `PATCH /meal-entries/{id}` - Update meal entry
-- `DELETE /meal-entries/{id}` - Delete meal entry (subtracts shopping list contributions)
-
-### Calendar Events
-- `GET /calendar-events` - List events (requires start_date, end_date; optional assigned_to)
-- `GET /calendar-events/{id}` - Get single event
-- `POST /calendar-events` - Create event (MANUAL source default)
-- `PATCH /calendar-events/{id}` - Update event (MANUAL + ICLOUD; dispatches push for ICLOUD)
-- `DELETE /calendar-events/{id}` - Delete event (MANUAL + ICLOUD; dispatches delete-push for ICLOUD)
-
-### Calendar Integrations
-- `POST /integrations/icloud/validate` - Validate credentials, return calendar list
-- `POST /integrations/icloud/connect` - Connect iCloud (encrypt, store, initial sync)
-- `GET /integrations/` - List all integrations (optional family_member_id filter)
-- `GET /integrations/{id}` - Get single integration
-- `POST /integrations/{id}/sync` - Force sync (dispatches Celery task)
-- `DELETE /integrations/{id}` - Disconnect and cascade-delete synced events
-
-### App Settings
-- `GET /app-settings/` - Get current settings (timezone, week_start_day, measurement_system)
-- `PATCH /app-settings/` - Update settings (timezone validated as IANA name; week_start_day: "monday"/"sunday"; measurement_system: "imperial"/"metric")
-- `GET /app-settings/timezones` - List all valid IANA timezone names
-
-### Uploads
-- `POST /upload/family-photo` - Upload family member photo
-- `POST /upload/responsibility-icon` - Upload responsibility icon
-- `GET /upload/stock-icons` - List stock icons
+`/tasks` · `/lists` (+ `/lists/{id}/sections`, `/sections/{id}`) · `/family-members` ·
+`/responsibilities` (+ `/completions`, `/{id}/complete`) · `/items` (recipes and food items; +
+`/{id}/undo`, `/import-from-url`, `/import-status/{task_id}`, `/suggest-icon`) · `/meal-slot-types`
+(+ `/reset`) · `/meal-entries` (+ `/{id}/undo`) · `/calendar-events` · `/calendars` ·
+`/integrations` (iCloud calendar + reminders) · `/app-settings` (+ `/timezones`) · `/upload/*`
+and `POST /uploads/item-icon` (writes) · `/auth/*` · `/healthz`.
 
 ---
 
