@@ -102,8 +102,8 @@ state and procedure in the repo rather than in someone's memory.
       `api.mealy.dev/healthz` returns Access's 302. Use the Fly hostname
       instead; the production host gate lets `/healthz` (and only `/healthz`)
       through on it: `curl -sS https://mealy-app-prod.fly.dev/healthz`.
-- [ ] `fly scale show -a mealy-app-prod` lists exactly one `beat` machine (the
-      `fly.toml` singleton invariant). Not recorded in the 2026-09-11 run.
+- [x] `fly scale show -a mealy-app-prod` lists exactly one `beat` machine (the
+      `fly.toml` singleton invariant).
 - [x] **Smoke freeze:** do NOT create real household uploads until the checks
       below pass. Use one throwaway image you are willing to delete.
 
@@ -188,7 +188,9 @@ If you must roll back by image, add the flag explicitly:
       the first run lands about an hour after a deploy or restart). Look for
       the worker's task-success line:
       `fly logs -a mealy-app-prod --no-tail | grep -i sweep_abandoned_uploads`
-      → `Task app.tasks.sweep_abandoned_uploads[…] succeeded`. The
+      → `Task app.tasks.sweep_abandoned_uploads[…] succeeded`. The beat's
+      `Scheduler: Sending due task sweep-abandoned-uploads` line only proves the
+      job was queued; the worker's `succeeded` line proves it ran. The
       `Abandoned-upload sweep: deleted N unreferenced assets` line only appears
       when there is something to reclaim (`sweep_abandoned_uploads` in
       `app/services/asset_lifecycle.py` returns early otherwise), so its
@@ -200,4 +202,4 @@ If you must roll back by image, add the flag explicitly:
 
 | Date | Operator | Outcome | Notes |
 |---|---|---|---|
-| 2026-09-11 | willdoucet | Pass | Cutover 10:49 PDT (17:49 UTC), PR #44 merged 10:48 PDT. Every pre-cutover gate and smoke check passed; private media arrived as `cache-control: private, no-cache` with `cf-cache-status: BYPASS`. Browser Cache TTL changed from 4 hours to "Respect Existing Headers" before the deploy. Access Application 1 removed the same day; post-teardown checks passed. Still open: the sweep success line and the `fly scale show` beat count. |
+| 2026-09-11 | willdoucet | Pass | Cutover 10:49 PDT (17:49 UTC), PR #44 merged 10:48 PDT. Every pre-cutover gate and smoke check passed; private media arrived as `cache-control: private, no-cache` with `cf-cache-status: BYPASS`. Browser Cache TTL changed from 4 hours to "Respect Existing Headers" before the deploy. Access Application 1 removed the same day; post-teardown checks passed. `fly scale show` confirmed one beat machine. Still open: the sweep's worker `succeeded` line (only the beat's scheduling line appeared, at 20:07 UTC). |
