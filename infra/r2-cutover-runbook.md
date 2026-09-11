@@ -9,7 +9,8 @@ state and procedure in the repo rather than in someone's memory.
 
 - **Plan:** `.agents/plans/features/prod-r2-storage/prod-r2-storage-plan-20260715-201232.md`
 - **Milestone:** M7 of the `v1-productionization` epic
-- **Status:** NOT YET EXECUTED — fill in the log at the bottom when you run it
+- **Status:** EXECUTED 2026-09-11 — cutover at 10:49 PDT (17:49 UTC); Cloudflare
+  Access Application 1 removed the same day. See the execution log at the bottom.
 
 ---
 
@@ -33,23 +34,23 @@ state and procedure in the repo rather than in someone's memory.
 
 ## Pre-cutover gates
 
-- [ ] **OQ1 — live same-site check (BLOCKING, cannot be automated).**
+- [x] **OQ1 — live same-site check (BLOCKING, cannot be automated).**
       In a real browser against the Cloudflare-proxied production origin, log in
-      at `https://mealy.dev` and confirm an `<img>` pointing at
-      `https://api.mealy.dev/uploads/<key>` loads. This proves the
-      `SameSite=Strict` `__Host-refresh` cookie transmits on a same-site
-      subresource load. Same-site is confirmed on paper (`mealy.dev` and
-      `api.mealy.dev` share eTLD+1), but the entire read path rests on it.
-      If it fails, PR2 must not ship as designed.
-- [ ] **CF edge does not cache private media.** With DevTools open, load a
-      private image twice and confirm no `cf-cache-status: HIT` on
-      `/uploads/*`. `Cache-Control: private, no-cache` should prevent it; a
-      revalidation returning `304` is expected and correct.
-- [ ] **`fly volumes list -a mealy-app-prod` is empty** (OQ3 residual). `fly.toml`
+      at `https://mealy.dev`, open DevTools → Network, and confirm the
+      `__Host-refresh` cookie is sent on an `<img>` request to
+      `https://api.mealy.dev/uploads/<key>` (the request's Cookies tab). This
+      proves the `SameSite=Strict` cookie transmits on a same-site subresource
+      load. Same-site is confirmed on paper (`mealy.dev` and `api.mealy.dev`
+      share eTLD+1), but the entire read path rests on it. If it fails, PR2
+      must not ship as designed.
+      Before PR2 is deployed, the old StaticFiles mount serves the image whether
+      or not the cookie is sent, so "the image loads" proves nothing. The cookie
+      on the request is the signal.
+- [x] **`fly volumes list -a mealy-app-prod` is empty** (OQ3 residual). `fly.toml`
       has no `[mounts]` block, so `/app/uploads` should be ephemeral and there is
       nothing to migrate. A volume attached imperatively would not show in
       config — this is the definitive 30-second check.
-- [ ] **The four `R2_*` secrets are present** (provisioned in M2, first real use
+- [x] **The four `R2_*` secrets are present** (provisioned in M2, first real use
       here). Names only — never print values. Prefer Fly's own names-only view:
       `fly secrets list -a mealy-app-prod`
       If you need to confirm they reached the running machine, filter ON THE
@@ -59,18 +60,25 @@ state and procedure in the repo rather than in someone's memory.
       into a local `grep` — the non-matching lines have already crossed into
       your terminal and the transcript by then. See LESSONS.md, "Never run
       unfiltered `env` / `printenv`".
-- [ ] **`fly secrets list -a mealy-app-prod` does NOT list `STORAGE_BACKEND`.**
+- [x] **`fly secrets list -a mealy-app-prod` does NOT list `STORAGE_BACKEND`.**
       A Fly secret overrides `fly.toml [env]`. If one exists, the "rollback
       reverts the flip" argument below is void — remove it (`fly secrets unset
       STORAGE_BACKEND -a mealy-app-prod`) before deploying.
-- [ ] **The browser receives `cache-control: private, no-cache` unmodified.**
-      Cloudflare's *Caching → Configuration → Browser Cache TTL* rewrites the
-      header unless set to "Respect Existing Headers"; a rewritten TTL would let
-      a logged-out user on a shared device keep seeing cached photos. Check the
-      response header in DevTools on a private image and record the dashboard
-      setting in [`cloudflare-state.md`](./cloudflare-state.md).
-- [ ] **Keep Cloudflare Access Application 1 UP** through cutover and smoke
+- [x] **Cloudflare's Browser Cache TTL is "Respect Existing Headers".**
+      *Caching → Configuration → Browser Cache TTL* rewrites `Cache-Control`
+      unless set to "Respect Existing Headers"; a rewritten TTL would let a
+      logged-out user on a shared device keep seeing cached photos. Set it in
+      the dashboard and record it in [`cloudflare-state.md`](./cloudflare-state.md).
+      The header itself can only be checked after the deploy (Smoke
+      verification): the pre-PR2 mount sends no `Cache-Control`, so there is
+      nothing to inspect yet.
+- [x] **Keep Cloudflare Access Application 1 UP** through cutover and smoke
       verification. It is the fallback while first-party auth is unproven.
+
+> Every `fly` command needs `-a mealy-app-prod` or must run from `backend/`.
+> The repo root has no `fly.toml`, and flyctl fails there with "the config for
+> your app is missing an app name". Don't work around it by changing the `app`
+> name in `fly.toml`: `mealy-app-prod` is the real app.
 
 > **Expected, not a regression: images do NOT load on Vercel preview
 > deployments.** `vercel.app` is on the Public Suffix List, so every
@@ -83,27 +91,47 @@ state and procedure in the repo rather than in someone's memory.
 
 ## Cutover
 
-- [ ] Record the cutover timestamp here: `________________`
-- [ ] Deploy PR2 (code + the `STORAGE_BACKEND=r2` flip land in the SAME deploy —
+- [x] Record the cutover timestamp here: `2026-09-11 10:49 PDT (17:49 UTC)`
+- [x] Deploy PR2 (code + the `STORAGE_BACKEND=r2` flip land in the SAME deploy —
       writes-to-R2 and reads-through-the-proxy must flip together, or an
-      R2-written object would 404 against a disk-backed read).
-- [ ] `GET /healthz` returns 200.
-- [ ] **Smoke freeze:** do NOT create real household uploads until the checks
+      R2-written object would 404 against a disk-backed read). Deploy the
+      merged `master`, from `backend/` so `fly.toml` and the Dockerfile are
+      picked up: `git checkout master && git pull`, then
+      `cd backend && fly deploy -a mealy-app-prod`.
+- [x] `GET /healthz` returns 200. While Access Application 1 is up,
+      `api.mealy.dev/healthz` returns Access's 302. Use the Fly hostname
+      instead; the production host gate lets `/healthz` (and only `/healthz`)
+      through on it: `curl -sS https://mealy-app-prod.fly.dev/healthz`.
+- [ ] `fly scale show -a mealy-app-prod` lists exactly one `beat` machine (the
+      `fly.toml` singleton invariant). Not recorded in the 2026-09-11 run.
+- [x] **Smoke freeze:** do NOT create real household uploads until the checks
       below pass. Use one throwaway image you are willing to delete.
 
 ## Smoke verification
 
-- [ ] Upload one throwaway image (any of the four types). It succeeds.
-- [ ] That image renders in the app after a full page reload.
-- [ ] The object exists in the R2 bucket (not on container disk).
-- [ ] `curl -i https://api.mealy.dev/uploads/<that-key>` with **no cookie** →
+- [x] Upload one throwaway image (any of the four types). It succeeds.
+- [x] That image renders in the app after a full page reload.
+- [x] The object exists in the R2 bucket (not on container disk).
+- [x] `curl -i https://api.mealy.dev/uploads/<that-key>` with **no cookie** →
       **401**. This is the security-critical check: no public static surface.
-- [ ] A stock icon renders (responsibility or item icon picker).
-- [ ] Log out, then reload a page with images → images fail to load (401).
-- [ ] **Durability:** `fly apps restart mealy-app-prod`, then confirm the
+      While Access Application 1 is up, this returns Access's **302** instead:
+      the edge answers before the app, so a 302 is neither a pass nor a fail.
+      Before the teardown, the app-level proof is the log-out check below; this
+      curl is repeated after the teardown (Post-cutover), where it must be 401.
+- [x] A stock icon renders (responsibility or item icon picker).
+- [x] Log out, then reload a page with images → images fail to load (401).
+- [x] **The browser receives `cache-control: private, no-cache` unmodified.**
+      DevTools → Network → a private image → Response Headers. Anything with
+      `max-age` in it means Cloudflare's Browser Cache TTL rewrote the header
+      (see the pre-cutover gate).
+- [x] **CF edge does not cache private media.** Load a private image twice and
+      confirm no `cf-cache-status: HIT` on `/uploads/*`. `BYPASS` is the
+      expected value (Cloudflare saw `private, no-cache`); a revalidation
+      returning `304` is also correct.
+- [x] **Durability:** `fly apps restart mealy-app-prod`, then confirm the
       throwaway image still renders. This is what proves R2 rather than
       ephemeral disk — the property M7 exists to deliver.
-- [ ] Delete the throwaway image's entity so no test data lingers.
+- [x] Delete the throwaway image's entity so no test data lingers.
 
 ## If smoke verification fails
 
@@ -148,16 +176,23 @@ If you must roll back by image, add the flag explicitly:
 
 ## Post-cutover (Ops, after PR2 is verified in prod)
 
-- [ ] Tear down **Cloudflare Access Application 1**. This is M7's exit item:
+- [x] Tear down **Cloudflare Access Application 1**. This is M7's exit item:
       `/uploads/*` was the last thing that needed edge gating.
-- [ ] Re-verify `api.mealy.dev` is protected by first-party auth alone:
+- [x] Re-verify `api.mealy.dev` is protected by first-party auth alone:
       unauthenticated `/uploads/*` → 401, unauthenticated protected API → 401,
       `/healthz` → 200.
-- [ ] Update [`cloudflare-state.md`](./cloudflare-state.md): move Application 1
+- [x] Update [`cloudflare-state.md`](./cloudflare-state.md): move Application 1
       to a historical-record section with the removal rationale and date, the
       same way Application 2 was recorded on 2026-05-14.
 - [ ] Confirm the abandoned-upload sweep runs against R2 (Celery beat, hourly;
-      look for the `Abandoned-upload sweep` log line).
+      the first run lands about an hour after a deploy or restart). Look for
+      the worker's task-success line:
+      `fly logs -a mealy-app-prod --no-tail | grep -i sweep_abandoned_uploads`
+      → `Task app.tasks.sweep_abandoned_uploads[…] succeeded`. The
+      `Abandoned-upload sweep: deleted N unreferenced assets` line only appears
+      when there is something to reclaim (`sweep_abandoned_uploads` in
+      `app/services/asset_lifecycle.py` returns early otherwise), so its
+      absence proves nothing.
 
 ---
 
@@ -165,4 +200,4 @@ If you must roll back by image, add the flag explicitly:
 
 | Date | Operator | Outcome | Notes |
 |---|---|---|---|
-| | | | |
+| 2026-09-11 | willdoucet | Pass | Cutover 10:49 PDT (17:49 UTC), PR #44 merged 10:48 PDT. Every pre-cutover gate and smoke check passed; private media arrived as `cache-control: private, no-cache` with `cf-cache-status: BYPASS`. Browser Cache TTL changed from 4 hours to "Respect Existing Headers" before the deploy. Access Application 1 removed the same day; post-teardown checks passed. Still open: the sweep success line and the `fly scale show` beat count. |

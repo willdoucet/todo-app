@@ -15,9 +15,11 @@ match the bypass selector at the edge while normalizing to a different
 path at the FastAPI origin, sidestepping CF Access on a non-plumbing-test
 request). Removing the vestigial bypass eliminates the concern entirely
 since the underlying routes no longer exist. The CF Access edge gate
-(Application 1) stays load-bearing for `/uploads/*` until M7 replaces
+(Application 1) stayed load-bearing for `/uploads/*` until M7 replaced
 the StaticFiles mount with R2 + auth-proxied uploads (Cursor
-implementation review constraint, 2026-05-07).
+implementation review constraint, 2026-05-07). It was **removed
+2026-09-11** after the M7 cutover smoke checks. No Access applications
+remain: `api.mealy.dev` is protected by first-party auth alone.
 
 Last verified: 2026-05-01 by willdoucet
 Cloudflare account ID: f7f2bff79b487f5d1552a1c5eebd3992
@@ -39,7 +41,13 @@ separate Cloudflare DNS record was added for it. If you ever want
 cloud) — Vercel will 308 it back to the apex per the project's primary-domain
 setting.
 
-## Access — Application 1: Edge gate (full app)
+## Access — Application 1: Edge gate (M2 → REMOVED 2026-09-11)
+
+**Removed 2026-09-11** (operator action in the Zero Trust dashboard), after the
+M7 R2 cutover smoke checks passed — M7's exit item. Historical intent retained
+below for the M8 runbook drift-detection work.
+
+### Historical record
 
 Name: Mealy Edge Gate
 Application domains:
@@ -50,6 +58,24 @@ Session duration: 24h
 Policy: "Operator allowlist"
   - Action: Allow
   - Include → Emails: willdoucet@gmail.com
+
+### Removal rationale (2026-09-11)
+
+From M5 on, the only surface first-party auth could not gate was the
+`/uploads/*` StaticFiles mount (a `Mount` is not an `APIRoute`, so the
+`protected` router's dependency never ran). M7 PR2 (#44) replaced it with the
+cookie-authenticated `GET /uploads/{key}` route, leaving the gate nothing to
+protect. Keeping it also had a cost. Access issues a separate session cookie
+per hostname and a cross-origin XHR cannot complete its login redirect, so
+whenever the 24h `api.mealy.dev` session lapsed, the SPA's `/auth/status` call
+followed a 302 to `mealyapp.cloudflareaccess.com` and failed as a CORS error —
+the operator could not log in (2026-09-11). The allowlist also admitted only
+the operator's email, so no other household member could use the app.
+
+Verified after removal, with no cookie, through Cloudflare: `/uploads/<key>` →
+401, `/tasks/` → 401, `/healthz` → 200, and `/auth/status` with
+`Origin: https://mealy.dev` → 200 with `access-control-allow-origin:
+https://mealy.dev`. Execution log: [`r2-cutover-runbook.md`](./r2-cutover-runbook.md).
 
 ## Access — Application 2: Plumbing-test bypass (M2 → REMOVED 2026-05-14)
 
@@ -95,13 +121,15 @@ zero cost since nothing depends on it.
 
 ## Caching — Browser Cache TTL
 
-Setting (Caching → Configuration → Browser Cache TTL): **not yet recorded**.
-Must be **"Respect Existing Headers"** — the M7 private-media route sends
+Setting (Caching → Configuration → Browser Cache TTL): **Respect Existing
+Headers** — changed from the 4-hour default on 2026-09-11 by willdoucet, before
+the M7 cutover.
+Must stay **"Respect Existing Headers"** — the M7 private-media route sends
 `Cache-Control: private, no-cache` so the browser revalidates every image load
 against the session cookie; any dashboard TTL would override that and let a
-logged-out user on a shared device keep seeing cached photos. Verify in
-DevTools and fill in during the M7 cutover (`r2-cutover-runbook.md`
-pre-cutover gate).
+logged-out user on a shared device keep seeing cached photos. Verified in
+DevTools after the cutover (2026-09-11): a private image arrives with
+`cache-control: private, no-cache` unmodified and `cf-cache-status: BYPASS`.
 
 ## WAF — Rate limiting rules
 

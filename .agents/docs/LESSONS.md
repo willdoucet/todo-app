@@ -73,6 +73,15 @@ Discovered 2026-05-01 during M2 prod-deploy-skeleton Slice 3 verification — an
 - For UI motion, verify in the browser that the motion actually fires.
 - For backend changes, verify the real response shape and side effects, not just that code compiles.
 
+### Runbook checks must be runnable, and meaningful, where they sit
+
+- A pre-deploy gate that inspects behavior only the new code produces cannot pass before the deploy. The M7 runbook asked for the private-media `cache-control` header and `cf-cache-status` as pre-cutover gates, but the old StaticFiles mount sent no `Cache-Control`. Split such a gate: the precondition (a dashboard setting) goes before the deploy, the observation goes in the smoke checks.
+- A check must fail when the thing it guards is broken. "The image loads" was OQ1's signal, but before the deploy the old mount served the image with or without the cookie. The real signal was the cookie on the request.
+- A log-line check needs a line that is always printed. The sweep's `Abandoned-upload sweep: deleted N` line only appears when there is something to delete, so check the Celery `Task … succeeded` line instead.
+- An edge gate answers before the app. While Cloudflare Access was up, a no-cookie `curl` got Access's 302, not the app's 401, so it said nothing about the app.
+
+Discovered 2026-09-11 while executing `infra/r2-cutover-runbook.md`.
+
 ## User Preferences
 
 - Plan mode for non-trivial tasks.
@@ -254,6 +263,7 @@ def run_async(coro):
 | 2026-04-17 | `RecipeUrlImport.jsx` + `ItemFormModal.jsx` | Nested `<form>` — RecipeUrlImport's inner form was inside RecipeFormBody's outer form. Clicking the Import button bubbled a submit event to the outer form, which tried to POST /items with empty fields; user saw the modal disappear | Inner panel uses `<div>` + `onClick` on button + `onKeyDown` on input; both handlers `stopPropagation()` to prevent any bubbling. Regression test at `frontend/tests/components/RecipeImportClickBug.test.jsx` |
 | 2026-04-19 | `MealPlannerView.jsx` pendingDeletes cleanup | `useEffect(() => cleanup, [pendingDeletes])` cancelled the previous Map's timers on every state change. Rapid sequential deletes killed the first meal's 5s purge timer → the first UndoMealCard stuck on-screen forever | Switched dep to `[]` with a ref mirror (`pendingDeletesRef.current`) so cleanup only runs on unmount. Adversarial-review F3 / lock-in tests at `frontend/tests/components/mealboard/MealPlannerView.delete.test.jsx` |
 | 2026-04-19 | `crud_items.py:undo_soft_delete_item` restore cascade | Restoring a soft-deleted Item cleared `soft_hidden_at` on cascade-hidden meal_entries but left `undo_token` populated. Live rows must have `undo_token=NULL` per the state-machine invariant documented in `crud_meal_entries.py`. No user-visible corruption (CAS guard prevents accidental undo of live rows), but a latent foot-gun | Added `undo_token=None` to the restore UPDATE's `.values()` |
+| 2026-09-11 | Cloudflare Access Application 1 (edge, `api.mealy.dev`) | Operator could not log in at mealy.dev; the console showed a CORS error on `api.mealy.dev/auth/status`. The Access session for `api.mealy.dev` had lapsed (Access sessions are per hostname, 24h here), so Access answered the SPA's XHR with a 302 to its login page on `mealyapp.cloudflareaccess.com`, which carries no CORS headers. The app's own CORS config was correct | Workaround: open any `api.mealy.dev` URL in a tab to re-authenticate. Fixed for good by removing Application 1 at the M7 cutover. When a browser CORS error hides the real response, `curl -i` the URL with an `Origin` header first — a 3xx or 5xx from the edge is the usual cause |
 | 2026-09-11 | `app/main.py:production_host_gate` | The gate compared only the client-written `Host` header. Fly holds a cert for `api.mealy.dev`, so `curl --resolve` to the Fly IP reached the app and skipped the Cloudflare `/auth/*` rate limit — the only brute-force and argon2-CPU control on login | Gate also requires `X-Origin-Verify` (set by a Cloudflare Transform Rule) to match the `ORIGIN_VERIFY_SECRET` Fly secret; production refuses to boot without it. Regression tests in `tests/integration/auth/test_host_gate.py` and `tests/unit/test_origin_verify_bootstrap.py` |
 
 ## Fly Postgres + asyncpg setup
