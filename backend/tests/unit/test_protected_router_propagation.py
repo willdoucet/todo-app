@@ -6,15 +6,24 @@ a router via ``app.include_router(X)`` instead of
 ``protected.include_router(X)`` causes this test to fail with the path
 name in the error, not silently ship as a public surface.
 
-Three assertions:
+Assertions:
 
 1. Every non-allowlisted ``APIRoute`` has ``get_current_user`` somewhere
    in its dependency tree.
-2. The only public ``Mount`` is ``/uploads`` (the StaticFiles mount, gated
-   in M7). Protected upload APIs (``/upload/*`` and ``/uploads/item-icon``)
-   are ``APIRoute`` objects, not mounts, so they are NOT allowlisted here
-   — they fail the first assertion if they ever lose ``get_current_user``.
-3. ``/docs``, ``/redoc``, and ``/openapi.json`` are absent (FastAPI's
+2. There are NO ``Mount`` objects at all. M7 PR2 deleted the ``/uploads``
+   StaticFiles mount — the last public static surface, and the one thing a
+   router-level dependency could not gate. Protected upload APIs
+   (``/upload/*`` and ``POST /uploads/item-icon``) are ``APIRoute`` objects,
+   not mounts, so they are NOT allowlisted here — they fail the first
+   assertion if they ever lose ``get_current_user``.
+
+3. ``GET /uploads/{key:path}`` is the one API route that is auth-gated by
+   something OTHER than ``get_current_user``: it uses the cookie-based
+   ``require_media_session`` because ``<img>`` cannot send a Bearer header.
+   It is exempt from assertion 1 but has its own assertion that it really
+   carries that guard — an exemption without a replacement check would be a
+   hole, which is the whole failure mode this file exists to prevent.
+4. ``/docs``, ``/redoc``, and ``/openapi.json`` are absent (FastAPI's
    built-in routes are registered by ``FastAPI(...)`` itself and bypass
    router-level dependencies; PR1 disables them via
    ``docs_url=None, redoc_url=None, openapi_url=None``).
@@ -22,17 +31,23 @@ Three assertions:
 
 from __future__ import annotations
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_media_session
 from app.main import app
 from fastapi.routing import APIRoute
 from starlette.routing import Mount
 
-# Public APIRoute prefixes (auth-portal endpoints only after PR2).
+# Public APIRoute prefixes (auth-portal endpoints only).
 PUBLIC_PREFIXES = ("/auth/",)
 # Public APIRoute exact paths (root sanity + healthz).
 PUBLIC_EXACT = {"/", "/healthz"}
-# The only public StaticFiles mount. /uploads is gated in M7.
-PUBLIC_STATIC_MOUNTS = {"/uploads"}
+# NO public mounts remain after M7 PR2. Deliberately empty, not absent: an
+# empty allowlist plus the subtraction below fails loudly the moment any mount
+# reappears.
+PUBLIC_STATIC_MOUNTS: set[str] = set()
+# Routes gated by a cookie dependency instead of the Bearer dependency, with
+# the dependency each one MUST carry. Exempt from assertion 1, checked by
+# assertion 4.
+COOKIE_GUARDED_ROUTES = {"/uploads/{key:path}": require_media_session}
 # FastAPI auto-docs/schema must be disabled, not allowlisted.
 FORBIDDEN_PUBLIC_DOCS = {"/docs", "/redoc", "/openapi.json"}
 
@@ -65,6 +80,8 @@ def test_every_protected_route_requires_auth():
             continue
         if _is_public(route.path):
             continue
+        if route.path in COOKIE_GUARDED_ROUTES:
+            continue  # checked by test_cookie_guarded_routes_carry_their_guard
         if not _has_dep(route.dependant.dependencies, get_current_user):
             failures.append(route.path)
         else:
@@ -82,11 +99,56 @@ def test_every_protected_route_requires_auth():
     )
 
 
-def test_only_expected_static_mounts_are_public():
-    """Only `/uploads` may be a public Mount. Anything else is a regression."""
+def test_no_public_static_mounts_remain():
+    """M7 PR2's headline structural property: there is no public static
+    surface left. A `Mount` cannot be gated by a router dependency, so any
+    mount reappearing here is an ungated hole by construction — and would
+    re-create the exact reason CF Access Application 1 had to exist."""
     mounts = [route.path for route in app.routes if isinstance(route, Mount)]
     unexpected = sorted(set(mounts) - PUBLIC_STATIC_MOUNTS)
     assert not unexpected, f"Unexpected public mounts: {unexpected}"
+    assert mounts == [], f"No mounts should remain after M7 PR2; found {mounts}"
+
+
+def test_cookie_guarded_routes_carry_their_guard():
+    """Assertion 4 — the counterpart to assertion 1's exemption.
+
+    `GET /uploads/{key}` serves private family photos and is NOT on the
+    `protected` router. If it ever lost `require_media_session` it would
+    become a public read surface for every uploaded image, and assertion 1
+    would stay green because the path is exempt. This closes that gap.
+    """
+    by_path = {
+        route.path: route for route in app.routes if isinstance(route, APIRoute)
+    }
+    for path, required_dep in COOKIE_GUARDED_ROUTES.items():
+        route = by_path.get(path)
+        assert route is not None, f"{path} is not registered any more"
+        assert _has_dep(route.dependant.dependencies, required_dep), (
+            f"{path} lost its {required_dep.__name__} guard — it is not on the "
+            "`protected` router, so nothing else is gating it"
+        )
+        # It must NOT be on `protected`: <img> cannot send a Bearer header, so
+        # adding get_current_user here would 401 every image in the app.
+        assert not _has_dep(route.dependant.dependencies, get_current_user), (
+            f"{path} must not require a Bearer token — `<img>` cannot send one"
+        )
+
+
+def test_media_read_is_the_only_cookie_guarded_route():
+    """A second cookie-guarded route added without updating
+    COOKIE_GUARDED_ROUTES would be exempt from nothing and checked by nothing
+    — so enumerate them from the app and compare."""
+    found = sorted(
+        route.path
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        and _has_dep(route.dependant.dependencies, require_media_session)
+    )
+    assert found == sorted(COOKIE_GUARDED_ROUTES), (
+        f"cookie-guarded routes changed: app has {found}, "
+        f"COOKIE_GUARDED_ROUTES lists {sorted(COOKIE_GUARDED_ROUTES)}"
+    )
 
 
 def test_fastapi_docs_are_not_public():

@@ -249,22 +249,23 @@ async def refresh(
 
     now = datetime.now(timezone.utc)
 
-    # 2. Reject revoked.
-    if row.revoked_at is not None:
+    # 2-4. Classify the row through the SHARED validity predicate (M7 PR2,
+    # eng review CQ1). The media read guard behind GET /uploads/{key} calls
+    # the same function, so "is this session valid?" cannot drift between the
+    # refresh path and the image-read path. Rotation stays here; only the
+    # predicate is shared.
+    status = tokens.refresh_row_status(row, now)
+
+    if status is tokens.RefreshStatus.REVOKED:
         raise errors.refresh_failed("bad_refresh_revoked")
-
-    # 3. Reject expired.
-    if row.expires_at < now:
+    if status is tokens.RefreshStatus.EXPIRED:
         raise errors.refresh_failed("bad_refresh_expired")
-
-    # 4. Branch on superseded_at.
-    if row.superseded_at is None:
+    if status is tokens.RefreshStatus.LIVE:
         return await _refresh_case_a(db, row, now)
-
-    if now < row.superseded_at + timedelta(seconds=tokens.REFRESH_TOKEN_GRACE_SECONDS):
+    if status is tokens.RefreshStatus.SUPERSEDED_IN_GRACE:
         return await _refresh_case_b(db, row, now)
 
-    # Case C — past grace. Reject.
+    # Case C — superseded past grace. Reject.
     raise errors.refresh_failed("bad_refresh_superseded")
 
 
@@ -323,12 +324,10 @@ async def _refresh_case_b(
     current = row
     for _ in range(SUCCESSOR_TRAVERSAL_MAX_HOPS):
         if current.successor_id is None:
-            # Hit a terminal. Re-check liveness post-lock.
-            if (
-                current.revoked_at is None
-                and current.superseded_at is None
-                and current.expires_at >= now
-            ):
+            # Hit a terminal. Re-check liveness post-lock — through the same
+            # shared predicate (CQ1), so this third copy of "is this row
+            # live?" cannot drift from steps 2-4 or from the media guard.
+            if tokens.refresh_row_status(current, now) is tokens.RefreshStatus.LIVE:
                 # Live terminal — mint access JWT, NO new cookie.
                 sv_result = await db.execute(
                     select(User.session_version).where(User.id == current.user_id)

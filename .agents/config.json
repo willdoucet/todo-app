@@ -162,6 +162,14 @@
       },
       {
         "paths": [
+          "backend/app/main.py",
+          "backend/app/auth/**"
+        ],
+        "doc": "PRD.md",
+        "section": "5.7 User Authentication"
+      },
+      {
+        "paths": [
           "frontend/src/constants/**"
         ],
         "doc": "FRONTEND_STRUCTURE.md",

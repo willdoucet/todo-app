@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 from app.auth import config as auth_config
 from app.auth import tokens
@@ -251,3 +251,54 @@ async def test_valid_token_returns_user(db_returning):
     token = _encode(_payload(sub="42", session_version=3))
     result = await validate_bearer(f"Bearer {token}", db)
     assert result is user
+
+
+# =============================================================================
+# require_media_session — absent-cookie path (M7 PR2)
+# =============================================================================
+#
+# The remaining branches (unknown / revoked / expired / superseded-past-grace /
+# LIVE / in-grace) need a real refresh row, so they are exercised end-to-end
+# against the real route in tests/integration/auth/test_media_read.py. This
+# returns before touching the DB, so it belongs here.
+
+
+@pytest.mark.asyncio
+async def test_require_media_session_rejects_absent_cookie():
+    from app.auth.dependencies import require_media_session
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/uploads/item-icons/x.png",
+        "headers": [],
+        "query_string": b"",
+    })
+
+    with pytest.raises(HTTPException) as exc_info:
+        # db is never touched on this path — None proves it.
+        await require_media_session(request, media_cookie=None, db=None)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "unauthorized"
+    assert exc_info.value.log_reason == "media_no_cookie"
+    assert exc_info.value.headers == {"Cache-Control": "private, no-store"}
+
+
+@pytest.mark.asyncio
+async def test_require_media_session_rejects_empty_cookie():
+    """An empty cookie value must not fall through to a hash lookup of ""."""
+    from app.auth.dependencies import require_media_session
+
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/uploads/item-icons/x.png",
+        "headers": [],
+        "query_string": b"",
+    })
+
+    with pytest.raises(HTTPException) as exc_info:
+        await require_media_session(request, media_cookie="", db=None)
+    assert exc_info.value.log_reason == "media_no_cookie"
+    assert exc_info.value.headers == {"Cache-Control": "private, no-store"}

@@ -93,6 +93,16 @@ sidestepping CF Access on `/uploads/*`. Removing the vestigial bypass
 now (rather than waiting for M7) eliminates the concern entirely with
 zero cost since nothing depends on it.
 
+## Caching — Browser Cache TTL
+
+Setting (Caching → Configuration → Browser Cache TTL): **not yet recorded**.
+Must be **"Respect Existing Headers"** — the M7 private-media route sends
+`Cache-Control: private, no-cache` so the browser revalidates every image load
+against the session cookie; any dashboard TTL would override that and let a
+logged-out user on a shared device keep seeing cached photos. Verify in
+DevTools and fill in during the M7 cutover (`r2-cutover-runbook.md`
+pre-cutover gate).
+
 ## WAF — Rate limiting rules
 
 Rule name: Mealy api-auth burst limit

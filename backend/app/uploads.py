@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import models
 from .storage import get_storage
+from .storage.keys import MANAGED_SUBDIRS
 from .utils.upload_validation import validate_and_read
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,25 @@ async def store_upload(
     """Validate, store, and manifest an uploaded file. Returns the logical
     ``/uploads/{key}`` URL (unchanged contract). Raises HTTPException 413/415
     on validation failure (before anything is stored)."""
+    # The media read route only serves the allowlisted subdirs, so a typo here
+    # would mint keys that upload fine and then 404 forever on read. Fail at
+    # the write site instead (caller bug, not user input — hence assert-style).
+    if subdir not in MANAGED_SUBDIRS:
+        raise ValueError(
+            f"unknown upload subdir {subdir!r}; add it to "
+            f"storage.keys.MANAGED_SUBDIRS"
+        )
+
     validated = await validate_and_read(file, max_bytes=max_bytes)
     key = f"{subdir}/{uuid.uuid4()}{validated.ext}"
+
+    # End the auth-dependency transaction BEFORE the storage call. `get_current_user`
+    # already SELECTed on this session, which autobegan a transaction and checked
+    # out a pool connection. PR2 puts that PUT on R2 (5 s + 15 s, one retry);
+    # holding the connection across it is the same pool-starvation path the
+    # media read route already closed. `commit()` of a read-only txn is how
+    # every CRUD handler ends work, so the SAVEPOINT test wiring absorbs it.
+    await db.commit()
 
     storage = get_storage()
     await storage.put(key, validated.content, validated.content_type)

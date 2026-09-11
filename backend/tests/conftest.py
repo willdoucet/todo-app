@@ -4,9 +4,35 @@ Shared pytest fixtures for all tests.
 Fixtures defined here are automatically available to both unit and integration tests.
 """
 
+import os
+
 import pytest
 from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock
+
+
+# =============================================================================
+# Storage safety (M7)
+# =============================================================================
+
+@pytest.fixture(autouse=True)
+def force_local_storage_backend(monkeypatch):
+    """Pin every test run to LocalDiskBackend.
+
+    `app.storage.get_storage()` reads `STORAGE_BACKEND` from the environment on
+    every call, and `docker-compose` feeds `backend/.env` into the `api` and
+    `api-test` containers. A developer who sets `STORAGE_BACKEND=r2` there to
+    reproduce a production issue would otherwise have this suite write and
+    delete real objects in the production R2 bucket — `test_media_read.py`'s
+    `_seed_asset` calls `storage.put()` directly.
+
+    Autouse and function-scoped so no individual test can leak the value to the
+    next one. A test that genuinely needs R2 (`test_storage.py`'s moto cases)
+    constructs `R2Backend` explicitly rather than going through the factory, so
+    nothing legitimate is blocked.
+    """
+    monkeypatch.setenv("STORAGE_BACKEND", "local")
+    assert os.environ["STORAGE_BACKEND"] == "local"
 
 
 # =============================================================================

@@ -46,8 +46,49 @@ if (!TOKEN || TOKEN.length < 20) {
   )
 }
 
+// M7 PR2 — a 1x1 transparent PNG, inlined so this fixture stays self-contained.
+const FIXTURE_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk' +
+    'YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
+
 export const test = base.extend({
   context: async ({ context }, use) => {
+    // M7 PR2 — serve fixture bytes for every private media read.
+    //
+    // `GET /uploads/*` is no longer a public static mount; it is a cookie-
+    // authenticated route. The visual stack cannot satisfy that guard: the
+    // browser talks to docker hostnames (`frontend-preview` / `api-test`),
+    // which are not same-site, so a `SameSite=Strict` `__Host-refresh` cookie
+    // would not transmit on an `<img>` subresource load — every image would
+    // 401 and the geometry under test would shift. Same reason the
+    // `/auth/refresh` intercept below exists.
+    //
+    // The real byte path is covered where it can be: backend pytest hits the
+    // actual route with a real cookie (tests/integration/auth/test_media_read.py,
+    // 41 tests). This suite only needs pixels. (Eng review A2.)
+    //
+    // NOTE: nothing in the current specs actually requests `/uploads/*` — the
+    // seeded items use `icon_emoji`, not `icon_url`. This is deliberately
+    // installed ahead of need, so the first spec that seeds an uploaded icon
+    // or a stock icon stays deterministic instead of silently 401ing.
+    await context.route('**/uploads/**', async (route) => {
+      // GET only. `context.route` is method-agnostic, and `POST
+      // /uploads/item-icon` is a real protected API endpoint — fulfilling it
+      // with PNG bytes would make a future upload spec fail inexplicably, or
+      // pass while proving nothing.
+      if (route.request().method() !== 'GET') {
+        await route.fallback()
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        headers: { 'Cache-Control': 'private, no-cache' },
+        body: FIXTURE_PNG,
+      })
+    })
     await context.route('**/auth/refresh', async (route) => {
       const origin = route.request().headers().origin
       const headers = origin

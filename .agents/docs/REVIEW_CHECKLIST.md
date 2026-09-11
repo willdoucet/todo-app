@@ -57,6 +57,8 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - New write paths send the same required fields as the established path for that entity (no shortcut endpoint that 422s).
 - CORS origins come from env; never `*` when `APP_ENV=production`.
 - Production-only host or origin gate returns a distinct status (e.g. 421) and is disabled in dev and test.
+- A route gated by something OTHER than `get_current_user` (a cookie guard, a signed token) carries its own structural assertion that it still has that guard; an exemption in the auth-propagation test never stands alone.
+- No response header is built from an unvalidated path or query parameter. Starlette encodes header values as latin-1, so a non-latin-1 value is an unhandled 500 — validate first, then build headers from the already-allowlisted value.
 
 ### Query efficiency
 - List endpoints eager-load every relationship the `response_model` touches; no lazy load fires during serialization.
@@ -65,6 +67,10 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 ### Error handling
 - 404 for missing, 409 for unique-constraint conflicts (catch `IntegrityError`), 400 for business-rule rejections, 422 left to Pydantic.
 - Custom exceptions map to statuses in one place; handlers never leak stack traces.
+- Conditional requests (`If-None-Match` / `If-Modified-Since`) are evaluated only after the key is validated AND the representation is known to exist; a 304 for something that does not exist is both non-conformant and a stale-cache trap.
+- A 401 raised from a *dependency* on a route whose URLs end in a cacheable extension (`.png`/`.jpg`/`.webp`) must still carry `Cache-Control: private, no-store`. The route body's error-header helper never runs for a dependency failure, and Cloudflare caches by extension.
+- A response meant to be revalidated (ETag + `no-cache`) never carries `Vary` on a header that rotates — `Vary: Cookie` with a rotating session cookie makes the browser discard the cached entry *and its validators* on every rotation, turning every 304 back into a full download. `private` already keeps it out of shared caches.
+- A dependency-unavailable status (503) is mapped from specific storage/network exception classes, never a bare `except Exception` — otherwise our own `TypeError` pages someone about a third-party outage.
 
 ### Secrets & config
 - Lifespan fails closed in production when a required secret is missing and logs a clear bootstrap warning in development.
@@ -339,6 +345,32 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - A mobile project covers the views that only exist below the mobile breakpoint.
 - Test data is created and deleted by the spec; no spec depends on another's leftovers.
 
+## Object storage (Cloudflare R2 / boto3)
+
+### Secrets & config
+- Production builds the configured storage backend in the lifespan hook, so a *missing* `R2_*` secret crashes the boot and the previous image keeps serving; it never boots green and 503s every read. (A present-but-rotated credential is not caught at boot — client construction makes no network call — so the cutover runbook's smoke upload stays mandatory.)
+- The boto3 client carries explicit `connect_timeout` / `read_timeout` and bounded retries; the defaults (60 s + 60 s, up to 5 attempts) can pin a pooled DB connection for minutes when the request holds one across the call.
+- A request that holds a DB session across a storage call ends its transaction first (`await db.commit()` after the last read — never `close()` or `rollback()`, which the SAVEPOINT test wiring cannot absorb) so a slow object store cannot exhaust the connection pool and take unrelated routes down with it.
+- The storage-cutover flag (`STORAGE_BACKEND`) is versioned with the code (`fly.toml [env]`), not a platform secret, so a rollback reverts reads and writes together.
+- Nothing constructs the boto3 client outside production: dev, CI and the visual-test stack stay on the local backend, and the test suite pins `STORAGE_BACKEND=local` in an autouse fixture so a developer's `.env` can never point pytest at the production bucket.
+
+### API & trust boundaries
+- Every key reaching `storage.get` / `storage.delete` has already passed the one canonical validator (`storage/keys.py`); a second regex anywhere else is a finding.
+- The content-type served comes from the manifest row written at upload, never from the object store or the client.
+
+### Error handling
+- Only genuine storage failures (`botocore` `ClientError` / `BotoCoreError`, `OSError`, `TimeoutError`) map to `503 storage_unavailable`; anything else raises a real 500 so ops is not sent to the Cloudflare dashboard for a Python bug.
+- A missing object (`ObjectNotFound`) is a 404 distinct from the 503, and the 503 is logged with a marker ops can grep.
+
+### Background jobs
+- Every boto3 call goes through `run_in_threadpool`; boto3 is synchronous and must never run on the event loop.
+- A write is storage-first with a compensating delete on DB failure (catching `BaseException`, so a client disconnect after `put` still reclaims the object); a failed compensating delete is logged loudly because the sweep cannot see a row-less orphan.
+- `delete` is idempotent and post-commit only; a rolled-back entity write never erases a still-referenced object.
+
+### Testing
+- `R2Backend` is covered with `moto` in-process; no test needs network or credentials.
+- A test that asserts storage was NOT reached has a negative control proving the patch took effect (`get_storage()` constructs per call — patch the factory, not the returned instance).
+
 ## Docker Compose
 
 ### Operations
@@ -374,4 +406,5 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 
 ### Testing
 - The matrix is limited to versions the project actually supports.
+- No test depends on a container-only path (`/app/...`). CI runs on a bare runner, so such a path is supplied through the job's `env:` block the way `UPLOAD_DIR` and `STOCK_ICONS_DIR` are, or the test does not belong in the CI suite.
 

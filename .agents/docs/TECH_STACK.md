@@ -263,9 +263,18 @@ REDIS_URL=redis://redis:6379/0
 FERNET_KEY=<base64-encoded-fernet-key>   # For encrypting stored iCloud passwords
 ANTHROPIC_API_KEY=<optional>             # AI recipe import (/items/import-from-url) + suggest-icon; empty disables
 AI_MODEL_NAME=claude-haiku-4-5-20251001  # Model for the above (compose default)
-STORAGE_BACKEND=local                    # local | r2 (unknown values raise; r2 is PR2)
+STORAGE_BACKEND=local                    # local | r2 (unknown values raise). Prod runs r2.
 SQLALCHEMY_ECHO=false                    # true opts into SQL logging; default off
+STOCK_ICONS_DIR=/app/stock_icons_src     # Bundled stock icons; served by the media read route
 ```
+
+**Production-only (Fly)** — `APP_ENV=production`, `PUBLIC_API_HOST`, `CORS_ALLOW_ORIGINS`,
+and the four R2 credentials (`R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+`R2_BUCKET_NAME`) are set as Fly secrets. (The SQLAlchemy engine pool is not env-tunable —
+`app/database.py` uses the SQLAlchemy defaults plus `pool_pre_ping` and `pool_recycle`.) `STORAGE_BACKEND=r2` is the one exception: it lives in `backend/fly.toml` `[env]`
+rather than a secret, because it is not secret and versioning it with the code makes a
+rollback revert the storage flip atomically. See
+[Object storage](#object-storage-cloudflare-r2) below.
 
 **Frontend (.env.local)**
 ```
@@ -291,18 +300,30 @@ VITE_API_BASE_URL=http://localhost:8000
 | `.github/workflows/doc-guard.yml` | On pull requests: `.agents/bin/doc-guard --range` refuses merges that change a documented code area without updating its owning doc (see `.agents/WORKFLOW.md`) |
 | `.github/workflows/deploy.yml` | Deploy to production (deferred to v1.1; the M8 manual runbook comes first) |
 
-**CI Pipeline (Current):**
-```yaml
-on: [push, pull_request]
-jobs:
-  test:
-    - Checkout code
-    - Setup Python/Node
-    - Install dependencies
-    - Run backend tests (pytest)
-    - Run frontend tests (vitest)
-    - Lint check
-```
+**CI Pipeline (Current)** — `.github/workflows/test.yml`, on push to `master` and on pull
+requests to `master`. Four jobs, no `needs:` between them, so they run in parallel:
+
+| Job | Services | Runs |
+|---|---|---|
+| `backend-tests` | postgres:16, redis:7 | `uv run pytest tests/unit` then `uv run pytest tests/integration` |
+| `frontend-tests` | — | `npm run test:run` (Vitest, single-run) |
+| `visual-tests` | docker-compose `visual-test` profile | Playwright against `vite preview` + a baked `api-test` backend |
+| `migration-upgrade` | postgres:16 | `alembic upgrade head` from base, then newest-revision down/up symmetry |
+
+Jobs run pytest **on the runner, not in a container**, so any container-only path a test
+depends on must be supplied through the job's `env:` block: `UPLOAD_DIR=/tmp/uploads`
+(`app/main.py` mkdirs it at import) and, since M7 PR2, `STOCK_ICONS_DIR` pointed at
+`backend/stock_icons` (the media read route serves bundled stock icons from
+`/app/stock_icons_src`, which exists only inside the image).
+
+Secrets consumed: `CI_FERNET_KEY` (integration + visual), `CI_JWT_SECRET_KEY` and
+`CI_HOUSEHOLD_ACCESS_KEY` (visual). The visual job fails fast with an actionable error when
+any is unset.
+
+`frontend-tests` also runs `npm run lint` (gated since M7 PR2; it had been red for months on
+two ESLint config gaps with nothing running it — Node globals for `playwright.config.js`, and
+`react-hooks/rules-of-hooks` firing on Playwright's `use()` fixture hand-off under
+`tests/visual/**`).
 
 **CD Pipeline (Planned):**
 ```yaml
@@ -327,7 +348,7 @@ Chosen and shipped in the v1 productionization epic ([plan](../plans/features/pr
 | Backend | Fly.io (`mealy-app-prod`, region `sjc`) | `api.mealy.dev` — `web` (uvicorn), `worker` (Celery), `beat` (scheduler) process groups; `backend/fly.toml` |
 | Database | Fly Postgres | Managed PostgreSQL 16; `asyncpg` with `ssl=` (see LESSONS.md) |
 | Redis | Upstash | Celery broker + result backend over `rediss://` |
-| File Storage | Cloudflare R2 | User uploads (photos, icons) — provisioned in M2; cutover is M7 (`prod-r2-storage`) |
+| File Storage | Cloudflare R2 | User uploads (photos, icons) — provisioned in M2; **cutover is M7 PR2, pending merge** (`infra/r2-cutover-runbook.md`); see Object storage below |
 | DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, Access Application 1 until M7's teardown; `infra/cloudflare-state.md` |
 | SSL | Auto-provisioned | Let's Encrypt via Fly (API) and Vercel (frontend); Cloudflare terminates at the edge |
 
@@ -336,6 +357,32 @@ Chosen and shipped in the v1 productionization epic ([plan](../plans/features/pr
 1. **Cloud Hosted (Primary)** - Users visit public URL, no setup required
 2. **One-Click Deploy** - Heroku/Railway deploy buttons for self-hosting
 3. **Docker Compose** - For advanced users running locally
+
+### Object storage (Cloudflare R2)
+
+From the M7 PR2 cutover onward (runbook status: not yet executed), production stores every user
+upload in R2 (S3-compatible, via boto3) and serves it back through the authenticated
+`GET /uploads/{key}` route. Dev, CI, and the visual-test stack stay on local
+disk — they must not gain an R2 dependency.
+
+| | Where | Why there |
+|---|---|---|
+| `STORAGE_BACKEND=r2` | `backend/fly.toml` `[env]` | Not secret, and versioned with the code so a rollback reverts the flip atomically. As a Fly secret it would survive a code rollback, leaving the previous release writing to R2 while reading from disk. |
+| `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Fly secrets | Credentials. Provisioned in M2; first used in M7. |
+
+Reads and writes must flip together — an R2-written object 404s against a disk-backed read.
+The operator procedure, pre-cutover gates, smoke checks, and the three rollback windows are in
+[`infra/r2-cutover-runbook.md`](../../infra/r2-cutover-runbook.md). Cloudflare Access /
+WAF state is in [`infra/cloudflare-state.md`](../../infra/cloudflare-state.md).
+
+**Same-site is a deployment constraint, not just a detail.** Private images are served by a
+cookie-authenticated route, and the `SameSite=Strict` `__Host-refresh` cookie only rides an
+`<img>` subresource load when the frontend origin and `api.mealy.dev` are the *same site*.
+`mealy.dev` and `api.mealy.dev` share eTLD+1, so production works. `*.vercel.app` is on the
+Public Suffix List, so **every Vercel preview origin is a different site and every image 401s
+there** — expected, not a regression; see the runbook and the P3 entry in
+[TODOS.md](./TODOS.md). Moving the frontend off a `mealy.dev` subdomain would break private
+image reads in production.
 
 ### External API Integrations
 
@@ -393,7 +440,8 @@ Production:  https://api.mealy.dev   # Fly.io behind Cloudflare; PUBLIC_API_HOST
 
 **Current (since M3–M5, May 2026):** one shared household login. 15-minute HS256 JWT access
 token in `Authorization: Bearer`, 30-day `__Host-refresh` cookie with 60-second rotation grace,
-every non-`/auth/*` route on the `protected` router. Details:
+every non-`/auth/*` route on the `protected` router. Private media (`GET /uploads/{key}`) is
+cookie-authenticated because `<img>` cannot send a Bearer header. Details:
 [BACKEND_STRUCTURE.md → Auth](./BACKEND_STRUCTURE.md).
 
 ### Rate Limiting
@@ -471,7 +519,7 @@ todo-app/
 │   └── tests/                # Backend tests
 │
 ├── AGENTS.md                 # Project rules for every AI harness (CLAUDE.md imports it)
-├── infra/                    # cloudflare-state.md
+├── infra/                    # cloudflare-state.md, r2-cutover-runbook.md
 └── .agents/docs/             # Documentation (framework docs set)
     ├── PRD.md
     ├── APP_FLOW.md
