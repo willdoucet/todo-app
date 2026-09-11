@@ -29,6 +29,7 @@ frontend/src/
 │
 ├── lib/
 │   ├── apiBase.js        # API_BASE_URL + apiUrl(path) — single source of VITE_API_BASE_URL reads
+│   │                     #   + M7 private-media guardrail (see Key Patterns)
 │   ├── api.js            # Shared axios instance + request/response interceptors (Bearer + 401 refresh)
 │   ├── queryClient.js    # createQueryClient() — QueryCache/MutationCache route 401s to redirect helper
 │   ├── router.jsx        # createBrowserRouter + ProtectedOutlet + rootAuthLoader
@@ -94,7 +95,7 @@ Tests are split between:
 ```
 frontend/tests/visual/
 ├── fixtures/
-│   ├── auth-base.js       # Playwright `test` extended with the cached token and the /auth/refresh intercept
+│   ├── auth-base.js       # Playwright `test` extended with the cached token, the /auth/refresh intercept, and the GET /uploads/* shim (M7)
 │   ├── geometric.js       # expectStableAcrossHover, expectDeltaOnHover, waitForMealboardReady, bboxOf, PX_TOLERANCE, DELTA_TOLERANCE
 │   ├── seed.js            # Idempotent API-based seed of 3 canonical VRT items + meal entries for the current week
 │   └── global-setup.js    # Playwright globalSetup — runs seedKnownWeek() once per job
@@ -389,6 +390,7 @@ Cross-cutting UI components, helpers, and providers used across multiple feature
 - **Routing:** `main.jsx` calls `setRouter(router)` for the auth-redirect helper and renders `<RouterProvider/>` directly; `lib/router.jsx` defines `createBrowserRouter` with `<RootLayout/>` as the layout and a pathless protected layout (loader = `rootAuthLoader`); `MealboardPage.jsx` owns nested `/mealboard/*` routes.
 - **Root providers:** `DarkModeProvider`, `ToastProvider`, `UndoToastProvider`, and `QueryClientProvider` mount inside `RootLayout` so they wrap both `/auth` and protected routes; `HydrateFallback`/`BootErrorScreen` use inline localStorage reads since they may render before RootLayout's children mount.
 - **HTTP/data fetching:** Single shared axios instance in `lib/api.js` (with request/response interceptors for Bearer injection + single-flight refresh on 401). `lib/apiBase.js` is the only place that reads `VITE_API_BASE_URL`. TanStack Query hosts the `/auth/*` surface (status query + login/register/logout mutations); the existing 28 imperative callers keep their current shape and route through `api` (TanStack Query migration of those callers is deferred to Phase 3.1).
+- **Private media (M7):** every `/uploads/*` URL is served by an *authenticated* backend route (`GET /uploads/{key}`, guarded by the `__Host-refresh` cookie), not a public static mount. All 11 image consumers (`ResponsibilityCard`, `ResponsibilityForm`, `MemberAvatar`, `PhotoUpload`, `ItemIcon`, `ItemCard`, `ItemDetailDrawer`, `ItemFormModal`, `RecipeImageUpload`, …) render a plain `<img src={apiUrl(...)}>` with **no `crossorigin` attribute**, which is what lets the browser attach the cookie to the subresource load. Adding `crossorigin`, switching to `fetch()`/XHR image loading, or moving an image into a CSS `background-image` would suppress the cookie and 401 every image at once — that is not a frontend-only change, it needs a different auth mechanism on the media route first. The canonical warning lives at `lib/apiBase.js::apiUrl`; the backend half is in `app/routes/media.py`. Because the DB stores *logical* paths (`/uploads/{key}`) and `apiUrl()` resolves them at render time, M7 swapped both the storage backend and the access model without touching a single `<img>` consumer.
 - **Auth state:** Access token lives in `lib/auth/tokenStore.js` (module-scope, in-memory only — never `localStorage`). React subscribes via `useSyncExternalStore` in `useAuth()`; axios reads the token directly. Single-flight refresh in `lib/auth/refresh.js`; one-shot redirect to `/auth` via `lib/auth/redirect.js` shared by axios + Query.
 - **State management:** Local `useState` / `useEffect`, lightweight context (`DarkModeContext`, toast providers), and some `localStorage` persistence for UI preferences.
 - **Unified item model:** Mealboard recipes and food items share the `Item` API surface and frontend primitives such as `useItems`, `ItemFormModal`, `ItemCard`, and `ItemRow`.

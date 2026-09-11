@@ -445,7 +445,8 @@ Categories: Produce, Protein, Dairy, Pantry, Frozen, Bakery, Beverages, Other
 | Refresh | `POST /auth/refresh` against the refresh cookie returns a fresh access token and rotates the refresh cookie. 60-second grace window on rotation handles parallel in-flight refreshes. |
 | Logout | Revokes the refresh token. Requires the access token in `Authorization: Bearer` (cookie-only logout is rejected as CSRF). |
 | Password Recovery | No self-service password reset in v1. Operator rotates the shared password via CLI (`fly ssh console`) — the rotation also invalidates all outstanding refresh tokens AND any still-unexpired access JWTs via a server-side token/session version check. |
-| Route Protection | Unauthenticated users on `/`, `/lists`, `/responsibilities`, `/settings`, `/mealboard/*` are redirected to `/auth?return_to=<path>`. Public application routes (no FastAPI auth dependency): `/healthz`, the root `GET /` sanity message, and `/auth/*` (login/register/refresh/logout/status). The `/uploads/*` `StaticFiles` mount has no app-layer auth dependency; Cloudflare Access on `api.mealy.dev` is the backstop preventing open-internet reads of uploaded item images until M7 replaces the mount with R2 + auth-proxied uploads (Cursor implementation review, 2026-05-07). FastAPI auto-docs (`/docs`, `/redoc`, `/openapi.json`) are disabled, not allowlisted. |
+| Route Protection | Unauthenticated users on `/`, `/lists`, `/responsibilities`, `/settings`, `/mealboard/*` are redirected to `/auth?return_to=<path>`. Public application routes (no FastAPI auth dependency): `/healthz`, the root `GET /` sanity message, and `/auth/*` (login/register/refresh/logout/status). FastAPI auto-docs (`/docs`, `/redoc`, `/openapi.json`) are disabled, not allowlisted. |
+| Private Media | **No public static surface.** M7 removed the `/uploads/*` `StaticFiles` mount — the one surface a router-level dependency could not gate, and the reason Cloudflare Access stayed load-bearing from M5. `GET /uploads/{key}` is now a first-party authenticated route: an `<img>` cannot send an `Authorization` header, so it is guarded by the `__Host-refresh` cookie instead of the Bearer token. Unauthenticated reads of family photos and uploaded icons return 401. Requires the frontend to stay on a `mealy.dev` subdomain (same-site cookies). Superseded the M5-era position that Cloudflare Access was the backstop (Cursor implementation review, 2026-05-07). |
 
 #### What this explicitly does NOT include in v1
 
@@ -652,12 +653,12 @@ Push/PR → GitHub Actions
 #### Deployment Checklist for v1
 
 - [x] CI: Tests run on all PRs (backend, frontend, visual, migration jobs — `.github/workflows/test.yml`)
-- [ ] CI: Linting enforced
+- [x] CI: Linting enforced (`npm run lint` in the `frontend-tests` job, M7 PR2)
 - [ ] CD: Auto-deploy to staging on PR merge — **deferred to v1.1**; v1 ships via the M8 manual runbook
 - [ ] CD: Manual promotion to production — the M8 runbook is this step
 - [x] Hosting: Production environment live (2026-05-01)
 - [x] Hosting: Managed PostgreSQL (Fly Postgres)
-- [ ] Hosting: File storage configured — Cloudflare R2 provisioned in M2; cutover is M7 (`prod-r2-storage`)
+- [x] Hosting: File storage configured (Cloudflare R2, M7 — pending merge of PR2)
 - [ ] Monitoring: Basic health checks
 - [ ] Monitoring: Error tracking (Sentry or equivalent)
 
@@ -1080,7 +1081,8 @@ a copy; it drifted (it still listed `/recipes` and `/food-items` four months aft
 `/{id}/undo`, `/import-from-url`, `/import-status/{task_id}`, `/suggest-icon`) · `/meal-slot-types`
 (+ `/reset`) · `/meal-entries` (+ `/{id}/undo`) · `/calendar-events` · `/calendars` ·
 `/integrations` (iCloud calendar + reminders) · `/app-settings` (+ `/timezones`) · `/upload/*`
-and `POST /uploads/item-icon` (writes) · `/auth/*` · `/healthz`.
+and `POST /uploads/item-icon` (writes) · `GET /uploads/{key}` (cookie-authenticated reads) ·
+`/auth/*` · `/healthz`.
 
 ---
 

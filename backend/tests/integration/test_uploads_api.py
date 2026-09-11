@@ -43,6 +43,27 @@ def _file(name: str, content: bytes, ctype: str = "image/png"):
     return {"file": (name, io.BytesIO(content), ctype)}
 
 
+def _fail_nth_commit(session, n: int, exc: BaseException | None = None):
+    """Let the first n-1 commits through, then raise.
+
+    `store_upload` commits once to release the auth-dependency connection
+    before `storage.put`, then again to persist the assets row. Compensating-
+    delete tests must fail only that second commit, or put never runs.
+    """
+    remaining = {"i": n}
+    real_commit = session.commit
+    if exc is None:
+        exc = RuntimeError("simulated DB failure")
+
+    async def _commit():
+        remaining["i"] -= 1
+        if remaining["i"] <= 0:
+            raise exc
+        await real_commit()
+
+    return _commit
+
+
 # =============================================================================
 # GET /upload/stock-icons
 # =============================================================================
@@ -201,11 +222,9 @@ class TestCompensatingDelete:
 
         monkeypatch.setattr(uploads_mod, "get_storage", lambda: SpyStorage())
 
-        # Make the commit fail AFTER the successful put.
-        async def boom_commit():
-            raise RuntimeError("simulated DB failure")
-
-        monkeypatch.setattr(db_session, "commit", boom_commit)
+        # store_upload now commits twice: once to end the auth txn before
+        # put, once to persist the assets row. Fail only the second.
+        monkeypatch.setattr(db_session, "commit", _fail_nth_commit(db_session, 2))
 
         with pytest.raises(RuntimeError):
             await uploads_mod.store_upload(
@@ -241,11 +260,7 @@ class TestCompensatingDelete:
                 raise RuntimeError("simulated storage delete failure")
 
         monkeypatch.setattr(uploads_mod, "get_storage", lambda: SpyStorage())
-
-        async def boom_commit():
-            raise RuntimeError("simulated DB failure")
-
-        monkeypatch.setattr(db_session, "commit", boom_commit)
+        monkeypatch.setattr(db_session, "commit", _fail_nth_commit(db_session, 2))
 
         caplog.set_level(logging.ERROR)
         with pytest.raises(RuntimeError, match="simulated DB failure"):
@@ -282,11 +297,9 @@ class TestCompensatingDelete:
                 await backend.delete(key)
 
         monkeypatch.setattr(uploads_mod, "get_storage", lambda: SpyStorage())
-
-        async def boom_commit():
-            raise asyncio.CancelledError()
-
-        monkeypatch.setattr(db_session, "commit", boom_commit)
+        monkeypatch.setattr(
+            db_session, "commit", _fail_nth_commit(db_session, 2, asyncio.CancelledError())
+        )
 
         with pytest.raises(asyncio.CancelledError):
             await uploads_mod.store_upload(
@@ -296,3 +309,39 @@ class TestCompensatingDelete:
         assert deleted == put_keys
         with pytest.raises(ObjectNotFound):
             await backend.get(put_keys[0])
+
+    async def test_db_transaction_ends_before_the_storage_put(
+        self, db_session, monkeypatch, tmp_path
+    ):
+        """PR2 puts `storage.put` on R2. The auth-dependency SELECT must not
+        hold a pooled connection across that call — same pool-starvation path
+        the media read route closed. Call order, not transaction-state, because
+        the test session runs in SAVEPOINT mode."""
+        from app import uploads as uploads_mod
+        from app.storage.local import LocalDiskBackend
+
+        backend = LocalDiskBackend(root=tmp_path)
+        calls: list[str] = []
+        real_commit = db_session.commit
+
+        async def spy_commit():
+            calls.append("commit")
+            await real_commit()
+
+        monkeypatch.setattr(db_session, "commit", spy_commit)
+
+        class SpyStorage:
+            async def put(self, key, data, content_type):
+                calls.append("storage.put")
+                await backend.put(key, data, content_type)
+
+            async def delete(self, key):
+                raise AssertionError("delete must not run on the happy path")
+
+        monkeypatch.setattr(uploads_mod, "get_storage", lambda: SpyStorage())
+
+        url = await uploads_mod.store_upload(
+            db_session, _mock_upload(PNG), "family_photos", max_bytes=5 * 1024 * 1024
+        )
+        assert url.startswith("/uploads/family_photos/")
+        assert calls == ["commit", "storage.put", "commit"], calls

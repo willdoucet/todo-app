@@ -559,11 +559,11 @@ Append-only rotation chain. The plaintext lives only in the `__Host-refresh` coo
 |--------|------|-------------|-------------|
 | `id` | BIGINT | PRIMARY KEY | |
 | `user_id` | BIGINT | FK → users.id ON DELETE CASCADE, NOT NULL | |
-| `token_hash` | BYTEA(32) | NOT NULL, UNIQUE (`ix_refresh_tokens_token_hash`) | SHA-256 of the cookie value; one indexed lookup per refresh |
+| `token_hash` | BYTEA(32) | NOT NULL, UNIQUE (`ix_refresh_tokens_token_hash`) | SHA-256 of the cookie value; one indexed lookup per refresh and per private image read |
 | `successor_id` | BIGINT | FK → refresh_tokens.id ON DELETE SET NULL, NULLABLE (`use_alter=True`) | Rotation chain pointer, walked during the 60 s grace window |
 | `issued_at` / `expires_at` | TIMESTAMPTZ | NOT NULL | 30-day TTL |
-| `superseded_at` | TIMESTAMPTZ | NULLABLE | Set on rotation; classifies in-grace vs past-grace |
-| `revoked_at` | TIMESTAMPTZ | NULLABLE | Set by logout and any `session_version` bump |
+| `superseded_at` | TIMESTAMPTZ | NULLABLE | Set on rotation; `refresh_row_status()` classifies in-grace vs past-grace from it |
+| `revoked_at` | TIMESTAMPTZ | NULLABLE | Set by logout and any `session_version` bump — the invariant the media read guard leans on |
 
 #### assets (M7)
 
@@ -752,9 +752,21 @@ Post-refactor, meal entries reference items via a single `item_id` field (the ol
 
 ### File Upload
 
+Writes are Bearer-protected (on the `protected` router). The read route is NOT — see
+"M7 media read route" below.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/upload` | Upload file (multipart/form-data) |
+| POST | `/uploads/item-icon` | Item icon (recipe / food item). 1 MB cap. multipart/form-data. |
+| POST | `/upload/family-photo` | Family-member photo. 5 MB cap. |
+| POST | `/upload/responsibility-icon` | Responsibility icon. 1 MB cap. |
+| POST | `/upload/recipe-image` | Recipe image. 5 MB cap. |
+| GET | `/upload/stock-icons` | List the five bundled stock icons (`id`, `url`, `label`). URLs are `/uploads/stock_icons/*.png`. |
+| GET | `/uploads/{key}` | **M7 PR2** — read a stored upload. Cookie-authenticated, NOT Bearer. See "M7 media read route". |
+
+All four write endpoints go through `app/uploads.py::store_upload` and return
+`{"url": "/uploads/{subdir}/{uuid4}.{ext}"}`. PNG / JPEG / WebP only (magic-byte sniffed;
+GIF and SVG rejected with 415). Over-cap → 413.
 
 ### Auth (M3)
 
@@ -773,19 +785,21 @@ Post-refactor, meal entries reference items via a single `item_id` field (the ol
 - Every `/auth/*` request emits exactly one structured JSON log line at completion via `app.auth.logging_utils.emit_log_line`. Fields: `event`, `outcome`, `reason`, `user_id`, `ip` (sanitized via CF-Connecting-IP → XFF first-entry → 128-char truncate), `request_id` (sanitized via allowlist → UUID4 fallback), `latency_ms`.
 - Refresh tokens are NOT JWTs — they're opaque `secrets.token_urlsafe(32)` strings. Their identity is the SHA-256 hash row in `refresh_tokens`. Plaintext is never persisted.
 - Access JWTs are HS256 with claims `{sub, iat, exp, session_version}`. 15-min TTL.
-- The `__Host-refresh` cookie is `HttpOnly`, `Secure`, `Path=/`, `SameSite=Lax`, no `Domain` (host-only on `api.<domain>`), 30-day Max-Age.
+- The `__Host-refresh` cookie is `HttpOnly`, `Secure`, `Path=/`, `SameSite=Strict`, no `Domain` (host-only on `api.<domain>`), 30-day Max-Age. (Corrected 2026-09-09: this said `Lax`, but `app/auth/routes.py::REFRESH_COOKIE_SAMESITE` has always been `"strict"` — the M2 summary's "Lax is canonical" note was never what shipped. M7's OQ1 asked for the reconciliation because the media read route depends on this value: both `Lax` and `Strict` transmit on *same-site* subresource loads, so the design is unaffected, but `mealy.dev` → `api.mealy.dev` must be same-site for private `<img>` loads to carry the cookie.)
 - `app/auth/dependencies.py::get_current_user` is now wired across the API via the M5 PR1 wrapping `protected` APIRouter pattern (see "Wrapping protected APIRouter" below).
 
 #### Wrapping protected APIRouter (M5 PR1)
 
-Auth enforcement uses a single `protected = APIRouter(dependencies=[Depends(get_current_user)])` declared in `app/main.py`. The 14 protected routers (tasks, family_members, responsibilities, uploads.router + uploads.item_icon_router, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries) are included on `protected`. The public surface (`/`, `/healthz`, `/auth/*`, `/uploads/*` StaticFiles mount) is registered directly on `app` or via the auth router. The `/uploads/*` mount has no app-layer auth dependency; Cloudflare Access on `api.mealy.dev` is the backstop until M7 replaces the mount with R2 + auth-proxied uploads.
+Auth enforcement uses a single `protected = APIRouter(dependencies=[Depends(get_current_user)])` declared in `app/main.py`. The 14 protected routers (tasks, family_members, responsibilities, uploads.router + uploads.item_icon_router, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries) are included on `protected`. The public surface (`/`, `/healthz`, `/auth/*`) is registered directly on `app` or via the auth router.
+
+**M7 PR2 removed the `/uploads/*` StaticFiles mount.** It was the one surface a router-level dependency could not gate (a `Mount` is not an `APIRoute`), which is why Cloudflare Access Application 1 stayed load-bearing from M5 to M7. In its place, `GET /uploads/{key}` is registered on `app` with its own cookie dependency, `require_media_session` — not on `protected`, because `<img>` cannot send an `Authorization` header. There is now **no public static surface**.
 
 ONE place to audit "is this auth-gated?" — grep `app.include_router` in `main.py` to enumerate the public surface. A new router added on `protected` is auth-gated automatically. A new router added on `app` directly is public.
 
 FastAPI's automatic `/docs`, `/redoc`, and `/openapi.json` are disabled (`docs_url=None, redoc_url=None, openapi_url=None`) because they bypass router-level dependencies — the wrapping `protected` APIRouter cannot gate them. Disabling them is the structural defense; Cloudflare Access on `api.mealy.dev` is the additional edge backstop until M7 closes that loop.
 
 Two test artifacts pin the gate from both ends:
-- `tests/unit/test_protected_router_propagation.py` — STRUCTURAL: walks `app.routes`, asserts every non-allowlist `APIRoute` has `get_current_user` in its dep tree, and that `/docs`/`/redoc`/`/openapi.json` are absent.
+- `tests/unit/test_protected_router_propagation.py` — STRUCTURAL: walks `app.routes` and asserts (1) every non-allowlisted `APIRoute` has `get_current_user` in its dep tree; (2) **no `Mount` objects remain at all** (M7 PR2); (3) the cookie-guarded `GET /uploads/{key:path}` really carries `require_media_session` and does NOT carry `get_current_user`, and is the only such route — an exemption from (1) without a replacement assertion would be a hole; (4) `/docs`/`/redoc`/`/openapi.json` are absent.
 - `tests/integration/test_auth_enforcement.py` — BEHAVIORAL: hits real HTTP endpoints, asserts 401 without auth and with malformed Bearer; asserts public root stays 200.
 
 #### Production host gate
@@ -800,53 +814,171 @@ backend/app/auth/
 ├── config.py          # AuthConfig dataclass + load_from_env + configure/get_settings/reset
 ├── models.py          # User + RefreshToken (SQLAlchemy ORM, registered with shared Base)
 ├── schemas.py         # RegisterIn, LoginIn, AccessTokenOut, AuthStatusOut (Pydantic)
-├── tokens.py          # JWT encode/decode + opaque refresh-token plaintext + SHA-256 hash helpers
+├── tokens.py          # JWT encode/decode + refresh plaintext/SHA-256 + REFRESH_COOKIE_NAME
+│                     # + RefreshStatus/refresh_row_status (shared validity predicate, M7 PR2)
 ├── passwords.py       # PasswordHasher injectable + verify_or_dummy + lazy dummy-hash cache
 ├── errors.py          # Single source for byte-identical 401 responses (with log_reason attr)
 ├── service.py         # Async business logic (register, login, refresh case A/B/C, logout, status)
-├── dependencies.py    # validate_bearer + get_current_user (FastAPI dep wrapper)
+├── dependencies.py    # validate_bearer + get_current_user + require_media_session (M7 PR2)
 ├── routes.py          # POST /auth/register, /login, /refresh, /logout, GET /auth/status
 └── logging_utils.py   # emit_log_line + IP/request-id sanitization
 ```
 
 Audit surface is intentionally one folder. Production secret loading runs in lifespan (fail-closed); test code calls `auth_config.configure(AuthConfig(...))` directly without reading process env.
 
-**Response:**
+**Upload response** (all four write endpoints, since M7 PR1 — no `filename` field; the key is
+a UUID, not a derived filename):
 ```json
-{"filename": "photo_123456.jpg", "url": "/uploads/photo_123456.jpg"}
+{"url": "/uploads/family_photos/0190a1b2-c3d4-4e5f-8a9b-0c1d2e3f4a5b.jpg"}
 ```
 
-### M7 storage layer (PR1)
+### M7 storage layer
 
 Object storage is abstracted behind `app/storage/` — a `StorageBackend` protocol
-(`put`/`get`/`delete`) with `LocalDiskBackend` (dev/test/prod-through-PR1) and
-`R2Backend` (boto3, enabled in PR2 via `STORAGE_BACKEND=r2`). `get_storage()`
-selects by env, defaulting to `local`.
+(`put`/`get`/`delete`) with `LocalDiskBackend` (dev / test / visual-test) and
+`R2Backend` (boto3, bounced through `run_in_threadpool` because boto3 is sync).
+`get_storage()` selects by `STORAGE_BACKEND`, defaulting to `local`; unknown
+values raise rather than silently writing to ephemeral disk. **Production runs
+`r2`** — set in `backend/fly.toml` `[env]`, deliberately not as a Fly secret so a
+code rollback reverts the flip atomically (see
+[`infra/r2-cutover-runbook.md`](../../infra/r2-cutover-runbook.md)).
 
-A new `assets` table is the upload manifest: PK `key` (`{subdir}/{uuid}.{ext}` —
-also the R2 object key and the tail of `/uploads/{key}`), `content_type`,
-`size_bytes`, `referenced` (bool), `created_at`, indexed `(referenced, created_at)`.
-The four managed subdirs (keep these exact names for PR2's key allowlist —
-they match the pre-M7 URL contract): `item-icons`, `family_photos`,
-`responsibility_icons`, `recipe_images`. Stock icons stay `stock_icons/*`
-(unmanaged, no assets row). `get_storage()` accepts only `local`/`r2`
-(unknown values raise).
+`get_storage()` is otherwise lazy, so `app/main.py::_initialize_storage_backend`
+builds the configured backend once from the lifespan hook **when
+`APP_ENV=production`**: a deploy *missing* an `R2_*` secret then crashes at boot
+and Fly keeps the previous image serving, instead of passing `release_command`,
+passing `/healthz`, taking traffic, and 503-ing every image. A present-but-
+rotated credential is not caught here (client construction makes no network
+call, and a boot-time bucket probe would make every deploy depend on R2 being
+up) — the cutover runbook's smoke upload covers that case. Same fail-closed
+contract `_parse_cors_origins` enforces for CORS. Outside production it is a
+no-op, so dev and test never construct an R2 client. Pinned by
+`tests/unit/test_storage_bootstrap.py`.
 
-Upload flow (`app/uploads.py::store_upload`): magic-byte validate (PNG/JPEG/WebP
-only — **GIF now rejected**; icons 1 MB / photos 5 MB) → `storage.put` → INSERT
-`assets(referenced=false)`, with a compensating `storage.delete` on DB failure.
-`app/services/asset_lifecycle.py` wires adopt (flip `referenced` on entity
-create/update, in-txn; **400 if the managed key has no assets row**) and
-release (delete object + drop row, post-commit; **keep an unreferenced row
-if storage delete fails so the sweep can retry**) into
-the responsibilities / family_members / items(+recipe image) write paths, plus a
-`stock_icons/*` carve-out (never deleted) and an hourly abandoned-upload sweep
-(Celery beat). **PR1 keeps the `/uploads/*` StaticFiles mount and local-disk prod
-writes**; the R2 flip + cookie-authed read proxy + mount removal are PR2.
+The `assets` table is the upload manifest: PK `key` (`{subdir}/{uuid4}.{ext}` —
+simultaneously the storage object key, the manifest PK, and the tail of
+`/uploads/{key}`), `content_type`, `size_bytes`, `referenced` (bool),
+`created_at`, indexed `(referenced, created_at)`. It is the **single authority for
+content-type** on read; `LocalDiskBackend` stores none, and trusting an
+R2-reported type would trust the upload.
+
+#### The key contract (`app/storage/keys.py`)
+
+One definition, three consumers — `store_upload` when minting, `asset_lifecycle`
+before `storage.delete`, and the media route before `storage.get`. A security
+check copied across modules drifts, and PR1's pre-landing review found exactly
+that class of bug here (unvalidated `icon_url` reaching `storage.delete` as an
+arbitrary-file delete).
+
+- **Managed key**: `{subdir}/{uuid4}.{png|jpg|webp}`, where `subdir` is one of a
+  **closed allowlist** — `item-icons`, `family_photos`, `responsibility_icons`,
+  `recipe_images` (stable since before M7; they match the pre-M7 URL contract, so
+  no data migration was ever needed). Has an `assets` row.
+- **Stock key**: `stock_icons/{name}.png` — bundled in the image at
+  `/app/stock_icons_src`, no `assets` row, never in R2, never deleted.
+- Anything else is neither, and every consumer refuses it. Traversal (`../`),
+  absolute/leading-slash keys, unknown subdirs, non-UUID names, and rejected
+  extensions all fail to classify. Patterns terminate with `\Z`, not `$` —
+  Python's `$` also matches before a trailing newline, which would have let
+  `…png\n` pass as valid.
+- `store_upload` raises on a subdir outside the allowlist, so a typo fails at the
+  write site instead of minting keys that 404 forever on read.
+
+#### Write flow (`app/uploads.py::store_upload`)
+
+Magic-byte validate (PNG/JPEG/WebP only — **GIF and SVG rejected**; icons 1 MB,
+photos 5 MB) → commit the auth-dependency transaction (releases the pool
+connection) → `storage.put` → INSERT `assets(referenced=false)`, with a
+compensating `storage.delete` on DB failure (catching `BaseException`, so a
+client disconnect after `put` still reclaims the object).
+
+`app/services/asset_lifecycle.py` wires **adopt** (flip `referenced` on entity
+create/update, inside the entity transaction; 400 if the managed key has no
+`assets` row) and **release** (delete object + drop row, post-commit only, so a
+rolled-back edit never erases live bytes; an unreferenced row is kept if the
+storage delete fails so the sweep can retry) into the responsibilities /
+family_members / items (+recipe image) write paths, plus the `stock_icons/*`
+carve-out and an hourly abandoned-upload sweep (Celery beat, `referenced=false`
+older than 24h, claimed with `SELECT … FOR UPDATE`).
+
+#### M7 media read route (`app/routes/media.py`, PR2)
+
+`GET /uploads/{key:path}` — registered on `app`, guarded by
+`app/auth/dependencies.py::require_media_session`. Replaces the StaticFiles mount.
+
+- **Auth**: reads the `__Host-refresh` cookie, SHA-256s it, looks up
+  `ix_refresh_tokens_token_hash`, and serves only when
+  `tokens.refresh_row_status(row, now)` is `LIVE` or `SUPERSEDED_IN_GRACE`. One
+  indexed lookup per image load. No row lock, no rotation, no `Set-Cookie` — a
+  read must not perturb the 60-second grace window `/auth/refresh` owns.
+  Identical in every environment; there is **no dev/test bypass**.
+- It deliberately does **not** re-check `users.session_version`. Read revocation
+  rides on the M3 invariant that anything bumping `session_version` also sets
+  `revoked_at` on the user's refresh rows. That invariant is now load-bearing for
+  private images and is pinned by
+  `tests/integration/auth/test_media_read.py`.
+- **`stock_icons/*` compat branch**: served from `/app/stock_icons_src` with
+  `image/png` — the one exception to manifest-sourced content-type, since stock
+  icons have no `assets` row. This keeps already-adopted
+  `/uploads/stock_icons/*.png` column values resolving. (It also *fixes* prod,
+  where nothing ever populated `/app/uploads/stock_icons`.)
+- **Response headers** (on `200` and `304` alike): `Cache-Control: private,
+  no-cache`, `X-Content-Type-Options: nosniff`, `ETag = "{key}"`.
+  `private` forbids Cloudflare edge caching of private images — the load-bearing
+  directive. `nosniff` stops a browser second-guessing the magic-byte-derived
+  content-type on a route whose whole job is returning user-uploaded bytes.
+  Deliberately **no `Vary: Cookie`**: the refresh cookie rotates every ~15 min
+  of use, and a browser treats a cached entry whose Vary'd header changed as
+  unusable — every rotation would turn every image back into a full download
+  and void the 304 path. Error responses (401/404/503) carry `private, no-store`
+  so Cloudflare's extension-based caching can never replay an authenticated
+  user's 404, or an unauthenticated 401, to anyone else. The 401 header is set
+  on `require_media_session` (the guard runs before the route body).
+- **Caching**: `no-cache` (not `no-store`) lets the browser keep bytes but
+  revalidate every time, and the revalidation carries the cookie and re-runs the
+  guard, so a revoked session gets 401 rather than a cheap 304. Keys are
+  immutable UUIDs, so `ETag = key` can never serve stale content.
+- **Conditional-request ordering is load-bearing.** `If-None-Match` is evaluated
+  only AFTER the key passes the allowlist *and* the representation is proven to
+  exist (bundled file read, or `assets` row found) — never before. The 2026-09-10
+  pre-landing review found both failure modes of the earlier ordering: `key` is
+  `{key:path}` so it accepts any character, and `ETag: "<raw key>"` with a
+  non-latin-1 byte raised `UnicodeEncodeError` inside Starlette's header encoding
+  (an unhandled 500 on this route); and per RFC 9110 §13.1.2 a conditional is
+  only evaluated against a *current* representation, so returning `304` for a key
+  with no object let a browser keep rendering a deleted photo from its own cache
+  indefinitely. A `304` therefore costs one indexed `assets` PK lookup on top of
+  the guard's lookup, and still skips the R2 GET — which was the point.
+- **Pool safety**: the manifest `SELECT` autobegins a transaction; the route
+  ends it (`await db.commit()`, read-only) *before* the storage call so the
+  pooled connection is not held across an R2 round trip. The write path does
+  the same: `store_upload` commits the auth-dependency transaction before
+  `storage.put`. `R2Backend`'s boto3 client carries explicit timeouts (5 s
+  connect / 15 s read, one retry — ~40 s worst case) in place of botocore's
+  60 s + 60 s × 5. Without both, one page of images against a hung R2 could
+  exhaust the 15-wide pool and take `/auth/refresh` down with it.
+- **Failure mapping**: malformed key, no manifest row, and missing object all →
+  `404 {"detail": "not_found"}` (byte-identical, so the route cannot be probed for
+  which keys exist). Storage unreachable → `503 {"detail": "storage_unavailable"}`
+  plus a distinctly-logged `STORAGE UNREACHABLE` line, so ops can tell "unknown
+  key" from "R2 is down". The `503` is mapped from **specific** failure classes
+  (`botocore` `ClientError` / `BotoCoreError`, `OSError`, `TimeoutError`), never a
+  bare `except Exception` — a `TypeError` in our own code is a bug, not an
+  outage, and raises a real `500` rather than paging someone about Cloudflare.
+- 401s are byte-identical `{"detail": "unauthorized"}`; the categorical reason
+  (`media_no_cookie`, `media_unknown_cookie`, `media_revoked`, `media_expired`,
+  `media_superseded_past_grace`) goes to the log only. Failures are logged;
+  successes are not (one line per `<img>` render is noise with no security value).
+
+⚠️ Adding `crossorigin` to an `<img>`, or loading images via `fetch()`/XHR or a CSS
+`background-image`, suppresses the cookie and would 401 every image in the app.
+The matching warning is at `frontend/src/lib/apiBase.js::apiUrl`.
 
 Env vars: `STORAGE_BACKEND` (`local`|`r2`, default `local`), `SQLALCHEMY_ECHO`
-(`true` opts into SQL logging; default off). R2 (PR2): `R2_ENDPOINT`,
+(`true` opts into SQL logging; default off), `STOCK_ICONS_DIR` (default
+`/app/stock_icons_src`), and the R2 credentials `R2_ENDPOINT`,
 `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
+
 
 ---
 
@@ -886,11 +1018,22 @@ backend/
 │   │   ├── reminders_sync_engine.py  # Two-way reminders sync (VTODO pull/push)
 │   │   ├── shopping_sync.py  # Mealboard meal-entry → shopping-task aggregation
 │   │   ├── recipe_extractor.py # AI recipe import pipeline (fetch → clean → recipe-scrapers → Claude)
-│   │   └── ai_client.py      # Anthropic client wrapper (import + suggest-icon)
+│   │   ├── ai_client.py      # Anthropic client wrapper (import + suggest-icon)
+│   │   └── asset_lifecycle.py # M7 adopt/release hooks + abandoned-upload sweep
+│   │
+│   ├── uploads.py           # store_upload: the single write path for all four upload types
+│   │
+│   ├── storage/              # M7 object-storage abstraction
+│   │   ├── base.py           # StorageBackend protocol (put/get/delete) + ObjectNotFound
+│   │   ├── local.py          # LocalDiskBackend (dev/test/visual-test)
+│   │   ├── r2.py             # R2Backend (boto3 via run_in_threadpool; prod)
+│   │   ├── keys.py           # Canonical key contract: managed/stock validation (M7 PR2)
+│   │   └── __init__.py       # get_storage() env factory (local|r2, unknown raises)
 │   │
 │   ├── utils/
 │   │   ├── encryption.py     # Fernet encrypt/decrypt for stored passwords
-│   │   └── url_safety.py     # SSRF guard for recipe-import URLs
+│   │   ├── url_safety.py     # SSRF guard for recipe-import URLs
+│   │   └── upload_validation.py  # validate_and_read: magic-byte + streaming size abort
 │   │
 │   ├── constants/
 │   │   ├── units.py          # Predefined unit system for ingredient aggregation
@@ -902,11 +1045,11 @@ backend/
 │   │   ├── config.py         # AuthConfig + load_from_env + fail-closed validation
 │   │   ├── models.py         # User + RefreshToken (registered with shared Base)
 │   │   ├── schemas.py        # RegisterIn, LoginIn, AccessTokenOut, AuthStatusOut
-│   │   ├── tokens.py         # JWT encode/decode + refresh-token plaintext + SHA-256 hash
+│   │   ├── tokens.py         # JWT + refresh plaintext/hash + refresh_row_status predicate
 │   │   ├── passwords.py      # PasswordHasher injectable + verify_or_dummy + dummy-cache
 │   │   ├── errors.py         # Single source for byte-identical 401 responses
 │   │   ├── service.py        # Async business logic (register/login/refresh/logout/status)
-│   │   ├── dependencies.py   # validate_bearer + get_current_user (NOT applied in M3)
+│   │   ├── dependencies.py   # validate_bearer + get_current_user + require_media_session
 │   │   ├── routes.py         # /auth/* endpoints
 │   │   └── logging_utils.py  # emit_log_line + IP/request-id sanitization
 │   │
@@ -924,7 +1067,8 @@ backend/
 │       ├── integrations.py  # /integrations endpoints (validate, connect, sync, disconnect)
 │       ├── sections.py     # /lists/{id}/sections + /sections/{id} endpoints
 │       ├── app_settings.py  # /app-settings endpoints (timezone config)
-│       └── uploads.py       # /uploads endpoints (family photos, responsibility icons; item icons → Chunk 5)
+│       ├── uploads.py       # POST upload endpoints + GET /upload/stock-icons
+│       └── media.py         # GET /uploads/{key} — cookie-authed private read proxy (M7 PR2)
 │
 ├── alembic/                 # Database migrations
 │   ├── versions/            # Migration scripts

@@ -2,12 +2,11 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
-from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries
+from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries, media
 from app.auth import get_current_user, router as auth_router
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
@@ -64,9 +63,39 @@ def _initialize_auth_config() -> None:
         )
 
 
+def _initialize_storage_backend() -> None:
+    """Lifespan startup hook for the M7 storage layer.
+
+    In production, build the configured backend once so a misconfigured deploy
+    CRASHES AT BOOT instead of degrading silently. `get_storage()` is otherwise
+    lazy: with `STORAGE_BACKEND=r2` (backend/fly.toml) but a MISSING `R2_*`
+    secret, the app would pass `release_command`, pass `/healthz`, take
+    traffic, and only then 503 every image and 500 every upload — invisible at
+    the edge, total at the app layer. Scope: this catches an absent variable
+    (`KeyError` at client construction). A present-but-rotated credential is
+    NOT caught — building a boto3 client makes no network call, and a boot-time
+    bucket probe would make every deploy depend on R2 being up. The runbook's
+    smoke upload is the check for that case. That is the same failure mode
+    `_parse_cors_origins` already refuses to allow, and REVIEW_CHECKLIST →
+    FastAPI → Secrets & config requires ("Lifespan fails closed in production
+    when a required secret is missing"). A boot crash leaves the previous Fly
+    image serving, which is the correct outcome.
+
+    Outside production this is a no-op: dev/test default to `local`, and the
+    R2 client must never be constructed there.
+    """
+    if os.getenv("APP_ENV") != "production":
+        return
+
+    from .storage import get_storage
+
+    get_storage()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _initialize_auth_config()
+    _initialize_storage_backend()
     yield
 
 
@@ -150,10 +179,6 @@ async def production_host_gate(request: Request, call_next):
 # auth-gated?". A new router added on `protected` is auth-gated
 # automatically. A new router added on `app` directly is public — grep
 # for `app.include_router` in this file to audit the public surface.
-#
-# Include routers BEFORE mounting StaticFiles so the specific
-# POST /uploads/item-icon route wins over the static mount, which would
-# otherwise intercept all /uploads/* requests and return 405 for non-GET.
 protected = APIRouter(dependencies=[Depends(get_current_user)])
 protected.include_router(tasks.router)
 protected.include_router(family_members.router)
@@ -161,8 +186,7 @@ protected.include_router(responsibilities.router)
 # uploads.router is the legacy /upload/* (singular) protected API surface.
 protected.include_router(uploads.router)
 # uploads.item_icon_router is a distinct router in the same module —
-# POST /uploads/item-icon. Protected. NOT the same as the public
-# StaticFiles mount on /uploads/* below.
+# POST /uploads/item-icon. Protected.
 protected.include_router(uploads.item_icon_router)
 protected.include_router(lists.router)
 protected.include_router(items.router)
@@ -178,9 +202,22 @@ app.include_router(protected)
 # Public surface — registered directly on `app`, NOT on `protected`.
 app.include_router(auth_router)
 
-# Mount static files AFTER routers so that specific router paths (e.g.
-# POST /uploads/item-icon) take precedence over the catch-all static mount.
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# M7 PR2 — GET /uploads/{key} replaces the public static mount that used to
+# live here. That mount bypassed `protected` entirely (a router dependency
+# cannot gate a mount), leaving private family photos gated only by
+# Cloudflare Access at the edge — the one reason CF Access Application 1 had
+# to survive since M5. It is gone; no public static surface remains.
+#
+# Registered on `app`, NOT on `protected`, because `<img>` cannot send an
+# Authorization header. The route carries its own cookie dependency
+# (`require_media_session`), and
+# `tests/unit/test_protected_router_propagation.py` asserts it is the ONLY
+# non-`protected` API route outside /auth/* and that it really carries it.
+#
+# Registered AFTER `protected` so POST /uploads/item-icon keeps its exact-path
+# match; Starlette falls through to this catch-all only when no earlier route
+# matches both path and method.
+app.include_router(media.router)
 
 
 @app.get("/")

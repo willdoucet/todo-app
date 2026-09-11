@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi.concurrency import run_in_threadpool
 
@@ -22,6 +23,20 @@ from .base import ObjectNotFound
 # S3-compatible stores (incl. R2) surface a missing object as ClientError
 # with one of these codes — not always the modeled NoSuchKey exception.
 _MISSING_OBJECT_CODES = {"NoSuchKey", "404", "NotFound"}
+
+# M7 PR2 put this client on the interactive request path (`GET /uploads/{key}`
+# holds a request-scoped DB session while it runs). botocore's defaults are
+# 60 s connect + 60 s read with up to 5 legacy-mode attempts — one hung R2
+# fetch could pin a pool connection for minutes, and the pool is 15 wide.
+# R2 ↔ Fly is datacenter-to-datacenter, so these are generous for a ≤5 MB
+# object. `max_attempts` counts RETRIES (botocore reports it back as
+# `total_max_attempts` = initial + retries), so this is one retry, two
+# attempts total, and a worst case of roughly 2 × (5 + 15) = 40 s per call.
+_CLIENT_CONFIG = Config(
+    connect_timeout=5,
+    read_timeout=15,
+    retries={"max_attempts": 1, "mode": "standard"},
+)
 
 
 class R2Backend:
@@ -53,6 +68,7 @@ class R2Backend:
                 secret_access_key or os.environ["R2_SECRET_ACCESS_KEY"]
             ),
             region_name=region,
+            config=_CLIENT_CONFIG,
         )
 
     async def put(self, key: str, data: bytes, content_type: str) -> None:

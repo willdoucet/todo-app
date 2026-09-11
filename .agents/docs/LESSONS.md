@@ -42,6 +42,17 @@
 - Never run app `npm`, backend `uv`, or backend `pytest` commands directly on the host.
 - Use Docker Compose for builds, tests, and runtime commands unless the task explicitly involves host-side `.claude` workflow tooling.
 
+### The visual-test `api-test` container has no bind-mount — rebuild it after backend changes
+
+- `docker-compose.yml`'s `api` service bind-mounts `./app`, but `api-test` (the visual-test
+  profile's backend) deliberately does not (Adversarial A5) — it bakes the code in at build time.
+- The documented sequence built only `frontend-preview frontend-visual`, so a backend change ran
+  the Playwright suite against the previously-built backend and "passed" while proving nothing.
+- **Rule:** `docker-compose --profile visual-test build api-test frontend-preview frontend-visual`
+  whenever backend code changed. Also avoid the documented `down -v` teardown mid-session: it
+  removes the shared `db` and `uploads_data` volumes. Fixed in `development-commands.md`
+  2026-09-09.
+
 ### Never run unfiltered `env` / `printenv` against any machine that may carry secrets
 
 - `fly ssh console -C 'env'`, `fly ssh console -C 'printenv'`, or any equivalent that dumps the entire process environment WILL spill `DATABASE_URL`, `FERNET_KEY`, `JWT_SECRET_KEY`, API tokens, etc. into the conversation transcript. Once spilled, those values are unrecoverably present in chat history and require rotation.
@@ -115,6 +126,18 @@ def run_async(coro):
 - New write paths must include the same required fields as established ones. Adding a shortcut API call path without required backend fields causes avoidable 422s.
 - When creating new records inside synced parent contexts, inherit the parent's sync metadata and dispatch the same follow-up side effects as existing flows.
 - When a caller passes contextual IDs like `section_id`, thread them end-to-end through the UI state and submit payload.
+
+### Anchor Python key/path regexes with `\Z`, never `$`
+
+- Python's `$` matches at end-of-string **or just before a trailing newline**. A validator like
+  `re.match(r"^item-icons/<uuid>\.png$", key)` therefore accepts `"item-icons/<uuid>.png\n"`.
+- For anything where the match IS the identity of a resource — a storage key, a path segment, a
+  filename — use `\Z`. A key with a stray newline is a key that exists in neither the database
+  nor the object store, so it silently becomes a no-op delete or a phantom 404 rather than a
+  loud error.
+- Discovered 2026-09-09 in M7 PR2 by a `trailing-newline` parametrized case in
+  `tests/unit/test_storage_keys.py` — written as an obvious-looking negative that turned out to
+  pass. Both `app/storage/keys.py` regexes were affected.
 
 ## Frontend Lessons And Motion Rules
 
@@ -375,6 +398,44 @@ Discovered 2026-04-30 during M2 prod-deploy-skeleton Slice 2 (Fly).
 - `tests/integration/auth/conftest.py` has a function-scoped autouse `install_auth_test_config` that calls `auth_config.reset()` at teardown. If a parent conftest also installs auth config but session-scoped, the parent's install fires once at session start and stays installed — until the first auth subfolder test resets it. After that, every post-auth-subfolder test runs with `_settings=None` and 500s on protected routes.
 - **Rule:** when the same global state is being installed at multiple test-suite scopes, make the broadest install function-scoped autouse so it re-installs after any narrower per-test reset. Discovered 2026-05-06 during M5 PR1.
 
+### The visual-test stack and the integration suite share `todo_app_test` — do not run them at once
+
+- `api-test` (visual-test profile) points `DATABASE_URL` at `todo_app_test` and runs
+  `alembic upgrade head` + seeding at boot. The integration suite targets the SAME database via
+  `TEST_DATABASE_URL` and manages schema itself with `Base.metadata.create_all`.
+- Running `docker-compose exec api uv run pytest` while the visual stack is up (or immediately
+  after it started, mid-migration) produces mass unrelated failures — observed once as
+  **72 failed / 263 errors**, where the identical suite passed **878** minutes earlier and again
+  immediately after. Individual files passed in isolation the whole time, which is the tell.
+- **Rule:** treat a sudden full-suite collapse with healthy per-file runs as environment
+  contention, not a code regression. Let the visual-test containers finish being removed, then
+  re-run before touching any code. Do not "fix" tests against it.
+- Discovered 2026-09-09 during M7 PR2 verification.
+
+### Patch the factory, not the returned instance, when a getter constructs per call
+
+- `app.storage.get_storage()` builds a **fresh** `LocalDiskBackend` on every call (it is cheap
+  to construct). So `monkeypatch.setattr(get_storage(), "get", fake)` patches an object the code
+  under test never sees, and the test passes for the wrong reason.
+- Patch where the caller looks it up: `monkeypatch.setattr("app.routes.media.get_storage", lambda: fake)`.
+- **Rule:** any test that asserts a dependency was NOT called needs a negative control proving
+  the patch takes effect at all — otherwise "not called" and "not patched" are indistinguishable.
+- Discovered 2026-09-09 in M7 PR2: a storage-unreachable test returned 200 instead of 503, and
+  its sibling "malformed keys never reach storage" assertion could never have failed.
+
+### HTTP clients normalize `../` out of URL paths — route-level traversal tests can be vacuous
+
+- httpx (like every conforming client, per RFC 3986) resolves dot-segments before sending, so
+  `GET /uploads/item-icons/../../app/main.py` never arrives at the server as a traversal. It
+  arrives as a different path and 404s on no-route-match — with or without a validator.
+- Percent-encoded traversal (`..%2f..%2f`) and empty segments (`/uploads//etc/passwd`, which
+  arrives as the absolute key `/etc/passwd`) **do** reach the route. Those are the shapes worth
+  asserting over HTTP.
+- **Rule:** pin literal-traversal rejection in a unit test against the validator directly, where
+  nothing normalizes the input, and keep route tests to shapes that survive transport. Verify
+  empirically which is which rather than assuming.
+- Discovered 2026-09-09 in M7 PR2 while writing the media read matrix.
+
 ## Domain Notes
 
 - Family task and responsibility management app with a FastAPI backend and React frontend.
@@ -391,3 +452,4 @@ Discovered 2026-04-30 during M2 prod-deploy-skeleton Slice 2 (Fly).
 | 2026-04-21 | Visual regression for mealboard: geometric-invariant tests (bbox/width/position deltas) catch the actual bug class deterministically without font-rendering Docker wrestling; pixel snapshots should be a secondary layer, not the primary mechanism | recorded by /office-hours | branch mealboard-todos-042026 |
 | 2026-04-22 | Infra-first for prod migrations: split-origin cookies, Fly migrations-on-release, and similar infra unknowns cost the most to discover late. De-risk infra before auth code commits to it. Ordering rule: which unknown costs the most to discover late? | recorded by /office-hours | branch prod-contract-freeze |
 | 2026-04-23 | Single-instance Fly deployments should use shallow /healthz (process-alive only), not deep DB+Redis probes. Deep health checks with min_machines_running=1 turn 5-sec dep flaps into total user-facing downtime — Fly pulls the only instance from rotation. Conventional wisdom (deep probes) assumes multi-instance + LB routing around bad instances; single-instance config inverts the calculus. | recorded by /plan-eng-review | branch prod-deploy-skeleton |
+| 2026-09-09 | Version a storage-cutover feature flag WITH THE CODE (`fly.toml [env]`), not as a platform secret, whenever the previous release also honors the flag. A secret survives a code rollback, so rolling back leaves old code + new flag — for M7 that means writing to R2 while reading from disk, the one combination that breaks every image. Versioning the flag makes rollback atomic and turns an operational hazard into a non-event. | recorded by /execute-plan (M7 PR2, user-approved) | branch prod-r2-storage |

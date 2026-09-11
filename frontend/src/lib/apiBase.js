@@ -41,6 +41,28 @@ export const API_BASE_URL = _upgradeProtocolIfNeeded(_RAW_API_BASE_URL)
 // Resolve a backend asset path to an absolute URL. Pass-through for
 // already-absolute http(s) URLs and for empty/nullish inputs so callers
 // don't have to branch.
+//
+// ⚠️  M7 — PRIVATE MEDIA GUARDRAIL. Read this before changing how any image
+//     loads. Every `/uploads/*` URL this returns is served by an
+//     AUTHENTICATED backend route (`GET /uploads/{key}`, guarded by the
+//     `__Host-refresh` cookie). It is no longer a public static mount.
+//
+//     The browser attaches that cookie to a plain `<img src={apiUrl(...)}>`
+//     subresource load automatically. Three changes would SUPPRESS it and
+//     make every image in the app 401 at once:
+//
+//       1. adding `crossorigin` (e.g. `crossorigin="anonymous"`) to an `<img>`
+//       2. loading images via `fetch()` / `XMLHttpRequest` instead of `<img>`
+//       3. moving an image into a CSS `background-image`
+//
+//     All 11 image consumers (ResponsibilityCard, ResponsibilityForm,
+//     MemberAvatar, PhotoUpload, ItemIcon, ItemCard, ItemDetailDrawer,
+//     ItemFormModal, RecipeImageUpload, …) are plain `<img>` with no
+//     `crossorigin`, which is what makes the auth model work. If you need
+//     one of the three patterns above, the media route needs a different
+//     auth mechanism first — it is not a frontend-only change.
+//
+//     The matching warning lives in `backend/app/routes/media.py`.
 export function apiUrl(path) {
   if (!path) return path
   if (/^https?:\/\//i.test(path)) return path

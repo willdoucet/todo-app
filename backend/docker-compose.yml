@@ -25,9 +25,6 @@ services:
     command: >
       sh -c "
         alembic upgrade head &&
-        if [ ! -d /app/uploads/stock_icons ]; then
-          cp -r /app/stock_icons_src /app/uploads/stock_icons
-        fi &&
         if [ -n \"$UV_DEV_MODE\" ]; then
           exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
         else
@@ -162,6 +159,11 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/todo_app_test
+      # M7: this service inherits `.env`, and STORAGE_BACKEND=r2 there (set to
+      # reproduce a prod issue) would point the visual-test backend at the
+      # production bucket. `environment:` wins over env_file, so pin it. The
+      # `api` service is deliberately NOT pinned — R2 stays testable by hand.
+      - STORAGE_BACKEND=local
       - PYTHONUNBUFFERED=1
       - UPLOAD_DIR=/app/uploads
       - REDIS_URL=redis://redis:6379/0

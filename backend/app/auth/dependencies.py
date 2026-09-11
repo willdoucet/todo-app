@@ -28,15 +28,18 @@ household scale.
 
 from __future__ import annotations
 
+import time
+from datetime import datetime, timezone
 from typing import Optional
 
 import jwt
-from fastapi import Depends, Header
+from fastapi import Cookie, Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import errors, tokens
-from app.auth.models import User
+from app.auth.logging_utils import emit_log_line
+from app.auth.models import RefreshToken, User
 from app.database import get_db
 
 
@@ -108,3 +111,93 @@ async def get_current_user(
     declares its inputs as FastAPI parameters so it can be used as
     ``Depends(get_current_user)`` on a route."""
     return await validate_bearer(authorization, db)
+
+
+# =============================================================================
+# Media read guard (M7 PR2)
+# =============================================================================
+#
+# `GET /uploads/{key}` is loaded by plain `<img src=...>`, and a browser cannot
+# attach an `Authorization: Bearer` header to a subresource load. So the media
+# route CANNOT ride the `protected` router — it needs a cookie-based check.
+#
+# This guard is a strict READ-ONLY subset of `service.refresh`: same shared
+# validity predicate (`tokens.refresh_row_status`, eng review CQ1), but NO row
+# lock, NO rotation, NO successor walk, and no new cookie. An image load must
+# never perturb the 60-second rotation grace window that `/auth/refresh` owns.
+#
+# Cost: one indexed lookup on `ix_refresh_tokens_token_hash` per image load.
+#
+# Deliberately NOT checked here: `users.session_version`. Read-access
+# revocation rides on the M3 invariant that logout and password/session-version
+# rotation ALSO set `revoked_at` on the user's refresh rows. That invariant is
+# now load-bearing for private image reads, and
+# `tests/integration/auth/test_media_read.py` locks it (eng review T2).
+#
+# The guard is IDENTICAL in every environment — there is no dev/test bypass
+# branch (eng review A2). A bypass flag that leaked to production would make
+# every private image public, defeating the whole milestone. Test coverage
+# splits by layer instead: pytest sets the cookie directly against the real
+# route; the Playwright visual suite shims `/uploads/*` with fixture bytes;
+# local dev works because `localhost:5173` and `localhost:8000` are same-site.
+
+
+async def require_media_session(
+    request: Request,
+    media_cookie: Optional[str] = Cookie(
+        default=None, alias=tokens.REFRESH_COOKIE_NAME
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> int:
+    """Authorize a private media read from the refresh cookie alone.
+
+    Returns the owning ``user_id`` (used only for the failure log line — this
+    is a single-family instance, so there is no per-user media ownership).
+    Raises a 401 ``unauthorized`` — byte-identical to every other 401 — for an
+    absent, unknown, revoked, expired, or past-grace-superseded cookie.
+
+    Only failures are logged. One INFO line per image load would be pure noise
+    at household scale and carries no security signal; an unauthenticated hit
+    on a private image does.
+    """
+    started = time.perf_counter()
+
+    def _reject(reason: str, user_id: Optional[int] = None):
+        emit_log_line(
+            request,
+            event="media_read",
+            outcome="failure",
+            reason=reason,
+            user_id=user_id,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
+        # Same `private, no-store` the media route puts on 404/503. Cloudflare
+        # caches by URL extension and these URLs end in .png/.jpg/.webp; 401
+        # is not in the default cached-status table, but after CF Access
+        # comes down this is the unauthenticated response for every private
+        # image URL, and the header makes an edge-cached 401 structurally
+        # impossible the same way it does for 404.
+        exc = errors.unauthorized(reason)
+        exc.headers = {"Cache-Control": "private, no-store"}
+        return exc
+
+    if not media_cookie:
+        raise _reject("media_no_cookie")
+
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.token_hash == tokens.hash_refresh_token(media_cookie)
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise _reject("media_unknown_cookie")
+
+    # Named `session_status`, not `status`: `fastapi.status` is the conventional
+    # import name in this codebase's route modules, and shadowing it in a
+    # security check is how a future edit ends up comparing the wrong thing.
+    session_status = tokens.refresh_row_status(row, datetime.now(timezone.utc))
+    if session_status not in tokens.REFRESH_STATUS_SERVES:
+        raise _reject(f"media_{session_status.value}", row.user_id)
+
+    return row.user_id

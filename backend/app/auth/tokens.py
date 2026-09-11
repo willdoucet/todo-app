@@ -15,11 +15,17 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from enum import Enum
+from typing import TYPE_CHECKING, Any
 
 import jwt
 
 from app.auth.config import get_settings
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    # Annotation only: keeps this module free of a runtime model import so the
+    # predicate stays pure and importable from anywhere in the auth package.
+    from app.auth.models import RefreshToken
 
 # Locked architecture (contract-freeze):
 #  - 15-minute access TTL
@@ -30,6 +36,13 @@ ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 REFRESH_TOKEN_TTL_DAYS = 30
 REFRESH_TOKEN_GRACE_SECONDS = 60
 JWT_ALGORITHM = "HS256"
+
+# The refresh cookie's name. Defined here rather than in `routes.py` because
+# two packages need it: the auth routes that set/clear it, and the M7 PR2
+# media read guard in `dependencies.py`. `routes.py` imports `dependencies.py`,
+# so the constant cannot live in `routes.py` without an import cycle.
+# `__Host-` prefix requires Secure + Path=/ + no Domain (enforced at set time).
+REFRESH_COOKIE_NAME = "__Host-refresh"
 
 
 def encode_access_token(user_id: int, session_version: int) -> str:
@@ -79,3 +92,60 @@ def generate_refresh_token() -> tuple[str, bytes]:
 def hash_refresh_token(plaintext: str) -> bytes:
     """SHA-256 over the cookie value's UTF-8 bytes. Always 32 bytes."""
     return hashlib.sha256(plaintext.encode("utf-8")).digest()
+
+
+class RefreshStatus(Enum):
+    """The five terminal states of a ``refresh_tokens`` row at a point in time.
+
+    Extracted in M7 PR2 (eng review CQ1). Before this, "is this session
+    valid?" existed only inline in :func:`app.auth.service.refresh`. PR2 adds
+    a SECOND consumer — the media read guard behind ``GET /uploads/{key}`` —
+    and a security predicate duplicated across two call sites drifts, silently
+    re-opening the hole M7 exists to close. One function, two consumers:
+
+      - ``service.refresh`` branches on it: ``LIVE`` → Case A (rotate),
+        ``SUPERSEDED_IN_GRACE`` → Case B (walk successors), anything else →
+        reject. Row locking and rotation stay in ``service.refresh``; only the
+        pure predicate is shared.
+      - the media read guard serves for :data:`REFRESH_STATUS_SERVES` and 401s
+        otherwise. It does NOT rotate.
+
+    ``SUPERSEDED_PAST_GRACE`` is a rejection, not a pass: without it a
+    rotated-away cookie would authorize image reads for its full 30-day TTL
+    even though it can no longer refresh.
+    """
+
+    LIVE = "live"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+    SUPERSEDED_IN_GRACE = "superseded_in_grace"
+    SUPERSEDED_PAST_GRACE = "superseded_past_grace"
+
+
+#: Statuses that count as "this session may read". The media read guard treats
+#: membership as serve and everything else as 401. In-grace is included so a
+#: page mid-rotation does not flash broken images for up to 60 seconds.
+REFRESH_STATUS_SERVES = frozenset(
+    {RefreshStatus.LIVE, RefreshStatus.SUPERSEDED_IN_GRACE}
+)
+
+
+def refresh_row_status(row: "RefreshToken", now: datetime) -> RefreshStatus:
+    """Classify a refresh-token row. Pure: no DB, no I/O, no mutation.
+
+    ``now`` MUST be timezone-aware — every compared column is
+    ``DateTime(timezone=True)``, so a naive ``now`` raises ``TypeError`` on
+    the first comparison rather than silently mis-classifying.
+
+    Check order mirrors ``service.refresh`` exactly (revoked → expired →
+    superseded branch), so the reason strings that route logs are unchanged.
+    """
+    if row.revoked_at is not None:
+        return RefreshStatus.REVOKED
+    if row.expires_at < now:
+        return RefreshStatus.EXPIRED
+    if row.superseded_at is None:
+        return RefreshStatus.LIVE
+    if now < row.superseded_at + timedelta(seconds=REFRESH_TOKEN_GRACE_SECONDS):
+        return RefreshStatus.SUPERSEDED_IN_GRACE
+    return RefreshStatus.SUPERSEDED_PAST_GRACE

@@ -3,7 +3,13 @@ plan_kind: "feature"
 registry_key: "plan:prod-r2-storage"
 parent_epic: "v1-productionization"
 milestone: "M7"
-updated_at: "2026-09-09T22:10:06Z"
+workflow_status: "shipped"
+review_status: ["impl-reviewed", "final-reviewed"]
+implementation_status: "shipped"
+completed: "2026-09-11"
+reason: "PR2 pre-landing review run 3 clean. Docs gate closed; 11 of 14 adversarial findings fixed and tested, 3 accepted at single-family scope. Concerns: the PR2 diff now also carries the user-directed full docs audit (~700 lines) — call it out in the PR body or split; OQ1 live same-site check and prod durability remain operator-owned pre-merge gates."
+updated_at: "2026-09-11T16:48:23Z"
+pr: "https://github.com/willdoucet/todo-app/pull/44"
 ---
 # Design: M7 — `prod-r2-storage`
 
@@ -581,7 +587,8 @@ silent failures, abuse cases, and test gaps that could still survive a normal en
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | ✅ clean | Scope (Fork 3 kept) + 4 issues (A1, A2/OQ2, CQ1, T1) resolved; 2 tests mandated; 0 critical gaps; folded in place. |
 | Adversarial Review | `/plan-adversarial-review` | GPT-5.4 red-team pass (Cursor skill) | 1 | ⚠️ concerns | Hardened key validation, asset lifecycle ordering, rollback plan, and test scope; 1 medium operational rollback concern remains. |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | n/a | Backend/infra only — skip. |
-| Pre-Landing Review | `/review-implementation` | First code diff review (required) | 1 | ✅ clean | Path-traversal delete + sweep/adopt race fixed; remaining items accepted at single-family scope. |
+| Pre-Landing Review | `/review-implementation` | First code diff review (required) | 3 | ✅ clean | **PR1 (run 1):** path-traversal delete + sweep/adopt race fixed. **PR2 (run 2, 2026-09-10):** 4 critical + 8 informational fixed (CI `STOCK_ICONS_DIR`, runbook secret leak, ETag-before-validation 500, fail-closed R2 boot, narrowed 503, nosniff, test-suite storage pin); blocked on PRD staleness → `/update-docs` (default + `--full`). **PR2 (run 3, 2026-09-10):** docs gate closed; adversarial (large) 14 findings → 11 fixed: DB transaction ended before the R2 fetch + boto3 timeouts (pool-exhaustion path), `Vary: Cookie` dropped (voided 304 on every rotation — reversed a run-2 recommendation), exact rollback command + Fly-secret-override gate + browser-header gate in the runbook, `api-test` pinned to local storage, botocore failure classes tested, `no-store` on error responses, CI permissions/concurrency/timeouts, `R2_*` in `.env.example`, over-claimed "rotated secret" wording struck; 3 accepted at single-family scope (worker/beat boot check, blocking stock-icon read, lazy-import nuance). 897 backend / 547 frontend / 7 visual green. |
 | Cursor Implementation Review | `cursor-implementation-review` | Second code diff review + Obsidian finalize (required) | 1 | ✅ clean | CancelledError compensating delete, fail-closed STORAGE_BACKEND, R2 404 mapping, keep-row on storage-delete failure, adopt fail-closed on missing manifest. Not an Obsidian-workflow plan. |
+| Final Review | `/final-review` | Second opinion (required) | 1 | ✅ clean | Independent pass (grok/grok-4.6 vs claude-code/claude-fable-5-1). 2 informational AUTO-FIXED: media 401s now send `private, no-store`; `store_upload` ends the auth txn before `storage.put` (write-side pool hold the first review closed only on the read path). Adversarial (large, 4 findings): those two plus 304-on-missing-object (accepted — manifest is the existence proof; fetching would void 304) and boto3 default checksums vs R2 (investigate at runbook smoke; official R2 boto3 docs as of 2026-06-08 use the default client, Jan 2025 CRC32 incident marked resolved). 898 backend passed. Operator gates unchanged (OQ1 live same-site; prod durability). |
 
-**VERDICT:** CLEARED — Eng Review (plan-scoped), Pre-Landing Review, and Cursor Implementation Review are clean. PR1 ready to land.
+**VERDICT:** CLEARED TO SHIP. Two operator-owned pre-merge gates remain (OQ1 live same-site check; prod durability across a redeploy) — `infra/r2-cutover-runbook.md`.

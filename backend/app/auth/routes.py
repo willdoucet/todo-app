@@ -27,7 +27,8 @@ from app.database import get_db
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-REFRESH_COOKIE_NAME = "__Host-refresh"
+# Re-exported from `tokens` (shared with the M7 media read guard).
+REFRESH_COOKIE_NAME = tokens.REFRESH_COOKIE_NAME
 # Same-origin SPA on Vercel — no email-link sign-in flow needs the cookie
 # to survive cross-origin top-level nav, so Strict is safe and stricter
 # than the M2 plumbing default. M3 originally settled on "lax"; bumped

@@ -8,6 +8,79 @@
 **Priority:** P2
 **Depends on:** Nothing — can be done anytime. Recommend bundling with the next backend infra PR.
 
+## P2 — Fix the 5 pre-existing frontend lint errors and gate lint in CI  ✅ DONE (M7 PR2, 2026-09-11)
+**Status:** ✅ DONE on `prod-r2-storage` (PR: https://github.com/willdoucet/todo-app/pull/44) — `frontend/eslint.config.js` gives `playwright.config.js` Node globals and turns `react-hooks/rules-of-hooks` off under `tests/visual/**`; `.github/workflows/test.yml` runs `npm run lint` in `frontend-tests`. 0 errors / 7 pre-existing warnings remain. Kept as a record; safe to remove on the next TODOS.md prune.
+
+**What:** `docker-compose run --rm frontend npm run lint` exits 1 with 5 errors:
+`frontend/playwright.config.js:11,15,17` — `'process' is not defined` (`no-undef`; the
+Playwright config is Node, not browser, and `eslint.config.js` gives it no Node globals
+env); `frontend/tests/visual/fixtures/auth-base.js:104,117` — `react-hooks/rules-of-hooks`
+firing on Playwright's `use()` fixture callback, which is not a React hook and never was.
+Then add a `lint` step to `.github/workflows/test.yml`'s `frontend-tests` job.
+**Why:** `npm run lint` is documented in development-commands.md as a check to run, but no CI
+job runs it, so it has been red for an unknown length of time and nobody noticed. Both error
+classes are config gaps, not code defects — an `languageOptions.globals` entry for
+`playwright.config.js` and a `react-hooks` override (or ignore) for `tests/visual/**`. Until
+lint is gated, "lint is clean" cannot be asserted by anyone, and a real error would land
+indistinguishable from these five.
+**Context:** Surfaced by `/review-implementation` on `prod-r2-storage` (M7 PR2), 2026-09-10.
+All 5 confirmed present on `master` — none introduced by that branch (verified with
+`git show master:frontend/tests/visual/fixtures/auth-base.js`, and `playwright.config.js` is
+untouched by the branch). Worth noting: that branch's execution summary reported
+"Frontend lint → clean", which is what made the gap visible. Where to start:
+`frontend/eslint.config.js`, then the CI job.
+**Effort:** S (human: ~45 min / CC: ~15 min)
+**Priority:** P2
+**Depends on:** Nothing.
+
+## P3 — Legacy `/uploads/*` keys that the M7 read proxy cannot serve
+
+**What:** Two shapes of stored `/uploads/{key}` column value 404 against
+`GET /uploads/{key}`, permanently: (a) keys whose extension is `.jpeg` or `.gif` — pre-M7
+`save_upload` (`git show 23d02ef~1:backend/app/uploads.py`) trusted the filename and accepted
+`{.jpg, .jpeg, .png, .gif, .webp}`, while `storage.keys.MANAGED_EXTENSIONS` is
+`("png", "jpg", "webp")`; (b) any key written before migration `b7e2c9a4f1d8`, which creates
+the `assets` manifest with **no backfill** — the read route treats "no manifest row" as 404
+before it ever asks storage. The same keys also fail `asset_lifecycle.managed_key`, so they
+can never be adopted or reclaimed either: permanent orphans.
+**Why:** Nothing is broken today and no fix is warranted yet — but the failure is silent
+(a broken `<img>`, no error, no log line) and the cause is three modules away from the symptom.
+Recording it turns a future afternoon of debugging into a two-minute lookup.
+**Context:** Surfaced by `/review-implementation` on `prod-r2-storage` (M7 PR2), 2026-09-10,
+and by its adversarial subagent independently. **Verified zero affected rows** at that date:
+`family_members.photo_url`, `responsibilities.icon_url`, `items.icon_url` and
+`recipe_details.image_url` all returned 0 for `LIKE '/uploads/%'` in the dev database, and
+`assets` was empty. Production is shielded because `backend/fly.toml` has no `[mounts]` block,
+so `/app/uploads` is ephemeral and holds nothing durable (plan OQ3). The exposure is a *future*
+environment with persisted uploads predating M7. Detection query:
+`SELECT photo_url FROM family_members WHERE photo_url LIKE '/uploads/%' UNION ALL SELECT icon_url FROM responsibilities WHERE icon_url LIKE '/uploads/%' UNION ALL SELECT icon_url FROM items WHERE icon_url LIKE '/uploads/%' UNION ALL SELECT image_url FROM recipe_details WHERE image_url LIKE '/uploads/%';`
+then check each against `app.storage.keys.is_managed_key` and for an `assets` row.
+**Remedies (pick per case):** add `jpeg` to `MANAGED_EXTENSIONS` for read-side compatibility
+only (`store_upload` still mints `.jpg`, so the write side stays canonical); and/or a one-time
+backfill that walks `UPLOAD_DIR`, sniffs magic bytes, and inserts
+`assets(key, content_type, size_bytes, referenced=true)`.
+**Effort:** S to detect (human: ~15 min / CC: ~5 min); S–M to remediate depending on the case.
+**Priority:** P3
+**Depends on:** Nothing. Revisit only if an environment with persisted pre-M7 uploads appears.
+
+## P3 — Serve Vercel preview deployments from a `mealy.dev` subdomain
+
+**What:** Give Vercel preview deployments a `*.preview.mealy.dev`-style domain instead of the
+default `*.vercel.app`, so previews exercise the real private-media auth path.
+**Why:** `vercel.app` is on the Public Suffix List, so every `*.vercel.app` origin is a
+distinct *site* from `api.mealy.dev`. The `SameSite=Strict` `__Host-refresh` cookie is
+therefore not sent on `<img>` subresource loads, and **every image 401s on every preview
+deploy** as of M7 PR2. Production is unaffected (`mealy.dev` + `api.mealy.dev` share eTLD+1).
+Until this is fixed, a preview cannot be used to review anything image-related, and the
+breakage looks identical to a real regression.
+**Context:** Surfaced by `/review-implementation` on `prod-r2-storage` (M7 PR2), 2026-09-10.
+Noted inline in `infra/r2-cutover-runbook.md` so the operator does not mistake it for a
+cutover failure; this TODO is the actual fix. Also confirm the preview origin is added to
+`CORS_ALLOW_ORIGINS` if XHR must work there too.
+**Effort:** S (human: ~30 min / CC: n/a — Vercel dashboard + DNS)
+**Priority:** P3
+**Depends on:** Nothing. Only worth doing if previews are actually used for review.
+
 ## P2 — Cloudflare config-as-code or drift-detection for M8 runbook
 **What:** During the M8 release runbook milestone, introduce real reconciliation between `infra/cloudflare-state.md` (the checked-in intent file from M2) and the live Cloudflare dashboard. Two acceptable shapes: (a) a small drift-detection script that hits the Cloudflare API, dumps current Access app + bypass policies + WAF rate-limit rules, and `diff`s them against the snapshot file (run in CI on a schedule, or as a runbook step), or (b) full Cloudflare-as-code via Terraform with the `cloudflare/cloudflare` provider, where the snapshot file is replaced by `.tf` config and `terraform plan` is the drift-detection mechanism.
 **Why:** M2's snapshot file fixes "no source of truth in repo," but reconciliation is still manual eyeball at Slice 7. During M2-M5 (single operator, ~5 dashboard edits across slices, active Access bypass policy gating critical plumbing-test paths), a fat-finger or forgotten edit silently survives until something visibly breaks. The M8 runbook is the natural home because it owns operational durability — once auth has been live for a while and the M5 bypass is removed, drift detection becomes the load-bearing safety net for "did someone modify the rate limit on /auth/* and not tell us?" or "did the Access policy expire?"
@@ -349,6 +422,7 @@
 **Depends on:** M5 PR #1 ships (visual-test stack uses real login + Playwright `context.route()` interception of /auth/refresh; no bypass flag). Bundle with the existing "Other-surface visual coverage" P3 follow-up if both are scheduled together.
 
 ## P2 — `/uploads/*` asset auth strategy under M5 backend route enforcement — RESOLVED 2026-05-08
+> **Status (2026-09-11): three of four closure items landed in M7 PR2** (`prod-r2-storage`, PR: https://github.com/willdoucet/todo-app/pull/44) — R2 storage, the cookie-authenticated `GET /uploads/{key}` read proxy, and the StaticFiles mount removal. The fourth, tearing down Cloudflare Access Application 1, is the operator's post-merge step in `infra/r2-cutover-runbook.md`; this entry closes when that is recorded in `cloudflare-state.md`.
 > **Status (2026-05-08): RESOLVED in M5 PR2.** Strategy (a) chosen — `/uploads/*` is the FastAPI `StaticFiles` mount with no app-layer auth dependency. The wrapping `protected` APIRouter pattern from M5 PR1 cannot gate a `StaticFiles` mount, so Cloudflare Access on `api.mealy.dev` is the only thing standing between an open-internet request and an uploaded item image. **Cursor implementation review (2026-05-07) overrides the original plan's Premise 5:** Cloudflare Access stays on the API host until M7 replaces this mount with R2 + auth-proxied uploads. PRD §5.7 updated in PR2 Step 2.2 to acknowledge this. Fully closed by M7 (R2 + auth-proxied uploads + StaticFiles mount removal + CF Access removal as M7 exit step).
 
 **What:** Decide and implement how `<img>`-rendered backend assets stay reachable after M5 PR #1 wraps non-auth API routes with `get_current_user`. `<img>` tags cannot send `Authorization: Bearer ...` headers, so the bearer-only access pattern M4 establishes will break image rendering on every protected page (recipe images, family-member avatars, food-item icons, responsibility icons) the moment M5 PR #1 ships. Four candidate strategies: (a) leave `/uploads/*` unprotected — accepts that an attacker who learns an upload path can fetch the binary, but leaks nothing structural about the household; (b) hybrid auth with a separate cookie-based session (e.g., a short-lived `__Host-asset-session` cookie issued at login alongside the bearer access token); (c) signed asset URLs — `apiUrl()` becomes `apiUrl(path, { signed: true })` and hits a backend endpoint that returns a short-lived signed URL; (d) move uploads to a CDN (R2 + Cloudflare Worker) with signed paths, decoupling asset auth from the API entirely.

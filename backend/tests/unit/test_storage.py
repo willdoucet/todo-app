@@ -133,3 +133,25 @@ class TestGetStorageFactory:
         monkeypatch.setenv("STORAGE_BACKEND", "s3")
         with pytest.raises(ValueError, match="Unknown STORAGE_BACKEND"):
             get_storage()
+
+
+def test_r2_client_has_bounded_timeouts_and_retries():
+    """Pre-landing review, run 2: the client sits on the interactive request
+    path (GET /uploads/{key}) while a pooled DB connection is checked out.
+    botocore's defaults (60 s + 60 s, up to 5 legacy attempts) would let one
+    hung fetch pin that connection for minutes; these bounds are what keep a
+    slow R2 from exhausting the 15-wide pool."""
+    from app.storage.r2 import R2Backend
+
+    backend = R2Backend(
+        endpoint_url="https://r2.invalid",
+        bucket="b",
+        access_key_id="k",
+        secret_access_key="s",
+    )
+    cfg = backend._client.meta.config
+    assert cfg.connect_timeout == 5
+    assert cfg.read_timeout == 15
+    # botocore normalizes `max_attempts` (retries) into total attempts.
+    assert cfg.retries["mode"] == "standard"
+    assert cfg.retries["total_max_attempts"] == 2

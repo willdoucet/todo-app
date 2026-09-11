@@ -10,6 +10,18 @@ primary_region = "sjc"
   # otherwise — any future stage added after `prod` would silently ship.
   build_target = "prod"
 
+[env]
+  # M7 PR2 — the R2 cutover flag. Deliberately NOT a Fly secret, unlike every
+  # other production env var here: it is not secret, and versioning it with the
+  # code means a rollback undoes the storage flip atomically. A secret would
+  # survive a code rollback, leaving PR1's code writing to R2 while reading
+  # from disk — the one genuinely broken combination (see the adversarial
+  # review's rollback concern and infra/r2-cutover-runbook.md).
+  #
+  # Reads and writes MUST flip together: an R2-written object 404s against a
+  # disk-backed read.
+  STORAGE_BACKEND = "r2"
+
 [deploy]
   # Runs against the new image before web takes traffic. Migrations must be
   # backward-compatible: a release_command failure leaves the previous

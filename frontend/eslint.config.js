@@ -70,4 +70,16 @@ export default defineConfig([
       },
     },
   },
+  {
+    // Playwright config runs under Node (reads process.env for CI / base URL).
+    files: ['playwright.config.js'],
+    languageOptions: { globals: globals.node },
+  },
+  {
+    // Playwright fixtures are `async ({ ... }, use) => { await use(x) }`:
+    // `use` is Playwright's fixture hand-off, not a React hook, and these
+    // files never render React.
+    files: ['tests/visual/**/*.js'],
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
+  },
 ])

@@ -27,7 +27,6 @@ Invariant (A1): each managed key is adopted by at most one entity column, so
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException, status
@@ -36,25 +35,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models
 from ..storage import get_storage
+from ..storage.keys import is_managed_key
 
 logger = logging.getLogger(__name__)
 
 _UPLOADS_PREFIX = "/uploads/"
 _STOCK_PREFIX = "/uploads/stock_icons/"
 
-# A managed key MUST match the exact shape `store_upload` produces:
-# `{subdir}/{uuid4}.{png|jpg|webp}`. Validating this before the key ever
-# reaches `storage.delete` is the trust boundary: `icon_url`/`photo_url`/
-# `image_url` are unvalidated client strings, so a crafted value like
-# `/uploads/../../etc/passwd` or `/uploads//etc/passwd` (leading slash — pathlib
-# would discard the root) must NOT classify as managed, or it becomes an
-# arbitrary-file-delete via the release hook. The subdir char class excludes
-# `.` and `/`, so `..` and empty/absolute segments are rejected.
-_KEY_RE = re.compile(
-    r"^[a-z0-9_-]+/"
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-    r"\.(png|jpg|webp)$"
-)
+# Key-shape validation lives in `storage.keys` — ONE definition shared with
+# the PR2 media read route, so the traversal fix from PR1's pre-landing review
+# cannot drift between the delete path and the read path. `icon_url`/
+# `photo_url`/`image_url` are unvalidated client strings, so a crafted value
+# like `/uploads/../../etc/passwd` must NOT classify as managed, or it becomes
+# an arbitrary-file delete via the release hook.
 
 # Abandoned uploads (never adopted) are swept after this age.
 ABANDONED_UPLOAD_TTL = timedelta(hours=24)
@@ -72,9 +65,9 @@ def managed_key(url: str | None) -> str | None:
         return None
     key = url[len(_UPLOADS_PREFIX):]
     # Reject anything that isn't a well-formed managed key — traversal
-    # (`../`), leading-slash/absolute, and other malformed shapes all fail
-    # here and classify as unmanaged (no adopt, no delete).
-    if not _KEY_RE.match(key):
+    # (`../`), leading-slash/absolute, unknown subdir, and other malformed
+    # shapes all fail here and classify as unmanaged (no adopt, no delete).
+    if not is_managed_key(key):
         return None
     return key
 
