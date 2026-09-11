@@ -254,6 +254,7 @@ def run_async(coro):
 | 2026-04-17 | `RecipeUrlImport.jsx` + `ItemFormModal.jsx` | Nested `<form>` — RecipeUrlImport's inner form was inside RecipeFormBody's outer form. Clicking the Import button bubbled a submit event to the outer form, which tried to POST /items with empty fields; user saw the modal disappear | Inner panel uses `<div>` + `onClick` on button + `onKeyDown` on input; both handlers `stopPropagation()` to prevent any bubbling. Regression test at `frontend/tests/components/RecipeImportClickBug.test.jsx` |
 | 2026-04-19 | `MealPlannerView.jsx` pendingDeletes cleanup | `useEffect(() => cleanup, [pendingDeletes])` cancelled the previous Map's timers on every state change. Rapid sequential deletes killed the first meal's 5s purge timer → the first UndoMealCard stuck on-screen forever | Switched dep to `[]` with a ref mirror (`pendingDeletesRef.current`) so cleanup only runs on unmount. Adversarial-review F3 / lock-in tests at `frontend/tests/components/mealboard/MealPlannerView.delete.test.jsx` |
 | 2026-04-19 | `crud_items.py:undo_soft_delete_item` restore cascade | Restoring a soft-deleted Item cleared `soft_hidden_at` on cascade-hidden meal_entries but left `undo_token` populated. Live rows must have `undo_token=NULL` per the state-machine invariant documented in `crud_meal_entries.py`. No user-visible corruption (CAS guard prevents accidental undo of live rows), but a latent foot-gun | Added `undo_token=None` to the restore UPDATE's `.values()` |
+| 2026-09-11 | `app/main.py:production_host_gate` | The gate compared only the client-written `Host` header. Fly holds a cert for `api.mealy.dev`, so `curl --resolve` to the Fly IP reached the app and skipped the Cloudflare `/auth/*` rate limit — the only brute-force and argon2-CPU control on login | Gate also requires `X-Origin-Verify` (set by a Cloudflare Transform Rule) to match the `ORIGIN_VERIFY_SECRET` Fly secret; production refuses to boot without it. Regression tests in `tests/integration/auth/test_host_gate.py` and `tests/unit/test_origin_verify_bootstrap.py` |
 
 ## Fly Postgres + asyncpg setup
 
@@ -331,6 +332,24 @@ Cloudflare evaluates the more-specific path-bound Application FIRST. So a reques
 > Keep paths EXACT. A bypass app with `path = plumbing-test` (no wildcards) covers exactly that path and `/plumbing-test` only. Empty path = the bypass covers the whole subdomain — that would unintentionally make the entire API public.
 
 Discovered 2026-05-01 during M2 prod-deploy-skeleton Slice 4 (Cloudflare Access setup) — runbook had to be corrected, `infra/cloudflare-state.md` schema updated to document the two-application structure.
+
+## A Host-header check does not stop direct-to-origin bypass
+
+When the origin holds a TLS certificate for the public hostname (Fly does for `api.mealy.dev`, through the `_acme-challenge.api` record), anyone can skip Cloudflare by connecting to the origin IP with the public hostname as both SNI and `Host`:
+
+```bash
+curl --resolve api.mealy.dev:443:<fly-ip> https://api.mealy.dev/...
+```
+
+That request carries the same `Host` as a Cloudflare-proxied one, so a gate comparing `Host` with `PUBLIC_API_HOST` lets it through, and Cloudflare never sees it: no WAF rate limit, no Access, no Transform Rule. The M3 `production_host_gate` only ever stopped callers who used the `*.fly.dev` name.
+
+- **Rule:** to prove a request came through the edge, check something only the edge can add. Here that is a secret header set by a Cloudflare Transform Rule (`X-Origin-Verify`, compared with `hmac.compare_digest` against the `ORIGIN_VERIFY_SECRET` Fly secret). A `Host` check is a fine extra layer, but on its own it proves nothing.
+- A Cloudflare IP allowlist is not proof either: every Cloudflare customer shares those ranges, so another tenant can reach the origin from a Cloudflare IP with their own WAF off.
+- Two traps in the compare. `hmac.compare_digest` raises `TypeError` on non-ASCII `str`, so compare bytes (otherwise a forged header is a 500, not a rejection). And an empty configured secret equals an absent header, so reject explicitly when the secret is empty.
+- Headers the edge normally sets are attacker-controlled on a request that went around it. `resolve_client_ip` trusts `CF-Connecting-IP` for auth logs, which is only sound while the origin is locked.
+- Verify a lock by going around the edge (the `--resolve` curl), not only through it.
+
+Discovered 2026-09-11 during the M7 R2 cutover smoke checks. Rollout and rotation: `infra/cloudflare-state.md` → *Transform Rules — origin lock*.
 
 ## Celery beat schedule file location under non-root containers
 
@@ -453,3 +472,4 @@ Discovered 2026-04-30 during M2 prod-deploy-skeleton Slice 2 (Fly).
 | 2026-04-22 | Infra-first for prod migrations: split-origin cookies, Fly migrations-on-release, and similar infra unknowns cost the most to discover late. De-risk infra before auth code commits to it. Ordering rule: which unknown costs the most to discover late? | recorded by /office-hours | branch prod-contract-freeze |
 | 2026-04-23 | Single-instance Fly deployments should use shallow /healthz (process-alive only), not deep DB+Redis probes. Deep health checks with min_machines_running=1 turn 5-sec dep flaps into total user-facing downtime — Fly pulls the only instance from rotation. Conventional wisdom (deep probes) assumes multi-instance + LB routing around bad instances; single-instance config inverts the calculus. | recorded by /plan-eng-review | branch prod-deploy-skeleton |
 | 2026-09-09 | Version a storage-cutover feature flag WITH THE CODE (`fly.toml [env]`), not as a platform secret, whenever the previous release also honors the flag. A secret survives a code rollback, so rolling back leaves old code + new flag — for M7 that means writing to R2 while reading from disk, the one combination that breaks every image. Versioning the flag makes rollback atomic and turns an operational hazard into a non-event. | recorded by /execute-plan (M7 PR2, user-approved) | branch prod-r2-storage |
+| 2026-09-11 | Prove a request came through Cloudflare with a secret header set by a Transform Rule (`X-Origin-Verify` against the `ORIGIN_VERIFY_SECRET` Fly secret). Rejected: allowlisting Cloudflare's IP ranges (every tenant shares them, so another zone with its WAF off passes); Authenticated Origin Pulls (Fly's proxy terminates TLS, so the app never sees the client cert); Cloudflare Tunnel (largest change for the same result). App-layer `/auth/login` rate limiting stays deferred to v1.1: it is defense in depth and does not close the bypass. | recorded by /quickfix (user-approved) | branch quickfix/origin-verify-header |
