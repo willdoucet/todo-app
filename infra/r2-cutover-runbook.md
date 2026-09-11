@@ -104,6 +104,11 @@ state and procedure in the repo rather than in someone's memory.
       through on it: `curl -sS https://mealy-app-prod.fly.dev/healthz`.
 - [x] `fly scale show -a mealy-app-prod` lists exactly one `beat` machine (the
       `fly.toml` singleton invariant).
+- [ ] `fly status -a mealy-app-prod` shows **every** process group `started`.
+      A deploy updates a machine that was already stopped without starting it,
+      so `web` can look perfectly healthy while `worker` or `beat` is dead.
+      Added after the 2026-09-11 run, where this check would have caught a
+      worker that had been stopped since at least the end of May.
 - [x] **Smoke freeze:** do NOT create real household uploads until the checks
       below pass. Use one throwaway image you are willing to delete.
 
@@ -202,4 +207,4 @@ If you must roll back by image, add the flag explicitly:
 
 | Date | Operator | Outcome | Notes |
 |---|---|---|---|
-| 2026-09-11 | willdoucet | Pass | Cutover 10:49 PDT (17:49 UTC), PR #44 merged 10:48 PDT. Every pre-cutover gate and smoke check passed; private media arrived as `cache-control: private, no-cache` with `cf-cache-status: BYPASS`. Browser Cache TTL changed from 4 hours to "Respect Existing Headers" before the deploy. Access Application 1 removed the same day; post-teardown checks passed. `fly scale show` confirmed one beat machine. Still open: the sweep's worker `succeeded` line (only the beat's scheduling line appeared, at 20:07 UTC). |
+| 2026-09-11 | willdoucet | Pass | Cutover 10:49 PDT (17:49 UTC), PR #44 merged 10:48 PDT. Every pre-cutover gate and smoke check passed; private media arrived as `cache-control: private, no-cache` with `cf-cache-status: BYPASS`. Browser Cache TTL changed from 4 hours to "Respect Existing Headers" before the deploy. Access Application 1 removed the same day; post-teardown checks passed. `fly scale show` confirmed one beat machine. **The sweep check found the `worker` machine stopped** — only beat's scheduling line appeared at 20:07 UTC. It had been stopped since at least the end of May (32,136 scheduled jobs queued in Upstash, ~103 days), and the cutover deploy updated it without starting it. Queue cleared and the machine started the same day; hardening in quickfix `worker-outage-hardening`. Still open: the sweep's worker `succeeded` line. |

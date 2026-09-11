@@ -268,6 +268,7 @@ The `/settings` route is implemented by `pages/FamilyMembersPage.jsx`, which ren
 
 - `FamilyMembersPage.jsx` sets the page title to `Settings` and renders all settings surfaces in one page shell.
 - `ICloudSettings.jsx` supports both calendar syncing and reminders syncing.
+- `ICloudSettings.jsx` shows a freshness dot beside each "Last synced" line: green while the last sync is under 30 minutes old (three 10-minute beat cycles), red plus the words "sync overdue" after that, so a stopped Celery worker surfaces instead of failing silently. Sync timestamps arrive without a timezone (`timestamp without time zone`, UTC), so the component parses them as UTC — `new Date()` alone reads them as local time and skews every relative time by the viewer's offset.
 - `MealboardSettings.jsx` loads meal-slot types, family members, and app settings together.
 - Mealboard settings use a two-column layout at `lg`, with a sticky `DayPreview` sidebar on larger screens.
 

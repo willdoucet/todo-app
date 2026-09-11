@@ -70,6 +70,64 @@ describe('ICloudSettings', () => {
     })
   })
 
+  // The API serializes `last_sync_at` with no timezone — it is a `timestamp
+  // without time zone` column holding UTC — so these fixtures drop the trailing
+  // Z that `toISOString()` adds and `mockIntegration` above carries. Pinning a
+  // non-UTC zone is what makes the bug visible: read as local time, a recent
+  // sync lands in the future and everything looks fresh.
+  describe('sync freshness', () => {
+    const realTz = process.env.TZ
+
+    beforeAll(() => {
+      process.env.TZ = 'America/Los_Angeles'
+    })
+
+    afterAll(() => {
+      process.env.TZ = realTz
+    })
+
+    const naiveUtc = (msAgo) =>
+      new Date(Date.now() - msAgo).toISOString().replace(/\.\d+Z$/, '')
+
+    const serveIntegration = (overrides) =>
+      server.use(
+        http.get(`${API_BASE}/integrations/`, () =>
+          HttpResponse.json([{ ...mockIntegration, ...overrides }])
+        )
+      )
+
+    it('reads a timestamp with no timezone as UTC, not local time', async () => {
+      serveIntegration({ last_sync_at: naiveUtc(5 * 60000) })
+      render(<ICloudSettings />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Last synced 5 min ago/)).toBeInTheDocument()
+      })
+      expect(screen.queryByText(/sync overdue/)).not.toBeInTheDocument()
+    })
+
+    it('marks a sync older than three cycles as overdue', async () => {
+      serveIntegration({ last_sync_at: naiveUtc(3 * 3600000) })
+      render(<ICloudSettings />)
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Last synced 3 hr ago · sync overdue/)
+        ).toBeInTheDocument()
+      })
+    })
+
+    it('says nothing when an integration has never synced', async () => {
+      serveIntegration({ last_sync_at: null })
+      render(<ICloudSettings />)
+
+      await waitFor(() => {
+        expect(screen.getByText('alice@icloud.com')).toBeInTheDocument()
+      })
+      expect(screen.queryByText(/Last synced/)).not.toBeInTheDocument()
+    })
+  })
+
   describe('error state', () => {
     it('shows error message when integration has error', async () => {
       server.use(
