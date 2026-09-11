@@ -3,10 +3,13 @@ plan_kind: "feature"
 registry_key: "plan:prod-r2-storage"
 parent_epic: "v1-productionization"
 milestone: "M7"
-workflow_status: "ready-for-review"
+workflow_status: "shipped"
 review_status: ["impl-reviewed", "final-reviewed"]
+implementation_status: "shipped"
+completed: "2026-09-11"
 reason: "PR2 pre-landing review run 3 clean. Docs gate closed; 11 of 14 adversarial findings fixed and tested, 3 accepted at single-family scope. Concerns: the PR2 diff now also carries the user-directed full docs audit (~700 lines) — call it out in the PR body or split; OQ1 live same-site check and prod durability remain operator-owned pre-merge gates."
-updated_at: "2026-09-11T16:19:20Z"
+updated_at: "2026-09-11T16:48:23Z"
+pr: "https://github.com/willdoucet/todo-app/pull/44"
 ---
 # Design: M7 — `prod-r2-storage`
 
