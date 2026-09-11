@@ -19,3 +19,13 @@
 - Tests: none (docs only); post-teardown checks through Cloudflare: /uploads/<key> 401, /tasks/ 401, /healthz 200, /auth/status CORS 200
 - Docs: docs-only change; doc-guard passes
 - Branch: quickfix/m7-cutover-record · PR: https://github.com/willdoucet/todo-app/pull/45
+
+## 2026-09-11 — worker-outage-hardening
+- Source: free text (M7 cutover sweep check found the worker machine stopped)
+- What: restart policy + quieter Celery flags for the Fly worker/beat groups; sync-freshness dot in the iCloud settings card; naive-UTC timestamp parse fix; runbook `fly status` check
+- Why: the worker had been stopped since at least the end of May (32,136 queued jobs, ~103 days of dead iCloud sync, soft-delete purge and upload sweep) and nothing surfaced it
+- Files: backend/fly.toml, frontend/src/components/settings/ICloudSettings.jsx, frontend/tests/components/settings/ICloudSettings.test.jsx, infra/r2-cutover-runbook.md, .agents/docs/{LESSONS,TECH_STACK,FRONTEND_STRUCTURE,TODOS}.md
+- Tests: frontend 550 passed; the 2 new sync-freshness tests fail without the parse fix ("just now"); lint 0 errors; local worker boots with the new flags
+- Docs: TECH_STACK (Infrastructure), FRONTEND_STRUCTURE (Behavioral Notes), LESSONS (2 Bug Log rows + 2 rules), TODOS (widget closed, background-job health signal opened)
+- Operator: fly.toml changes need a deploy; master carries #46, so do its Cloudflare Transform Rule + ORIGIN_VERIFY_SECRET steps first
+- Branch: quickfix/worker-outage-hardening · PR: https://github.com/willdoucet/todo-app/pull/49
