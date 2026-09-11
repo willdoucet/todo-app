@@ -141,12 +141,28 @@ expression to the original `(http.request.uri.path matches "^/auth/") and
 Status: **PENDING — not yet created.** The operator creates it in step 2 of the
 rollout below; change this line to `active (YYYY-MM-DD)` when it is live.
 
+Dashboard path (post-2025 redesign; there is no longer a "Transform Rules →
+Modify Request Header" submenu): select the **`mealy.dev` zone** (this is a
+zone-level feature, not account-level) → **Rules → Overview** (older accounts:
+**Rules → Transform Rules**) → **Create rule → Request Header Transform Rule**.
+
 Rule name: Mealy origin lock
-Match: custom filter expression `(http.host eq "api.mealy.dev")`
-Then: Modify request header → **Set static**
+When incoming requests match: **Custom filter expression**
+  `(http.host eq "api.mealy.dev")`
+  (Expression Builder equivalent: Field `Hostname`, Operator `equals`, Value
+  `api.mealy.dev`.)
+Then → Modify request header: **Set static**
   - Header name: `X-Origin-Verify`
   - Value: the `ORIGIN_VERIFY_SECRET` Fly secret. **Never written in this file,
     in git, or in a chat transcript.**
+Deploy.
+
+Free plan: allowed (10 transform rules total; this uses 1). The only Free
+limitation is no regex in expressions — not needed here, `eq` is exact match.
+API fallback if the rule type is not visible in the dashboard:
+`PUT /zones/{zone_id}/rulesets/phases/http_request_late_transform/entrypoint`
+with a single `rewrite` rule whose `action_parameters.headers` sets
+`X-Origin-Verify` to `{"operation":"set","value":"<secret>"}`.
 
 Why: the Fly origin accepted connections that skip Cloudflare. Fly holds its
 own certificate for `api.mealy.dev` (the `_acme-challenge.api` record above), so
@@ -178,8 +194,9 @@ they can be done before the pull request merges.
    ```bash
    python3 -c "import secrets; print(secrets.token_urlsafe(32), end='')" | pbcopy
    ```
-2. Dashboard → Rules → Transform Rules → Modify Request Header: create the rule
-   above, paste the value, deploy it.
+2. In the `mealy.dev` zone: Rules → Overview → Create rule → Request Header
+   Transform Rule. Create the rule above (see the dashboard path at the top of
+   this section), paste the value, Deploy.
 3. Store the same value as a Fly secret (this restarts the machines on the
    current image). Pipe it through stdin so the value never lands in the `fly`
    process's arguments (visible in `ps`); then clear the clipboard:
