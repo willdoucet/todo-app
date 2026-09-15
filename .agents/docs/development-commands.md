@@ -9,7 +9,7 @@
 **IMPORTANT: App commands must run through Docker Compose. Never run `npm`, backend app `uv`, or backend app `pytest` directly on the host.**
 
 Exceptions (host-side by design):
-- The framework helpers under `.agents/bin/` (`workflow-state`, `obsidian-workflow`, `doc-guard`, `review-log`, `review-read`, `ctx`)
+- The framework helpers under `.agents/bin/` (`workflow-state`, `obsidian-workflow`, `doc-guard`, `review-log`, `review-read`, `ctx`, `design-sync-check`, `design-sync-mark`)
 - Their tests under `.agents/tests/`
 
 ## Full Stack (Docker Compose)

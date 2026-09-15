@@ -59,3 +59,12 @@
 - Tests: `framework doctor` before 3 warnings incl. the modified-locally one, after 2 with it gone; helper tests pass
 - Docs: no doc impact (manifest fingerprints only)
 - Branch: quickfix/refresh-framework-manifest · PR: https://github.com/willdoucet/todo-app/pull/51
+
+## 2026-09-15 — helper-list-design-sync
+- Source: free text (noticed during #50)
+- What: add `design-sync-check` and `design-sync-mark` to the host-side exceptions list in development-commands.md's Critical Rule
+- Why: the list named six of the eight runnable helpers under `.agents/bin/`; skills now call `design-sync-check --pin-sha` for every design pin
+- Files: .agents/docs/development-commands.md
+- Tests: none (docs only); the listed names match the executable, non-underscore files in `.agents/bin/` exactly
+- Docs: development-commands.md (Critical Rule) updated; AGENTS.md pointer unchanged
+- Branch: quickfix/helper-list-design-sync · PR: https://github.com/willdoucet/todo-app/pull/52
