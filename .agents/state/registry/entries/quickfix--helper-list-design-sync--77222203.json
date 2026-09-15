@@ -1,16 +1,19 @@
 {
   "branch": "quickfix/helper-list-design-sync",
+  "commit": "706bd6c",
+  "completed": "2026-09-15",
   "created_at": "2026-09-15T16:36:56Z",
-  "implementation_status": "implementing",
+  "implementation_status": "shipped",
   "key": "quickfix:helper-list-design-sync",
   "kind": "quickfix",
   "note_path": null,
   "plan_mode": "quickfix",
   "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/52",
   "registry_version": 3,
   "review_status": [],
   "task_id": null,
   "title": "List design-sync-check and design-sync-mark among the host-side helpers",
-  "updated_at": "2026-09-15T16:36:56Z",
-  "workflow_status": "implementing"
+  "updated_at": "2026-09-15T16:38:05Z",
+  "workflow_status": "shipped"
 }
