@@ -135,12 +135,12 @@ source of truth for failure handling, rollout assumptions, and test expectations
   **Design system pin SHA**, compare it with the current SHA of the watched design files:
 
   ```bash
-  WATCHED=$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1])).get("design_watched_files", [])))' "$REPO_ROOT/.agents/config.json")
-  git log -1 --format=%H -- $WATCHED
+  "$BIN/design-sync-check" --pin-sha
   ```
 
   If they differ, warn once: the prototype's tokens may lag `FRONTEND_GUIDELINES.md`;
-  `/review-implementation` reconciles.
+  `/review-implementation` reconciles. A non-zero exit means no current SHA: print the
+  helper's message as the warning instead and skip the comparison.
 - *HTML mockups.* Verify each listed mockup exists. Read each before implementing its component;
   it is the authoritative visual reference for that component.
 - *None.* Record the rationale and continue.

@@ -180,7 +180,7 @@ the guideline's value, the rendered value, the pages where it differs, and a pro
 verdict: `code bug` (the guideline is right, the page is wrong), `guideline stale` (the page
 is consistent with itself and the doc lags), or `intentional evolution` (the change is in this
 branch on purpose; check the plan and, when the plan pins a design-system SHA, compare it
-with `git log -1 --format=%H -- <the design_watched_files listed in $REPO_ROOT/.agents/config.json>`).
+with `"$BIN/design-sync-check" --pin-sha`; a non-zero exit means no current SHA, so say so).
 The verdicts become questions in step 18. Rendered values the guidelines bless are not drift.
 
 ### 9. Page-by-page audit

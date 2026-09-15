@@ -2,17 +2,24 @@
 """Report whether the watched design files changed since the design system was last marked synced.
 
 Usage:
-    design-sync-check
+    design-sync-check                      drift check against the marker
+    design-sync-check --pin-sha [PATH ...] print the design pin SHA and nothing else
 
 Reads <state>/design-system-synced.json and compares synced_design_sha with the latest
 commit touching any file in config `design_watched_files`.
 
 Exit codes: 0 clean, 1 drift, 2 marker missing or malformed.
 When config modules.design_sync is false, prints "design-sync: module disabled" and exits 0.
+
+--pin-sha prints the last commit touching any PATH (default: config `design_watched_files`),
+whatever modules.design_sync says. When there is no such commit or the list is empty it prints
+the reason on stderr, nothing on stdout, and exits 2, so `PIN=$(design-sync-check --pin-sha)`
+never captures an error as the SHA.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -22,8 +29,24 @@ import _design_sync as ds  # noqa: E402
 import _lib  # noqa: E402
 
 
+def print_pin_sha(root: Path, paths: list[str]) -> int:
+    try:
+        print(ds.pin_sha(root, paths or ds.watched_files(_lib.load_config(root))))
+    except _lib.FrameworkError as exc:
+        print(f"design-sync-check: {exc.message}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main() -> int:
+    ap = argparse.ArgumentParser(prog="design-sync-check")
+    ap.add_argument("--pin-sha", nargs="*", metavar="PATH", default=None)
+    args = ap.parse_args(sys.argv[1:])
+
     root = _lib.repo_root()
+    if args.pin_sha is not None:
+        return print_pin_sha(root, args.pin_sha)
+
     cfg = _lib.load_config(root)
     if not ds.enabled(cfg):
         print(ds.DISABLED_MESSAGE)
