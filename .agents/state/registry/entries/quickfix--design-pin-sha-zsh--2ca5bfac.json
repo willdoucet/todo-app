@@ -1,16 +1,19 @@
 {
   "branch": "quickfix/design-pin-sha-zsh",
+  "commit": "3ff5587",
+  "completed": "2026-09-15",
   "created_at": "2026-09-15T04:09:16Z",
-  "implementation_status": "implementing",
+  "implementation_status": "shipped",
   "key": "quickfix:design-pin-sha-zsh",
   "kind": "quickfix",
   "note_path": null,
   "plan_mode": "quickfix",
   "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/50",
   "registry_version": 3,
   "review_status": [],
   "task_id": null,
   "title": "Compute the design pin SHA the same way in bash and zsh",
-  "updated_at": "2026-09-15T04:09:16Z",
-  "workflow_status": "implementing"
+  "updated_at": "2026-09-15T04:12:05Z",
+  "workflow_status": "shipped"
 }
