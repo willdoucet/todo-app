@@ -49,3 +49,13 @@
 - Tests: .agents/tests 273 passed; the 3 new pin-SHA tests failed before the fix; zsh and bash both print c0f7f30bcdfc1c6d2a2fdfeba8d39c6fa4c294cd
 - Docs: no doc impact (all paths under .agents/, no documented surface changed)
 - Branch: quickfix/design-pin-sha-zsh · PR: https://github.com/willdoucet/todo-app/pull/50
+
+## 2026-09-14 — refresh-framework-manifest
+- Source: free text (follow-up to #50)
+- What: refresh `.agents/manifest.json` fingerprints for the 8 payload files #50 changed, via `framework upgrade` from framework main (ab156cd)
+- Why: #50 hand-applied the framework change, so the manifest kept the 1.0.0 fingerprints and `framework doctor` warned "8 payload file(s) modified locally" for files identical to framework main
+- Also: the upgrade's key reorder of two doc_map rules in config.json (no value change) was reverted; framework checkout moved to main with the merged branch deleted locally and on GitHub; prod-launch-release fast-forwarded to #50; its LESSONS Bug Log row (2026-09-14, pin SHA) updated with the fix
+- Files: .agents/manifest.json
+- Tests: `framework doctor` before 3 warnings incl. the modified-locally one, after 2 with it gone; helper tests pass
+- Docs: no doc impact (manifest fingerprints only)
+- Branch: quickfix/refresh-framework-manifest · PR: https://github.com/willdoucet/todo-app/pull/51
