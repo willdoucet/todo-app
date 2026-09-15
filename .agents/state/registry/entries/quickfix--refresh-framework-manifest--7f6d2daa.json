@@ -1,0 +1,19 @@
+{
+  "branch": "quickfix/refresh-framework-manifest",
+  "commit": "eaa375f",
+  "completed": "2026-09-15",
+  "created_at": "2026-09-15T04:25:37Z",
+  "implementation_status": "shipped",
+  "key": "quickfix:refresh-framework-manifest",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/51",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Refresh the framework manifest after the design pin SHA fix",
+  "updated_at": "2026-09-15T04:28:01Z",
+  "workflow_status": "shipped"
+}
