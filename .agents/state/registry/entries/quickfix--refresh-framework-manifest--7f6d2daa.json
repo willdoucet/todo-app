@@ -1,0 +1,16 @@
+{
+  "branch": "quickfix/refresh-framework-manifest",
+  "created_at": "2026-09-15T04:25:37Z",
+  "implementation_status": "implementing",
+  "key": "quickfix:refresh-framework-manifest",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Refresh the framework manifest after the design pin SHA fix",
+  "updated_at": "2026-09-15T04:25:37Z",
+  "workflow_status": "implementing"
+}
