@@ -89,3 +89,36 @@ def test_empty_watch_list_is_an_error(tmp_path):
     repo = R.make_repo(tmp_path, modules={"design_sync": True}, design_watched_files=[])
     proc = R.run(repo, "design-sync-mark")
     assert proc.returncode == 2 and json.loads(proc.stdout)["status"] == "error"
+
+
+def test_pin_sha_is_last_commit_touching_any_watched_file(tmp_path):
+    repo = enabled_repo(tmp_path)  # the only watched commit touches WATCHED[1], not WATCHED[0]
+    design_sha = R.git(repo, "rev-parse", "HEAD")
+    R.write(repo, "README.md", "# unrelated\n")
+    R.commit(repo, "docs: readme")
+    proc = R.run(repo, "design-sync-check", "--pin-sha")
+    assert (proc.returncode, proc.stdout, proc.stderr) == (0, design_sha + "\n", "")
+
+
+def test_pin_sha_ignores_module_toggle_and_takes_explicit_paths(tmp_path):
+    repo = R.make_repo(tmp_path, design_watched_files=[])  # design_sync: false
+    R.write(repo, "docs/Design Guide.md", "# guide\n")
+    guide_sha = R.commit(repo, "docs: guide")
+    R.write(repo, "README.md", "# later\n")
+    R.commit(repo, "docs: readme")
+    proc = R.run(repo, "design-sync-check", "--pin-sha", "docs/Design Guide.md", "src/tokens.css")
+    assert (proc.returncode, proc.stdout.strip()) == (0, guide_sha)
+
+
+def test_pin_sha_fails_loudly_instead_of_printing_nothing(tmp_path):
+    repo = R.make_repo(tmp_path, design_watched_files=["frontend/src/nothing.css"])
+    proc = R.run(repo, "design-sync-check", "--pin-sha")
+    assert (proc.returncode, proc.stdout) == (2, "")
+    assert "no commit touches any of: frontend/src/nothing.css" in proc.stderr
+
+    cfg = R.load_cfg(repo)
+    cfg["design_watched_files"] = []
+    R.save_cfg(repo, cfg)
+    proc = R.run(repo, "design-sync-check", "--pin-sha")
+    assert (proc.returncode, proc.stdout) == (2, "")
+    assert "design_watched_files is empty" in proc.stderr

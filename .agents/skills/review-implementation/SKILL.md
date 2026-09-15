@@ -168,9 +168,9 @@ No matches: skip silently. Otherwise this is a static check; the live, graded au
    architecture, interaction states (loading, empty, error, success, partial), responsive
    behavior at the documented breakpoints. Token-level differences (exact spacing, shade,
    weight) belong to the guidelines check above, not here. If the section records a
-   **Design system pin SHA**, compare it with `git log -1 --format=%H -- <the
-   design_watched_files listed in $REPO_ROOT/.agents/config.json>`; when they differ, add one
-   INFORMATIONAL note that token drift may be intentional design-system evolution.
+   **Design system pin SHA**, compare it with `"$BIN/design-sync-check" --pin-sha`; when they
+   differ, add one INFORMATIONAL note that token drift may be intentional design-system
+   evolution. A non-zero exit means no current SHA: note the helper's message instead.
 5. Report under a `Design Review` header. These findings enter the same fix-first flow.
 
 ### 8. Test coverage diagram and gap tests

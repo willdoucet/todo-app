@@ -307,13 +307,15 @@ constraints and before per-component sections. Update it in place on a rerun. Ev
 item from 8A is accounted for. The design-system pin SHA:
 
 ```bash
-WATCHED=$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1])).get("design_watched_files", [])))' "$REPO_ROOT/.agents/config.json")
-DESIGN_PIN_SHA=$(git log -1 --format=%H -- $WATCHED)
+DESIGN_PIN_SHA=$("$BIN/design-sync-check" --pin-sha) && echo "Design pin: $DESIGN_PIN_SHA"
 ```
 
-If `design_watched_files` is empty, pass `$DOCS_DIR/FRONTEND_GUIDELINES.md` and the token
-source file it names instead. Downstream skills compare against the same list; use the same
-one.
+Never build the path list in shell: zsh does not word-split an unquoted variable, so a joined
+list matches nothing and git prints an empty SHA with exit 0. A non-zero exit from the helper
+means there is no SHA; show its message and resolve it before writing the section, never record
+an empty pin. If `design_watched_files` is empty, pass `$DOCS_DIR/FRONTEND_GUIDELINES.md` and
+the token source file it names as arguments after `--pin-sha`. Downstream skills compare
+against the same list; use the same one.
 
 **8F. Cleanup.** Path B: delete every unselected file in `$PLAN_DIR/mockups/`, keep only the
 chosen options, report the counts ("kept 3, deleted 6"). Path A: list `$PLAN_DIR/prototype/`

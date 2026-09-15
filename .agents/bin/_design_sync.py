@@ -29,3 +29,15 @@ def design_sha(root: Path, files: list[str]) -> str:
     """Last commit touching any watched file, else HEAD."""
     sha = _lib.git(root, "log", "-1", "--format=%H", "--", *files)
     return sha or _lib.git(root, "rev-parse", "HEAD")
+
+
+def pin_sha(root: Path, files: list[str]) -> str:
+    """Last commit touching any watched file, for a plan's design pin.
+
+    Unlike design_sha there is no HEAD fallback: a pin on an unrelated commit hides drift.
+    Each path is its own git argument, so shell word-splitting rules never apply.
+    """
+    sha = _lib.git(root, "log", "-1", "--format=%H", "--", *files)
+    if not sha:
+        raise _lib.FrameworkError(f"no commit touches any of: {', '.join(files)}", code=2)
+    return sha

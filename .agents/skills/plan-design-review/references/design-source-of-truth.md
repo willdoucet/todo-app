@@ -55,9 +55,10 @@ One line per non-trivial component from 8A, pointing at the single selected opti
 
 - Every non-trivial item identified in 8A is accounted for: a prototype that covers it, a
   mockup line, or the rationale for none.
-- The pin SHA is the last commit touching the watched design files: `design_watched_files` in
-  config, or `$DOCS_DIR/FRONTEND_GUIDELINES.md` plus the token source file it names when that
-  list is empty. Downstream skills compare it with the current SHA of the same files and warn
-  on drift; they never block.
+- The pin SHA is the last commit touching the watched design files, printed by
+  `"$BIN/design-sync-check" --pin-sha`: `design_watched_files` in config, or
+  `$DOCS_DIR/FRONTEND_GUIDELINES.md` plus the token source file it names (passed as arguments)
+  when that list is empty. An empty pin is never recorded. Downstream skills compare it with
+  the current SHA of the same files and warn on drift; they never block.
 - When both `mockups/` and `prototype/` exist under the plan folder, this section is the
   single statement of which is current; the other is history.

@@ -39,3 +39,13 @@
 - Tests: none (planning docs only)
 - Docs: doc-guard — staged changes touch no documented areas. Registry milestone record deliberately untouched; criteria live in the epic body
 - Branch: quickfix/m8-acceptance-criteria · PR: https://github.com/willdoucet/todo-app/pull/48
+
+## 2026-09-14 — design-pin-sha-zsh
+- Source: free text (LESSONS Bug Log 2026-09-14, found during /plan-design-review of M8)
+- What: `design-sync-check --pin-sha [PATH ...]` prints the design pin SHA with each watched path as its own git argument, and exits 2 with the reason on stderr when there is none. plan-design-review, execute-plan, review-implementation, and design-review call it instead of the shell snippet
+- Why: the snippet joined the watched files into one `$WATCHED` string; zsh does not word-split it, so `git log` matched nothing, exited 0, and the pin SHA came out empty
+- Also: the same change, byte-identical, in ../framework/payload (uncommitted there, with README and CHANGELOG); the LESSONS Bug Log row stays on prod-launch-release to avoid a duplicate
+- Files: .agents/bin/{design-sync-check,_design_sync.py}, .agents/tests/test_design_sync.py, .agents/skills/{plan-design-review,execute-plan,review-implementation,design-review}/SKILL.md, .agents/skills/plan-design-review/references/design-source-of-truth.md
+- Tests: .agents/tests 273 passed; the 3 new pin-SHA tests failed before the fix; zsh and bash both print c0f7f30bcdfc1c6d2a2fdfeba8d39c6fa4c294cd
+- Docs: no doc impact (all paths under .agents/, no documented surface changed)
+- Branch: quickfix/design-pin-sha-zsh · PR: https://github.com/willdoucet/todo-app/pull/50
