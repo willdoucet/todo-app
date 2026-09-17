@@ -894,7 +894,10 @@ client disconnect after `put` still reclaims the object).
 
 `app/services/asset_lifecycle.py` wires **adopt** (flip `referenced` on entity
 create/update, inside the entity transaction; 400 if the managed key has no
-`assets` row) and **release** (delete object + drop row, post-commit only, so a
+`assets` row; idempotent on an already-referenced key — the A1
+one-key-per-entity invariant is **accepted, not enforced**, so a second entity
+given the same `/uploads/{key}` shares the object and loses it when the first
+releases it) and **release** (delete object + drop row, post-commit only, so a
 rolled-back edit never erases live bytes; an unreferenced row is kept if the
 storage delete fails so the sweep can retry) into the responsibilities /
 family_members / items (+recipe image) write paths, plus the `stock_icons/*`

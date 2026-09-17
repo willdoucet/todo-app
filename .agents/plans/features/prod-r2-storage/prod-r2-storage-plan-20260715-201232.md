@@ -228,12 +228,23 @@ misses one):*
   the volume (Open Q3), deletes the SHARED bundled icon out from under every other entity still
   using it.** So: hooks match `stock_icons/*` → do nothing (no ref flip, no delete, no row drop).
 - **Adopt:** when an entity PATCH/POST sets `icon_url`/`photo_url`/`image_url` to `/uploads/{key}`
-  (and `key` is not `stock_icons/*`), row-lock the `assets` row, require it to exist, require
-  `referenced=false` for newly adopted keys, then flip `assets.referenced = true` for that key.
-  Paths: `responsibilities` (`icon_url`), `family_members` (`photo_url`), `items` (`icon_url`),
-  recipe/item (`image_url`). If a PATCH repeats the entity's existing key, treat it as a no-op
-  rather than a duplicate adoption. If a user copy-pastes another entity's managed `/uploads/*`
-  path, reject it instead of silently violating the 1:1 key→entity invariant.
+  (and `key` is not `stock_icons/*`), ~~row-lock the `assets` row,~~ require it to exist,
+  ~~require `referenced=false` for newly adopted keys,~~ then flip `assets.referenced = true` for
+  that key. Paths: `responsibilities` (`icon_url`), `family_members` (`photo_url`), `items`
+  (`icon_url`), recipe/item (`image_url`). If a PATCH repeats the entity's existing key, treat it
+  as a no-op rather than a duplicate adoption. ~~If a user copy-pastes another entity's managed
+  `/uploads/*` path, reject it instead of silently violating the 1:1 key→entity invariant.~~
+  > **Reconciliation (2026-09-17, post-ship; decided with the user) — the struck-through rule
+  > never shipped and is withdrawn. Eng review 1 (A1) above stands.** The adversarial review
+  > wrote an adopt-time rejection into this bullet without editing the A1 callout, so the plan
+  > carried both rules. PR #44 shipped A1: `adopt` is one `UPDATE … SET referenced=true …
+  > RETURNING` that fails closed only on a **missing** manifest row and is idempotent on an
+  > already-referenced key; the 1:1 invariant is accepted, not enforced
+  > (`TestA1DuplicatedKeyOutOfScope`). Both implementation reviews accepted that. The rule as
+  > written was also unshippable: the recipe form sends one upload as both `icon_url` and
+  > `recipe_detail.image_url` (`ItemFormModal.jsx`), so requiring `referenced=false` would 400
+  > every recipe saved with a photo. If rejection is ever wanted, `adopt` needs the entity's
+  > current value and a same-item dual-column carve-out — see the A1 revisit triggers.
 - **Replace:** when one of those columns changes **and the previous value is a managed
   (non-stock) key**, cleanup keys off the *previous* value alone — independent of what the new
   value is (managed upload, stock icon, or null) — so a managed→stock swap still reclaims the old
@@ -564,8 +575,10 @@ specified for GPT-5.4; the user explicitly approved continuing with GPT-5.5.
 
 ### What this review changed
 - Added strict media-key parsing and traversal rejection before any LocalDisk/R2 lookup.
-- Hardened asset adoption so missing, already-referenced, or copy-pasted managed keys cannot
-  silently break the 1:1 key→entity invariant.
+- Hardened asset adoption so missing~~, already-referenced, or copy-pasted~~ managed keys cannot
+  silently break the 1:1 key→entity invariant. *(Reconciliation 2026-09-17: only the
+  missing-row check shipped. Rejecting already-referenced / copy-pasted keys contradicted Eng
+  review 1 (A1), never shipped, and is withdrawn — see the note on the Adopt bullet.)*
 - Made replace/delete cleanup post-commit so failed DB writes cannot erase still-referenced bytes.
 - Added an explicit PR2 rollback/reversal plan for the R2 cutover window.
 - Expanded required tests for malformed keys, storage 5xx logging, operator password rotation,
