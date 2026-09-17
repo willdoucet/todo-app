@@ -82,13 +82,13 @@ Discovered 2026-05-01 during M2 prod-deploy-skeleton Slice 3 verification — an
 
 Discovered 2026-09-11 while executing `infra/r2-cutover-runbook.md`.
 
-### An optional review that ran with issues open is not the same as one that never ran
+### A review that ran with issues open blocks its stage; "optional" covers only a review that never ran
 
-- `workflow-state` treats a plan review logged `issues_open` exactly like a missing one: both are "not ok", and for `/plan-ceo-review` both only produce an optional suggestion — worded "not yet run" even when it ran. The implementation verdict looks only at eng review (plus design review with `ui_scope`), and `/plan-eng-review` never reads the review log. A critical gap an earlier review left open can therefore reach implementation without anyone being told to close it.
-- Until the framework fixes it: before trusting `CLEARED FOR IMPLEMENTATION`, run `.agents/bin/review-read` and treat every plan-stage `issues_open` entry as an open item. Confirm in the plan that a later review closed each one, and record where; do not log a fresh `clean` entry under the original skill to tidy the dashboard, because that claims a review that did not happen.
-- A review's REVIEW REPORT row must carry the status it logged. M8's CEO row read "CLEAR" beside an `issues_open` log entry.
+- Enforced by the tools since framework 1.1.0: a review whose latest entry is `issues_open` makes `workflow-state --next` name it as required ("ran with issues open", never "not yet run"), puts it in `missing` or `missing_to_ship`, and withholds `CLEARED FOR IMPLEMENTATION` and `CLEARED TO SHIP`. `/execute-plan` and `/ship` refuse unless `--next` names them. Before 1.1.0 a failed review read exactly like a missing one, the verdict looked only at eng review (plus design review with `ui_scope`), and a critical gap an earlier review left open could reach implementation without anyone being told to close it.
+- There are two ways to clear it, and only two: re-run the review, or confirm in the plan that a later review closed each open item and log `review-log --skill <the failed review> --status resolved --field resolved_by=<the later review that passed> --field note="<where each item is closed>"`. The procedure is `_shared/dashboard.md` → "When the next step names a review that ran with issues open". Never log a fresh `clean` entry under the original skill to tidy the dashboard, because that claims a review that did not happen; `resolved_by=operator` only when the user said in the session that they decided the item.
+- A review's REVIEW REPORT row carries the status it logged, and a resolution adds to the row rather than rewriting it (`_shared/plan-footer.md`). M8's CEO row read "CLEAR" beside an `issues_open` log entry.
 
-Discovered 2026-09-14 on M8 (`prod-launch-release`): CEO review left the break-glass gap open, eng review closed it in prose, and the dashboard kept showing `issues_open` with "Optional: /plan-ceo-review — not yet run". Framework follow-up: "optional to run, not optional to resolve".
+Discovered 2026-09-14 on M8 (`prod-launch-release`): CEO review left the break-glass gap open, eng review closed it in prose, and the dashboard kept showing `issues_open` with "Optional: /plan-ceo-review — not yet run". Fixed by the `workflow-review-resolution` plan ("optional to run, not optional to resolve", PR #53); M8's CEO entry was then resolved by `plan-eng-review` (log entry 2026-09-17T04:06:30Z). Until then the rule here was a manual one: run `review-read` before trusting the verdict.
 
 ### Worktrees: pass literal absolute paths to framework helpers, and recreate the vault link
 
