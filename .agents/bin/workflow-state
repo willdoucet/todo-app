@@ -9,10 +9,14 @@ Usage:
     workflow-state --history [N] [--json]  last N completions across the registry (default 10)
     workflow-state --epics [--json]     every epic with derived milestone progress
 
-Inputs: plan frontmatter, the plan's registry entry, the review log (latest entry per
-skill logged against THIS plan file), the summary file's step boxes, and epic progress
-derived by _lib.epic_progress. Nothing here is project-specific; branches, paths and
-skill names come from config, git and the log.
+Inputs: plan frontmatter, the plan's registry entry, the review log (the latest entry per
+skill logged against THIS plan file, read through `_lib.review_disposition` so legacy words
+and `resolved` records mean one thing), the count of unreadable log lines, the summary
+file's step boxes, and epic progress derived by _lib.epic_progress. One pure function,
+`gate_state`, turns the dispositions into the Open list, `missing`, `missing_to_ship`, and
+the verdict; `--next`, `--dashboard`, and the banner all read from it and cannot disagree.
+Nothing here is project-specific; branches, paths and skill names come from config, git and
+the log.
 
 Registry fields read (written by obsidian-workflow): key, kind, title, branch, plan,
 commit, implementation_status, completed, parent_epic, milestone, updated_at.
@@ -29,8 +33,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _lib  # noqa: E402
 
-OK_STATUSES = {"clean", "cleared", "done", "pass"}
-FIX_IN_PLACE = {"plan-adversarial-review", "qa", "design-review"}
 KNOWN_STATUSES = {
     "not-started",
     "implementing",
@@ -41,34 +43,15 @@ KNOWN_STATUSES = {
     "needs-context",
 }
 STUCK_STATUSES = ("ready-for-review", "implementing")
-
-# (dashboard label, banner label, skill)
-REVIEW_TIERS = [
-    ("CEO", "CEO", "plan-ceo-review"),
-    ("Eng", "Eng", "plan-eng-review"),
-    ("Adversarial", "Adv", "plan-adversarial-review"),
-    ("Design", "Design", "plan-design-review"),
-    ("Impl review", "Impl", "review-implementation"),
-    ("QA", "QA", "qa"),
-    ("Design audit", "Audit", "design-review"),
-    ("Final", "Final", "final-review"),
-    ("Ship", "Ship", "ship"),
-]
+TERMINAL_STATUSES = ("shipped", "abandoned")
 
 HARNESS_NOTE = "skill invocation syntax depends on the harness (/name or $name)"
+OK_DISPOSITIONS = ("passed", "resolved")
 
 
 # --------------------------------------------------------------------------
 # State gathering
 # --------------------------------------------------------------------------
-
-
-def review_ok(reviews: dict, skill: str) -> bool:
-    entry = reviews.get(skill)
-    if not entry:
-        return False
-    status = str(entry.get("status", "")).lower()
-    return status in OK_STATUSES or (skill in FIX_IN_PLACE and status == "issues_found")
 
 
 def summary_progress(plan: Path) -> tuple[int, int] | None:
@@ -133,6 +116,7 @@ def gather(root: Path, cfg: dict) -> dict:
         "fm": {},
         "entry": None,
         "reviews": {},
+        "unreadable": 0,
         "progress": None,
         "status": "not-started",
         "epic_slug": None,
@@ -142,6 +126,9 @@ def gather(root: Path, cfg: dict) -> dict:
     }
     if not branch:
         return st
+    # The count is data, never an exception: the banner is fail-silent, and a raise here
+    # would print nothing and leave the gate open.
+    st["unreadable"] = _lib.review_log_read(root, cfg)[1]
     plan, found_as = find_current_plan(root, cfg, branch)
     if not plan:
         return st
@@ -167,6 +154,99 @@ def gather(root: Path, cfg: dict) -> dict:
             st["epic"] = _lib.epic_progress(root, cfg, st["epic_slug"])
     st["status"] = infer_status(fm, st["entry"])
     return st
+
+
+# --------------------------------------------------------------------------
+# The gate
+# --------------------------------------------------------------------------
+#
+# --next, top to bottom (the order of the checks IS the gate):
+#
+#   unreadable log lines? ──yes──▶ Warn: N unreadable … · verdict NOT CLEARED — review log unreadable
+#                                  next.skill = null · Open and Optional empty
+#   plan? ─no─▶ init / idle (unchanged)
+#   epic? ─yes─▶ CEO missing → /plan-ceo-review "epic needs a CEO review" · failed → failed reason · else milestones
+#   status
+#    not-started ──▶ eng not ok?  → /plan-eng-review  (missing: shipping gate | failed: failed reason)
+#                    ui_scope and design not ok? → /plan-design-review
+#                    first other failed gating review? → its invoke, failed reason
+#                    else → /execute-plan  (+ Optional: CEO, adversarial — only when MISSING)
+#    implementing · blocked · needs-context ──▶ next unchanged; every failed gating review → Open: line
+#    ready-for-review ──▶ impl not ok? → /review-implementation
+#                         first failed gating review, any tier? → its invoke   (adversarial-subagent → /review-implementation)
+#                         final not ok? → /final-review (+ Optional /qa, /design-review when missing and ui_scope)
+#                         else → /ship
+#    shipped · abandoned ──▶ unchanged; no Open: lines
+#
+#   ok = passed | resolved · a gates=False tier (office-hours) never enters any list
+#   missing         = eng (and design with ui_scope) not ok + every failed plan-stage review
+#   missing_to_ship = impl + final not ok + every failed review of any gating tier
+#   CLEARED TO SHIP iff missing_to_ship empty; else CLEARED FOR IMPLEMENTATION iff missing empty; else NOT CLEARED
+
+
+def failed_reason(skill: str, reviews: dict, dispositions: dict) -> str:
+    """Why a failed review is the next step, and what to do about it. When another gating
+    tier already passed at or after the failure's `ts`, say so: the agent should log
+    `resolved` by that review rather than re-run a long one it already closed."""
+    failed_ts = _lib.review_ts(reviews.get(skill))
+    later = None
+    for tier in _lib.gating_tiers():
+        other = tier["skill"]
+        if not _lib.can_resolve(skill, other):
+            continue
+        if dispositions.get(other) == "passed" and _lib.review_ts(reviews.get(other)) >= failed_ts:
+            later = tier
+            break
+    prefix = "adversarial subagent ran with issues open: " if skill == "adversarial-subagent" else "ran with issues open: "
+    if later:
+        return (
+            f"{prefix}{later['invoke']} already passed after this failure; confirm each open item is "
+            f"closed and log resolved by {later['skill']}, or re-run this review"
+        )
+    if skill == "adversarial-subagent":
+        return f"{prefix}re-run /review-implementation, or confirm each finding is closed and log resolved"
+    return f"{prefix}re-run it, or confirm each open item is closed and log resolved"
+
+
+def gate_state(reviews: dict, fm: dict, status: str, unreadable: int) -> dict:
+    """Pure. Dispositions per tier, the Open list, `missing`, `missing_to_ship`, and the
+    verdict, from the latest entry per skill and the plan's frontmatter. Everything that
+    routes or reports reads this; nothing recomputes it."""
+    dispositions = {t["skill"]: _lib.review_disposition(reviews.get(t["skill"])) for t in _lib.REVIEW_TIERS}
+    out = {
+        "dispositions": dispositions,
+        "open": [],
+        "missing": [],
+        "missing_to_ship": [],
+        "verdict": "NOT CLEARED",
+        "unreadable": unreadable,
+    }
+    if unreadable > 0:
+        out["verdict"] = "NOT CLEARED — review log unreadable"
+        return out
+
+    def ok(skill: str) -> bool:
+        return dispositions[skill] in OK_DISPOSITIONS
+
+    impl_gate = ["plan-eng-review"] + (["plan-design-review"] if _lib.truthy(fm.get("ui_scope")) else [])
+    for tier in _lib.gating_tiers():
+        skill = tier["skill"]
+        failed = dispositions[skill] == "failed"
+        if (skill in impl_gate and not ok(skill)) or (skill in _lib.PLAN_STAGE_SKILLS and failed):
+            out["missing"].append(skill)
+        if (skill in _lib.SHIP_GATE_SKILLS and not ok(skill)) or failed:
+            out["missing_to_ship"].append(skill)
+        if failed and status not in TERMINAL_STATUSES:
+            out["open"].append({"skill": skill, "invoke": tier["invoke"], "reason": failed_reason(skill, reviews, dispositions)})
+    if not out["missing_to_ship"]:
+        out["verdict"] = "CLEARED TO SHIP"
+    elif not out["missing"]:
+        out["verdict"] = "CLEARED FOR IMPLEMENTATION"
+    return out
+
+
+def unreadable_reason(unreadable: int) -> str:
+    return f"review log has {unreadable} unreadable line(s); resolve the conflict (keep both sides) before any review command"
 
 
 # --------------------------------------------------------------------------
@@ -224,11 +304,36 @@ def active_epics(root: Path, cfg: dict) -> list[dict]:
 
 
 def decide(st: dict) -> dict:
+    gs = gate_state(st["reviews"], st["fm"], st["status"], st.get("unreadable", 0))
+    result = _decide(st, gs)
+    named = result.pop("next_log_skill", None)
+    result["unreadable"] = gs["unreadable"]
+    if gs["unreadable"] > 0:
+        result["next"] = nxt(None, None, True, unreadable_reason(gs["unreadable"]))
+        result["optional"] = []
+        result["open"] = []
+        return result
+    # A failed review that is already the next step is not repeated as an Open line.
+    result["open"] = [o for o in gs["open"] if o["skill"] != named]
+    return result
+
+
+def _decide(st: dict, gs: dict) -> dict:
     reviews = st["reviews"]
     fm = st["fm"]
+    disp = gs["dispositions"]
 
     def ok(skill: str) -> bool:
-        return review_ok(reviews, skill)
+        return disp.get(skill) in OK_DISPOSITIONS
+
+    def reason_for(skill: str, missing_reason: str) -> str:
+        return failed_reason(skill, reviews, disp) if disp.get(skill) == "failed" else missing_reason
+
+    def first_failed(exclude: tuple[str, ...] = ()) -> str | None:
+        for tier in _lib.gating_tiers():
+            if tier["skill"] not in exclude and disp[tier["skill"]] == "failed":
+                return tier["skill"]
+        return None
 
     if st["plan"] is None:
         docs = _lib.docs_dir(st["root"], st["cfg"])
@@ -265,7 +370,8 @@ def decide(st: dict) -> dict:
             result["stage"] = "EPIC (complete)"
             result["next"] = nxt(None, None, False, "all milestones shipped or subsumed — close the epic")
         elif not ok("plan-ceo-review"):
-            result["next"] = nxt("/plan-ceo-review", None, True, "epic needs a CEO review before its milestones start")
+            result["next"] = nxt("/plan-ceo-review", None, True, reason_for("plan-ceo-review", "epic needs a CEO review before its milestones start"))
+            result["next_log_skill"] = "plan-ceo-review"
         elif ep["next"]:
             result["next"] = milestone_next(ep, ep["next"])
         else:
@@ -276,6 +382,10 @@ def decide(st: dict) -> dict:
     result: dict = {"stage": "PLANNING", "optional": []}
     if st["epic"]:
         result["epic"] = epic_summary(st["epic"], st["milestone"])
+
+    def require(skill: str, missing_reason: str) -> None:
+        result["next"] = nxt(_lib.tier_for(skill)["invoke"], None, True, reason_for(skill, missing_reason))
+        result["next_log_skill"] = skill
 
     if status == "shipped":
         result["stage"] = "SHIPPED"
@@ -294,14 +404,17 @@ def decide(st: dict) -> dict:
         result["next"] = nxt("/execute-plan", None, True, "continue implementation")
     elif status == "ready-for-review":
         result["stage"] = "READY FOR REVIEW"
+        failed = first_failed(exclude=("review-implementation",))
         if not ok("review-implementation"):
-            result["next"] = nxt("/review-implementation", None, True, "pre-landing review")
+            require("review-implementation", "pre-landing review")
+        elif failed:
+            require(failed, "")
         elif not ok("final-review"):
-            result["next"] = nxt("/final-review", None, True, "shipping gate")
+            require("final-review", "shipping gate")
             if _lib.truthy(fm.get("ui_scope")):
-                if not reviews.get("qa"):
+                if disp["qa"] == "missing":
                     result["optional"].append(opt("/qa", "ui_scope is set and QA has not run"))
-                if not reviews.get("design-review"):
+                if disp["design-review"] == "missing":
                     result["optional"].append(opt("/design-review", "ui_scope is set and the design audit has not run"))
         else:
             result["next"] = nxt("/ship", None, True, "implementation and final reviews are clean")
@@ -310,19 +423,22 @@ def decide(st: dict) -> dict:
         if isinstance(risk_tags, str):
             risk_tags = [t.strip() for t in risk_tags.split(",") if t.strip()]
         if not ok("plan-eng-review"):
-            result["next"] = nxt("/plan-eng-review", None, True, "shipping gate")
-            if not ok("plan-ceo-review"):
+            require("plan-eng-review", "shipping gate")
+            if disp["plan-ceo-review"] == "missing":
                 result["optional"].append(opt("/plan-ceo-review", "scope review before the gate"))
         else:
-            # Eng review is clean. Adversarial review is suggested from here on, before any
-            # further gate, whenever the plan carries risk tags.
-            if risk_tags and not ok("plan-adversarial-review"):
+            # Eng review is ok. Adversarial review is suggested from here on, before any
+            # further gate, whenever the plan carries risk tags and it has never run.
+            if risk_tags and disp["plan-adversarial-review"] == "missing":
                 result["optional"].append(opt("/plan-adversarial-review", f"risk tags: {','.join(map(str, risk_tags))}"))
+            failed = first_failed(exclude=("plan-eng-review",))
             if _lib.truthy(fm.get("ui_scope")) and not ok("plan-design-review"):
-                result["next"] = nxt("/plan-design-review", None, True, "ui_scope is set")
+                require("plan-design-review", "ui_scope is set")
+            elif failed:
+                require(failed, "")
             else:
                 result["next"] = nxt("/execute-plan", None, True, "plan is cleared for implementation")
-                if not ok("plan-ceo-review"):
+                if disp["plan-ceo-review"] == "missing":
                     result["optional"].append(opt("/plan-ceo-review", "not yet run"))
     return result
 
@@ -342,20 +458,31 @@ def fmt_next(decision: dict) -> list[str]:
         lines = [f"Next:    {n['reason']}"]
     for o in decision.get("optional", []):
         lines.append(f"Optional: {o['skill']} — {o['reason']}")
+    for o in decision.get("open", []):
+        lines.append(f"Open:    {o['invoke']} — {o['reason']}")
     return lines
 
 
-def fmt_reviews(reviews: dict) -> str:
+def fmt_reviews(dispositions: dict) -> str:
+    """One mark per tier. gates=True: — missing, ✓ ok, ! failed. gates=False (display
+    only): — missing, · present; never ✓ or !, because neither means anything for it."""
     parts = []
-    for _label, short, skill in REVIEW_TIERS:
-        if skill not in reviews:
+    for tier in _lib.REVIEW_TIERS:
+        d = dispositions.get(tier["skill"], "missing")
+        if d == "missing":
             mark = "—"
-        elif review_ok(reviews, skill):
+        elif not tier["gates"]:
+            mark = "·"
+        elif d in OK_DISPOSITIONS:
             mark = "✓"
         else:
             mark = "!"
-        parts.append(f"{short} {mark}")
+        parts.append(f"{tier['short']} {mark}")
     return "  ".join(parts)
+
+
+def fmt_warn(unreadable: int) -> str:
+    return f"Warn:    {unreadable} unreadable review-log line(s) — resolve the conflict (keep both sides) before any review command"
 
 
 def fmt_epic_line(ep_summary: dict) -> str:
@@ -393,7 +520,10 @@ def fmt_epic_row(ep: dict) -> str:
 
 
 def banner_lines(st: dict, decision: dict) -> list[str]:
-    lines = ["━━━ Workflow Status ━━━", f"Branch:  {st['branch']}"]
+    lines = ["━━━ Workflow Status ━━━"]
+    if decision.get("unreadable"):
+        lines.append(fmt_warn(decision["unreadable"]))
+    lines.append(f"Branch:  {st['branch']}")
     plan = st["plan"]
     lines.append(f"Plan:    {plan.name if plan else 'none'}")
     if plan and decision.get("epic"):
@@ -403,7 +533,8 @@ def banner_lines(st: dict, decision: dict) -> list[str]:
         stage += " — on base branch"
     lines.append(f"Stage:   {stage}")
     if plan:
-        lines.append(f"Reviews: {fmt_reviews(st['reviews'])}")
+        gs = gate_state(st["reviews"], st["fm"], st["status"], st.get("unreadable", 0))
+        lines.append(f"Reviews: {fmt_reviews(gs['dispositions'])}")
     if st["on_base"]:
         for ep in active_epics(st["root"], st["cfg"]):
             lines.append(f"Epic:    {fmt_epic_row(ep)}")
@@ -418,59 +549,67 @@ def banner_lines(st: dict, decision: dict) -> list[str]:
 def dashboard(st: dict) -> dict:
     plan = st["plan"]
     if not plan:
-        return {"plan": None, "rows": [], "verdict": "NO PLAN", "missing": [], "missing_to_ship": []}
+        return {"plan": None, "rows": [], "verdict": "NO PLAN", "missing": [], "missing_to_ship": [], "unreadable": st.get("unreadable", 0)}
     reviews = st["reviews"]
+    gs = gate_state(reviews, st["fm"], st["status"], st.get("unreadable", 0))
     rows = []
-    for label, _short, skill in REVIEW_TIERS:
-        entry = reviews.get(skill)
+    for tier in _lib.REVIEW_TIERS:
+        entry = reviews.get(tier["skill"])
+        disposition = gs["dispositions"][tier["skill"]]
         rows.append(
             {
-                "label": label,
-                "skill": skill,
+                "label": tier["label"],
+                "skill": tier["skill"],
                 "status": entry.get("status") if entry else None,
-                "ok": review_ok(reviews, skill),
-                "when": (entry.get("ts") or "")[:10] if entry else None,
+                "disposition": disposition,
+                "gates": tier["gates"],
+                "ok": disposition in OK_DISPOSITIONS,
+                "when": _lib.review_ts(entry)[:10] if entry else None,
                 "extra": _lib.review_extra(entry) if entry else {},
             }
         )
-    ui = _lib.truthy(st["fm"].get("ui_scope"))
-    impl_gate = ["plan-eng-review"] + (["plan-design-review"] if ui else [])
-    ship_gate = ["review-implementation", "final-review"]
-    missing = [s for s in impl_gate if not review_ok(reviews, s)]
-    missing_to_ship = [s for s in ship_gate if not review_ok(reviews, s)]
-    if not missing_to_ship:
-        verdict = "CLEARED TO SHIP"
-    elif not missing:
-        verdict = "CLEARED FOR IMPLEMENTATION"
-    else:
-        verdict = "NOT CLEARED"
     return {
         "plan": plan.name,
-        "ui_scope": ui,
+        "ui_scope": _lib.truthy(st["fm"].get("ui_scope")),
         "rows": rows,
-        "verdict": verdict,
-        "missing": missing,
-        "missing_to_ship": missing_to_ship,
+        "verdict": gs["verdict"],
+        "missing": gs["missing"],
+        "missing_to_ship": gs["missing_to_ship"],
+        "unreadable": gs["unreadable"],
     }
 
 
 def fmt_extra(extra: dict) -> str:
-    return ",".join(f"{k}={v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)}" for k, v in sorted(extra.items()))
+    """Same rule as `_lib.fmt_review_value`: quote any value that would split the row."""
+    return ",".join(f"{k}={_lib.fmt_review_value(v)}" for k, v in sorted(extra.items()))
+
+
+def fmt_missing(names: list[str], rows: list[dict]) -> str:
+    failed = {r["skill"] for r in rows if r["disposition"] == "failed"}
+    return ", ".join(f"{n} (issues open)" if n in failed else n for n in names)
 
 
 def dashboard_lines(d: dict) -> list[str]:
     if not d["plan"]:
         return ["no plan on this branch"]
-    lines = [f"Plan: {d['plan']}", f"{'Review':<13}| {'Status':<14}| {'When':<11}| Extra"]
+    lines = []
+    if d.get("unreadable"):
+        lines.append(f"Warn: {d['unreadable']} unreadable review-log line(s)")
+    lines += [f"Plan: {d['plan']}", f"{'Review':<13}| {'Status':<14}| {'When':<11}| Extra"]
     for r in d["rows"]:
-        status = "—" if r["status"] is None else f"{r['status']} {'✓' if r['ok'] else '!'}"
+        if r["status"] is None:
+            status = "—"
+        elif not r["gates"]:
+            status = str(r["status"])
+        else:
+            status = f"{r['status']} {'✓' if r['ok'] else '!'}"
         lines.append(f"{r['label']:<13}| {status:<14}| {r['when'] or '':<11}| {fmt_extra(r['extra'])}")
     verdict = f"Verdict: {d['verdict']}"
     if d["verdict"] == "NOT CLEARED":
-        verdict += f" — missing: {', '.join(d['missing'])}"
+        verdict += f" — missing: {fmt_missing(d['missing'], d['rows'])}"
     lines.append(verdict)
     if d["verdict"] == "CLEARED FOR IMPLEMENTATION":
-        lines.append(f"To ship: {', '.join(d['missing_to_ship'])}")
+        lines.append(f"To ship: {fmt_missing(d['missing_to_ship'], d['rows'])}")
     return lines
 
 
@@ -578,7 +717,10 @@ def main() -> int:
     decision = decide(st)
     if args.json:
         return _lib.print_json(decision)
-    lines = [f"Stage:   {decision['stage']}"] + fmt_next(decision) + [f"Note:    {HARNESS_NOTE}"]
+    lines = []
+    if decision.get("unreadable"):
+        lines.append(fmt_warn(decision["unreadable"]))
+    lines += [f"Stage:   {decision['stage']}"] + fmt_next(decision) + [f"Note:    {HARNESS_NOTE}"]
     print("\n".join(lines))
     return 0
 

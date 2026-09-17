@@ -58,7 +58,7 @@ Follow the preamble. Refuse when `ON_BASE=1`, exactly as `/review-implementation
 Then read who did the first review:
 
 ```bash
-"$BIN/review-read" --json | python3 -c 'import json,sys; e=(json.load(sys.stdin).get("reviews") or {}).get("review-implementation") or {}; print("first review:", e.get("harness","not logged"), e.get("model","unknown"), e.get("status",""))'
+"$BIN/review-read" --json | python3 -c 'import json,sys; e=(json.load(sys.stdin).get("reviews") or {}).get("review-implementation") or {}; d=e.get("disposition",""); h,m=(e.get("harness","not logged"),e.get("model","unknown")) if d!="resolved" else ("unknown","unknown"); print("first review:", h, m, e.get("status",""), d)'
 echo "this review: $HARNESS"
 ```
 
@@ -110,6 +110,7 @@ Where the baseline names `/review-implementation` as its own identity, read `/fi
 | Header `Pre-landing review: N issues ...` | `Final review: N issues ...` |
 | `review-log --skill review-implementation` | `review-log --skill final-review` |
 | Adversarial entry `--skill adversarial-subagent --field tier=...` | same, plus `--field pass=final` |
+| Subagent resolution `resolved_by=review-implementation` | `resolved_by=final-review` (this pass's own skill; impl's pass is earlier than this subagent run, so naming it is rejected) |
 | REVIEW REPORT row `Implementation Review` | row `Final Review` |
 | Sync row `review-implementation` (`impl-reviewed`) | sync row `final-review` (`final-reviewed`) |
 
@@ -125,7 +126,9 @@ adversarial synthesis. The point of this skill is a second set of eyes on the sa
 not a re-read of the first report.
 
 When the first review left `issues_open`, treat each open item as a finding to resolve now,
-through the same fix-first flow, and say which of them you closed.
+through the same fix-first flow, and say which of them you closed. A `resolved` disposition
+means a later record cleared it; its provenance is unknown, so the independence warning above
+does not apply.
 
 ### 5. Persist
 
@@ -136,8 +139,11 @@ through the same fix-first flow, and say which of them you closed.
 ```
 
 `STATUS` is `clean` only when nothing remains unresolved, no critical gap is open, and the
-documentation check passed; otherwise `issues_open`. Skip the entry if the review stopped in
-baseline step 1. Update the `Final Review` row of `## REVIEW REPORT` in `$_PLAN_FILE` per
+documentation check passed; otherwise `issues_open`. The words are defined once in
+`_shared/obsidian-sync.md` → Review log. Skip the entry if the review stopped in baseline
+step 1. If this pass closed the first review's open items, log a resolution for it after your
+own entry, per `_shared/dashboard.md` → "When the next step names a review that ran with
+issues open". Update the `Final Review` row of `## REVIEW REPORT` in `$_PLAN_FILE` per
 `_shared/plan-footer.md`, in place, preserving the frontmatter.
 
 ## Completion

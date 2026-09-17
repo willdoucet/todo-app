@@ -140,7 +140,11 @@ and `Notes/File.md#batch` for vault-sourced work (paths relative to the vault ro
 `plan:<safe-branch>` for freeform features, `quickfix:<slug>`, `epic:<slug>`.
 
 The review log is `state/review-log.jsonl`. A review is current when it was logged against the
-current plan file. Age is informational only.
+current plan file. Age is informational only. Every entry's `status` is one of `clean`,
+`issues_open`, `resolved`, `done`, defined once in `skills/_shared/obsidian-sync.md` → Review
+log; `review-log` refuses any other word, and `workflow-state` gates on their dispositions: a
+review that ran and did not pass blocks its stage until it is re-run or resolved, while a
+review that never ran is merely optional.
 
 ## Artifacts at completion
 

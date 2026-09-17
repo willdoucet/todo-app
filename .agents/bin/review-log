@@ -1,24 +1,34 @@
 #!/usr/bin/env python3
-"""Append one entry to the review log (state/review-log.jsonl).
+"""Append one validated entry to the review log (state/review-log.jsonl).
 
 Usage:
+    review-log --skill plan-eng-review --status clean [--field k=v ...] [--plan NAME]
     review-log '{"skill":"plan-eng-review","status":"clean","issues":0}'
-    review-log --skill plan-eng-review --status clean [--field issues=0 ...] [--plan NAME]
+    review-log --skill plan-ceo-review --status resolved \\
+        --field resolved_by=plan-eng-review --field note="plan section 2, break-glass entry"
 
-`ts`, `branch`, `plan` (latest plan basename on the current branch), `commit` and
-`harness` are filled in automatically unless supplied. `--plan NAME` overrides the
-plan the entry is logged against. Prints the stored entry as JSON.
+`status` is one of clean, issues_open, resolved, done (`done` from `ship` only); the words
+are defined once in skills/_shared/obsidian-sync.md. `ts`, `branch`, `plan` (latest plan
+basename on the current branch), `commit`, and `harness` are filled in unless supplied;
+`--plan NAME` overrides the plan the entry is logged against. `--field` cannot set `status`
+or `skill`. Prints the stored entry as JSON. On any rejection prints a JSON error and writes
+nothing; exit 2 when the log has unreadable lines, or when no plan resolves for a `resolved` entry.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _lib  # noqa: E402
+
+RESERVED_FIELDS = ("status", "skill")
+TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")  # what _lib.now_iso writes; string order == time order
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -32,6 +42,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def build_entry(args: argparse.Namespace) -> dict:
+    """Merge JSON, flags, then --field into one entry. Validation runs on the result, never
+    on the flags alone, so a --field cannot smuggle a value past a rule."""
     if args.entry:
         try:
             entry = json.loads(args.entry)
@@ -45,16 +57,139 @@ def build_entry(args: argparse.Namespace) -> dict:
         entry["skill"] = args.skill
     if args.status:
         entry["status"] = args.status
-    for item in args.field:
+    for item in getattr(args, "field", None) or []:
         if "=" not in item:
             raise _lib.FrameworkError(f"--field expects k=v, got {item!r}")
         key, raw = item.split("=", 1)
-        entry[key.strip()] = _lib.parse_scalar(raw)
+        key = key.strip()
+        if key in RESERVED_FIELDS:
+            raise _lib.FrameworkError(f"--field cannot set {key!r}; use --{key}")
+        entry[key] = _lib.parse_scalar(raw)
     if args.plan:
         entry["plan"] = args.plan
     for required in ("skill", "status"):
-        if not entry.get(required):
+        value = entry.get(required)
+        if not isinstance(value, str) or not value.strip():
             raise _lib.FrameworkError(f"entry needs a {required!r} (pass --{required} or include it in the JSON)")
+    if isinstance(entry.get("plan"), str):
+        entry["plan"] = _lib.review_plan_name(entry)  # a summary name attaches to its plan on write as on read
+    entry.setdefault("ts", _lib.now_iso())  # stamped here, not at append, so every ordering rule below sees it
+    return entry
+
+
+# Validation order. Every rule runs on the MERGED entry (JSON, flags, then --field) and
+# nothing is written when any rule fails:
+#
+#   log readable?                                  no ─▶ exit 2, names the lines
+#   status in REVIEW_STATUSES, exact and lowercase no ─▶ unknown status, names the four words
+#   skill in REVIEW_TIERS                          no ─▶ unknown skill, names the tiers (typos)
+#   ts is UTC YYYY-MM-DDTHH:MM:SSZ, not after now  no ─▶ (stamped in build_entry when not given)
+#   disposition and resolves_ts absent             no ─▶ computed on read / filled from the failed entry
+#   status == done  ⇒ skill == ship                no ─▶ done is ship's word
+#   skill == ship   ⇒ status == done               no ─▶ ship never fails, so never resolved or re-run
+#   status == resolved:
+#     skill is a gating tier                       no ─▶ nothing gates on it
+#     resolved_by is a non-empty str, no leading / no ─▶ resolved_by needed
+#     resolved_by != skill                         no ─▶ a review never resolves itself
+#     resolved_by == operator or a gating tier     no ─▶ not a resolver
+#     _lib.can_resolve(skill, resolved_by)         no ─▶ ship never resolves; ship-stage needs ship-stage
+#     note is a non-empty str                      no ─▶ note needed
+#     target's latest entry is failed              no ─▶ nothing to resolve
+#     resolver's latest is passed, ts >= failed.ts no ─▶ resolver never looked
+#     entry ts >= failed.ts                        no ─▶ would not become the latest entry
+#   ─▶ resolves_ts = failed.ts; append
+def _non_empty_str(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def validate_entry(root: Path, cfg: dict, entry: dict) -> dict:
+    status = entry["status"]
+    skill = entry["skill"]
+    if status not in _lib.REVIEW_STATUSES:
+        raise _lib.FrameworkError(f"unknown status {status!r}; use one of: {', '.join(_lib.REVIEW_STATUSES)}")
+    if not _lib.tier_for(skill):
+        raise _lib.FrameworkError(f"unknown skill {skill!r}; use one of: {', '.join(t['skill'] for t in _lib.REVIEW_TIERS)}")
+    ts = entry.get("ts")
+    if not _non_empty_str(ts) or not TS_RE.match(ts):
+        raise _lib.FrameworkError(f"ts must be UTC YYYY-MM-DDTHH:MM:SSZ, got {ts!r}; omit it to stamp now")
+    try:
+        datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        raise _lib.FrameworkError(f"ts must be a real UTC datetime, got {ts!r}; omit it to stamp now")
+    now = _lib.now_iso()
+    if ts > now:
+        raise _lib.FrameworkError(f"ts {ts!r} is later than now ({now}); an entry cannot be dated ahead of the clock that writes it")
+    if "disposition" in entry:
+        raise _lib.FrameworkError("disposition is computed on read from status; do not write it")
+    if "resolves_ts" in entry:
+        raise _lib.FrameworkError("resolves_ts is filled from the failed entry; do not supply it")
+    if status == "done" and skill != "ship":
+        raise _lib.FrameworkError("'done' is written by 'ship' only; a review logs clean or issues_open")
+    if skill == "ship" and status != "done":
+        raise _lib.FrameworkError("'ship' logs done only; it never fails, so it is never resolved or re-run")
+    if status != "resolved":
+        return entry
+
+    tier = _lib.tier_for(skill)
+    if not tier or not tier["gates"]:
+        raise _lib.FrameworkError(f"nothing gates on {skill!r}; resolved applies to a gating review tier")
+    by = entry.get("resolved_by")
+    if not _non_empty_str(by):
+        raise _lib.FrameworkError("resolved needs --field resolved_by=<the review that verified the closure, or operator>")
+    if by.startswith("/"):
+        raise _lib.FrameworkError(f"resolved_by is the log name without the leading slash, got {by!r}")
+    if by == skill:
+        raise _lib.FrameworkError(f"{skill!r} cannot resolve its own failed entry; re-run it instead")
+    if by != "operator":
+        resolver = _lib.tier_for(by)
+        if not resolver or not resolver["gates"]:
+            raise _lib.FrameworkError(f"resolved_by must be 'operator' or a gating review tier, got {by!r}")
+        if by == "ship":
+            raise _lib.FrameworkError("'ship' cannot resolve a review; it never reviews anything")
+        if not _lib.can_resolve(skill, by):
+            raise _lib.FrameworkError(
+                f"{by!r} cannot resolve {skill!r}: a failure at the ship stage is resolved only by a ship-stage review "
+                f"({', '.join(_lib.SHIP_STAGE_SKILLS)}) or operator"
+            )
+    if not _non_empty_str(entry.get("note")):
+        raise _lib.FrameworkError("resolved needs --field note=<where each open item is closed: plan section, report, or commit>")
+
+    plan = entry.get("plan")
+    if not plan:
+        branch = _lib.current_branch(root)
+        latest = _lib.latest_plan(root, cfg, branch) if branch else None
+        if not latest:
+            raise _lib.FrameworkError("resolved needs a plan to resolve against; none on this branch (pass --plan)", code=2)
+        plan = entry["plan"] = latest.name
+
+    reviews = _lib.reviews_for_plan(root, cfg, plan)
+    target = reviews.get(skill)
+    disposition = _lib.review_disposition(target)
+    if disposition != "failed":
+        raise _lib.FrameworkError(f"{skill!r} has no failed entry to resolve on {plan} (latest is {disposition})")
+    # a superseded resolution is failed because of the later failure it did not name: resolve that one
+    superseded = target.get("superseded_by_failure")
+    failed_ts = superseded if isinstance(superseded, str) and superseded else _lib.review_ts(target)
+
+    if by != "operator":
+        resolver_entry = reviews.get(by)
+        resolver_disposition = _lib.review_disposition(resolver_entry)
+        if resolver_disposition != "passed":
+            raise _lib.FrameworkError(
+                f"resolver {by!r} latest entry on {plan} is {resolver_disposition}; "
+                "the resolver must have run after the failure and passed"
+            )
+        resolver_ts = _lib.review_ts(resolver_entry)
+        if resolver_ts < failed_ts:
+            raise _lib.FrameworkError(
+                f"resolver {by!r} passed at {resolver_ts}, before the failure at {failed_ts}; "
+                "a resolver must have run after the failure"
+            )
+    if ts < failed_ts:
+        raise _lib.FrameworkError(
+            f"ts {ts!r} is earlier than the failed entry's {failed_ts!r}; the resolution must become the latest entry"
+        )
+    entry["resolves_ts"] = failed_ts
     return entry
 
 
@@ -62,7 +197,11 @@ def main() -> int:
     args = parse_args(sys.argv[1:])
     root = _lib.repo_root()
     cfg = _lib.load_config(root)
-    stored = _lib.review_log_append(root, cfg, build_entry(args))
+    entry = build_entry(args)
+    _entries, bad = _lib.review_log_scan(root, cfg)
+    if bad:
+        raise _lib.FrameworkError(_lib.unreadable_message(bad), code=2, unreadable=len(bad), lines=bad)
+    stored = _lib.review_log_append(root, cfg, validate_entry(root, cfg, entry))
     return _lib.print_json(stored)
 
 

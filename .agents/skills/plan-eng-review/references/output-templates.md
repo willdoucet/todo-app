@@ -85,7 +85,7 @@ together are a **CRITICAL GAP**; count them for the completion summary and the r
   +====================================================================+
 ```
 
-`UNRESOLVED`, `CRITICAL_GAPS`, and `MODE` feed the review log.
+`UNRESOLVED`, `CRITICAL_GAPS_FOUND`, `CRITICAL_GAPS_OPEN`, and `MODE` feed the review log.
 
 ## Completion summary, epic variant
 
@@ -110,5 +110,6 @@ together are a **CRITICAL GAP**; count them for the completion summary and the r
   +====================================================================+
 ```
 
-For epics, `CRITICAL_GAPS` in the review log is the number of shared things without a
-contract plus the number of boundaries without a rollback.
+For epics, `CRITICAL_GAPS_FOUND` in the review log is the number of shared things without a
+contract plus the number of boundaries without a rollback, and `CRITICAL_GAPS_OPEN` how many
+of those the review left unresolved.

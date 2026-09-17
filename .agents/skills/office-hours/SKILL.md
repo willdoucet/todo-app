@@ -486,12 +486,12 @@ On DONE or DONE_WITH_CONCERNS run the sync block from `_shared/obsidian-sync.md`
 `$REGISTRY_KEY` (the epic file and `epic:$EPIC_SLUG` in epic mode). Then log the session:
 
 ```bash
-"$BIN/review-log" --skill office-hours --status clean \
+"$BIN/review-log" --skill office-hours --status "$STATUS" \
   --plan "$(basename "$_PLAN_FILE")" --field mode="$MODE" --field plan_kind="$PLAN_KIND"
 ```
 
-Use `issues_open` with `--field concerns=N` on DONE_WITH_CONCERNS. Close with the change
-description from the completion protocol, then:
+`STATUS` is `clean`, or `issues_open` with `--field concerns=N` on DONE_WITH_CONCERNS (words:
+`_shared/obsidian-sync.md` → Review log; this row is shown but never gates). Close with the change description, then:
 
 ```bash
 "$BIN/workflow-state" --dashboard

@@ -18,6 +18,11 @@ After a review or a design session, edit `_PLAN_FILE` to fold in every decision 
 Every plan carries a `## REVIEW REPORT` section at its end. Office-hours writes the placeholder;
 each review updates its own row with a one-line findings summary.
 
+**The Status cell carries the same word the review logged** (`clean`, `issues_open`, …). A row
+never reads cleaner than its log entry. A `resolved` record does not rewrite the original
+status: it adds to that row the resolver and where each item was closed, for example
+`issues_open (2026-09-12) · resolved by /plan-eng-review, 2026-09-16: item 2, break-glass entry`.
+
 ```markdown
 ## REVIEW REPORT
 
@@ -28,6 +33,7 @@ each review updates its own row with a one-line findings summary.
 | Adversarial Review | `/plan-adversarial-review` | Red-team pass, prefer another model | — | — |
 | Design Review | `/plan-design-review` | UI and UX | — | — |
 | Implementation Review | `/review-implementation` | First code review (required) | — | — |
+| Adversarial subagent | inside `/review-implementation` | Fresh-context pass on the diff | — | — |
 | QA | `/qa` | Browser verification | — | — |
 | Design Audit | `/design-review` | Live-site grade | — | — |
 | Final Review | `/final-review` | Second opinion (required) | — | — |

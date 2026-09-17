@@ -358,8 +358,10 @@ look; a Corrections Log row if the user corrected you. When `modules.design_sync
   --field found=N --field fixed=N --field deferred=N --field model=<your model, when known>
 ```
 
-`STATUS` is `done` when no finding was made or every finding was verified fixed; otherwise
-`issues_found`. Grades are the final ones.
+`STATUS` is `clean` when no finding was made, or every finding was verified fixed or deferred to
+TODOS.md with the user's approval (including the copy and asset findings this audit defers by
+design; `deferred=N` counts them); otherwise `issues_open`. The words are defined once in
+`_shared/obsidian-sync.md` → Review log. Grades are the final ones.
 
 Update the `Design Audit` row of `## REVIEW REPORT` in `$_PLAN_FILE` per
 `_shared/plan-footer.md`: status, grades before → after, one-line summary. Edit in place;

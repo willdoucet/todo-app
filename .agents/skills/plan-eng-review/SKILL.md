@@ -92,6 +92,17 @@ Follow the preamble, then plan discovery including the metadata read. Then:
 
 If on the base branch, stop and ask (one question) which branch holds the plan; re-run `ctx`.
 
+Then read the earlier reviews of this plan:
+
+```bash
+"$BIN/review-read"
+```
+
+For every earlier review whose disposition is `failed`, read its open items and decide as you
+go: if this review closes one, say where in the plan you closed it and note it for completion;
+if it stays open, carry it forward in your own summary so the next review sees it. Never leave
+a failed review unmentioned.
+
 Read `$DOCS_DIR/REVIEW_CHECKLIST.md`: it holds the project's concrete checks for the
 categories the sections below name. Read `$DOCS_DIR/development-commands.md` for the test
 layers and their commands; the test review refers to them by name.
@@ -303,13 +314,19 @@ Sync state per `_shared/obsidian-sync.md` with `STATUS_VALUE=eng-reviewed` and
 
 ```bash
 "$BIN/review-log" --skill plan-eng-review --status "$STATUS" \
-  --field mode="$MODE" --field unresolved="$UNRESOLVED" --field critical_gaps="$CRITICAL_GAPS" \
+  --field mode="$MODE" --field unresolved="$UNRESOLVED" \
+  --field critical_gaps_found="$CRITICAL_GAPS_FOUND" --field critical_gaps_open="$CRITICAL_GAPS_OPEN" \
   --field model="<your model>" ${PLAN_KIND:+--field plan_kind="$PLAN_KIND"}
 ```
 
-`STATUS` is `clean` when unresolved decisions and critical gaps are both zero, otherwise
-`issues_open`. `MODE` is `FULL_REVIEW` or `SCOPE_REDUCED`. The `model` field lets the
-adversarial review choose a different model family.
+`STATUS` is `clean` when unresolved decisions and `critical_gaps_open` are both zero, otherwise
+`issues_open`. The words are defined once in `_shared/obsidian-sync.md` → Review log.
+`critical_gaps_found` is how many this review found, `critical_gaps_open` how many it leaves
+open. `MODE` is `FULL_REVIEW` or `SCOPE_REDUCED`. The `model` field lets the adversarial review
+choose a different model family. Then, per `_shared/dashboard.md` → "When the next step names a review that ran with issues
+open", log one `resolved` entry for each earlier failed review this review closed, **after**
+your own entry above (the resolver's latest entry must be passed and not earlier than the
+failure).
 
 Report `DONE` or `DONE_WITH_CONCERNS` with the change description from the completion
 protocol. `BLOCKED` and `NEEDS_CONTEXT` set `implementation_status` and `reason` only. If the

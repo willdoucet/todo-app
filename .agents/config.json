@@ -23,6 +23,7 @@
       "CLAUDE.md",
       "README.md",
       ".gitignore",
+      ".gitattributes",
       "**/*.png",
       "**/*.jpg",
       "**/*.svg",
@@ -161,23 +162,23 @@
         "section": "CI/CD Pipeline"
       },
       {
+        "doc": "PRD.md",
         "paths": [
           "backend/app/main.py",
           "backend/app/auth/**"
         ],
-        "doc": "PRD.md",
         "section": "5.7 User Authentication"
       },
       {
+        "doc": "FRONTEND_STRUCTURE.md",
         "paths": [
           "frontend/src/constants/**"
         ],
-        "doc": "FRONTEND_STRUCTURE.md",
         "section": "Directory Overview"
       }
     ]
   },
-  "framework_version": "1.0.0",
+  "framework_version": "1.1.0",
   "layout": {
     "backend_dir": "backend",
     "frontend_dir": "frontend"
