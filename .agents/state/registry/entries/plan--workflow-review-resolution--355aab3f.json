@@ -1,12 +1,15 @@
 {
   "branch": "workflow-review-resolution",
+  "commit": "2d2b4e9",
+  "completed": "2026-09-16",
   "created_at": "2026-09-15T20:20:40Z",
-  "implementation_status": "ready-for-review",
+  "implementation_status": "shipped",
   "key": "plan:workflow-review-resolution",
   "kind": "plan",
   "note_path": null,
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/workflow-review-resolution/workflow-review-resolution-plan-20260915-131802.md",
+  "pr": "https://github.com/willdoucet/todo-app/pull/53",
   "reason": "Final review 2026-09-17 clean; framework PR #4 on main.",
   "registry_version": 3,
   "review_status": [
@@ -17,6 +20,6 @@
   ],
   "task_id": null,
   "title": "Optional to run, not optional to resolve: review-status vocabulary and resolution gate",
-  "updated_at": "2026-09-17T03:45:57Z",
-  "workflow_status": "ready-for-review"
+  "updated_at": "2026-09-17T03:58:18Z",
+  "workflow_status": "shipped"
 }

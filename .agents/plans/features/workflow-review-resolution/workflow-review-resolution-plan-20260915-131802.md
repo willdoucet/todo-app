@@ -4,11 +4,13 @@ plan_mode: "feature"
 registry_key: "plan:workflow-review-resolution"
 ui_scope: false
 risk_tags: ["infra", "security"]
-workflow_status: "ready-for-review"
+workflow_status: "shipped"
 review_status: ["eng-reviewed", "adversarial-reviewed", "impl-reviewed", "final-reviewed"]
-implementation_status: "ready-for-review"
+implementation_status: "shipped"
+completed: "2026-09-16"
 reason: "Final review 2026-09-17 clean: grok/grok-4.6 vs impl claude-code/Fable 5.1; 13 adversarial findings, 11 auto-fixed, 2 skipped as decided. Framework follow-up PR #4 merged (0cda9ef + 91e27b9); this worktree matches origin/main. Host 396, framework 428, doc-guard clean."
-updated_at: "2026-09-17T03:45:57Z"
+updated_at: "2026-09-17T03:58:18Z"
+pr: "https://github.com/willdoucet/todo-app/pull/53"
 ---
 # Design: Optional to run, not optional to resolve — one review-status vocabulary and a resolution gate
 
