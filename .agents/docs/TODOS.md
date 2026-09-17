@@ -311,6 +311,46 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Priority:** P2
 **Depends on:** M5 PR1 merged (so the protected-route boundary is live).
 
+## P3 — Align compose and CI Postgres with production (16 → 17)
+**What:** Bump `backend/docker-compose.yml`'s `db` service and both `postgres:16` service containers in `.github/workflows/test.yml` (`backend-tests`, `migration-upgrade`) to the major version production runs, and keep TECH_STACK's "Database" row in step.
+**Why:** Production is unmanaged Fly Postgres Flex on `flyio/postgres-flex:17.2` (an update to 17.7 is available); dev and CI run 16, and TECH_STACK said "Managed PostgreSQL 16" until M8 PR1a corrected it. The `migration-upgrade` job therefore proves the Alembic chain on a different major than the one it runs against in production. Low risk today (plain DDL), but it is exactly the class of quiet drift M8 exists to remove, and the backup-restore drill's own re-run trigger is "after a Postgres major-version upgrade".
+**Pros:** (a) Two image-tag edits; (b) CI proves migrations on the real major; (c) removes a surprise the next time a migration uses a 17-only feature or a 16-only behavior.
+**Cons:** (a) Every contributor re-initializes the local `db` volume; (b) anyone restoring a production dump locally needs a matching `pg_dump`/`pg_restore` major; (c) the visual-test profile's `db` is the same service, so it moves too.
+**Context:** Found by `/plan-eng-review` of M8 (`prod-launch-release`) on 2026-09-12 while checking the drill: `fly status -a mealy-app-prod-db` reports `flyio/postgres-flex:17.2`; `backend/docker-compose.yml` and `.github/workflows/test.yml` pin `postgres:16`. Where to start: change the three image tags, run `docker-compose down -v && docker-compose up --build`, run the full backend suite and the `migration-upgrade` sequence from development-commands.md, then update TECH_STACK → Infrastructure → Docker Services and Production Deployment. Decide at the same time whether to take Fly's 17.7 image update (`fly image update -a mealy-app-prod-db`), which is itself a drill re-run trigger.
+**Effort:** S (human: ~1 h / CC: ~15 min)
+**Priority:** P3
+**Depends on:** Nothing. Best done right after M8 ships, before the next migration.
+
+## P3 — `ICloudSettings` consumes the server-derived job staleness instead of its own 30-minute rule
+**What:** Replace `SYNC_STALE_AFTER_MS` (30 min, "three missed 10-minute cycles") in `frontend/src/components/settings/ICloudSettings.jsx` with the per-task `stale` flag `/healthz.jobs` reports for `app.tasks.sync_all_icloud_integrations` and `app.tasks.sync_all_reminders`, through the shared freshness module M8 item 15 extracts.
+**Why:** After M8 PR1b the server derives "overdue" per task from `celery_app.conf.beat_schedule` (three times each task's own interval). The iCloud card still carries a second, hardcoded definition of the same idea, so the two dots on one Settings page can disagree the day the schedule changes, and the freshness bug class logged 2026-09-11 would have two places to recur.
+**Pros:** (a) One definition of overdue; (b) deletes a constant and its comment; (c) the iCloud line becomes a plain consumer of the module item 15 creates, so the M8 extraction is completed rather than half-done.
+**Cons:** (a) The iCloud line then depends on the `/healthz` poll as well as the integrations query, so "can't check" needs a sensible fallback (keep the local rule as the fallback when `/healthz` is unreachable); (b) small enough that it is tempting to fold into PR1b, which is already the gated UI change.
+**Context:** Found by `/plan-eng-review` of M8 (`prod-launch-release`) on 2026-09-12, Section 2 (DRY). Item 15's per-task thresholds and five states are specified in the plan's item 15 and open question 6; the shared module lands in `frontend/src/lib/` and `frontend/src/components/shared/` in PR1b. Where to start: read the `jobs` rows from the same `useQuery(['healthz'])` the jobs indicator uses, look up the two sync task names, and pass `stale` into the shared line; keep `parseServerTime` for the "Last synced N min ago" text, which is still the integration's own timestamp.
+**Effort:** S (human: ~1 h / CC: ~15 min)
+**Priority:** P3
+**Depends on:** M8 PR1b shipped (`/healthz.jobs` and the shared freshness module exist).
+
+## P3 — Small-text contrast: `text-text-muted` and `terracotta-600` text fail WCAG AA
+**What:** Audit every `text-text-muted` use (190 today) and every `text-terracotta-600` used as link or button text; move the ones that carry meaning (timestamps, hints a user acts on, links) to `text-text-secondary` and `text-terracotta-700`, or decide to darken the two tokens in `frontend/src/index.css` instead of swapping call sites.
+**Why:** Measured during the M8 design review (WCAG relative luminance, 2026-09-14): `text-muted` #9A9287 on `card-bg` #FFFDFB is 3.03:1; `terracotta-600` #C4613F is 4.04:1 on `card-bg` and 3.61:1 on `warm-beige`. AA needs 4.5:1 for `text-sm`/`text-xs`, which is where both are used. `FRONTEND_GUIDELINES.md` §9 already says "never use `text-muted` for critical information", and nothing enforces it. The passing replacements are `text-secondary` #6B645A (5.76:1) and `terracotta-700` #A34E32 (5.01:1 on `warm-beige`).
+**Pros:** (a) Readable secondary text for everyone, including the kitchen tablet in daylight; (b) turns a guideline sentence into a checked rule; (c) M8 already moved the Background jobs card and the iCloud "Last synced" line, so the pattern exists.
+**Cons:** (a) Touches roughly 50 files; (b) darkening muted text flattens the page's hierarchy if applied indiscriminately — decorative and placeholder text can stay muted; (c) the mealboard visual-regression baselines need a refresh if pixel assertions exist by then.
+**Context:** Found by `/plan-design-review` of M8 (`prod-launch-release`), pass 6. Where to start: `grep -rn "text-text-muted\|text-terracotta-600" frontend/src`, classify each use as meaningful or decorative, and decide token-versus-call-site in one pass (a token change is one line but moves every placeholder too). Add a note to REVIEW_CHECKLIST → Tailwind CSS → Styling & accessibility so new code does not reintroduce it. `index.css` and `FRONTEND_GUIDELINES.md` are design-watched files; run `.agents/bin/design-sync-mark` after re-syncing the design tool.
+**Effort:** M (human: ~1 day / CC: ~2 h)
+**Priority:** P3
+**Depends on:** M8 PR1b shipped (it establishes the `text-secondary` status-text precedent).
+
+## P3 — Show "iCloud sync is behind" on the Calendar page, not only in Settings
+**What:** When `/healthz.jobs` reports `app.tasks.sync_all_icloud_integrations` or `app.tasks.sync_all_reminders` stale, render the same one-line alert M8 adds under the Settings title at the top of the Calendar page, linking to Settings' Background jobs section — only when the household has an iCloud integration connected. The two cleanup jobs never surface there.
+**Why:** M8's storyboard (item 15a, step 2) has a parent open Settings "because the calendar looks out of date", but the calendar is where they notice it, and nothing there says why. The Settings card answers the question only for someone who already thinks to look in Settings, which is the 103-day outage's shape one level down.
+**Pros:** (a) Reuses `BackgroundJobsAlert` and `useBackgroundJobs` from M8 PR1b unchanged apart from a job filter; (b) the message appears where the symptom is; (c) no new data or endpoint.
+**Cons:** (a) Adds the 30-second `/healthz` poll to the most-used page (cheap, but it is a request every 30 s while the calendar is open); (b) needs the integrations list to know whether iCloud is connected, so a household without iCloud never sees a sync warning; (c) a second place the alert can appear means copy and states must stay identical — derive both from `deriveJobsState`.
+**Context:** Deferred by `/plan-design-review` of M8 (`prod-launch-release`), pass 7 and step 10. M8 item 15's scope is Settings (CEO review, candidate 4); the daily `ops-check` email remains the operator's between-release detector either way. Where to start: `frontend/src/components/calendar/CalendarPage.jsx`, call `useBackgroundJobs`, filter rows to the two sync task names, and render the alert with a link to `/settings#background-jobs` (focus the section `h2` on arrival, as Settings' own link does).
+**Effort:** S (human: ~half day / CC: ~45 min)
+**Priority:** P3
+**Depends on:** M8 PR1b shipped (`BackgroundJobsAlert`, `useBackgroundJobs`, `/healthz.jobs`).
+
 ---
 
 # Completed

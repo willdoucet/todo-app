@@ -33,7 +33,7 @@
 
 ### Project Status
 
-- **Current state:** Deployed at `mealy.dev` (frontend) / `api.mealy.dev` (API) since 2026-05-01, behind a single shared household login. v1 productionization is 6 of 8 milestones done: M7 (private object storage) in review, M8 (launch runbook) next — see [IMPLEMENTATION_PLAN.md → Phase 2](./IMPLEMENTATION_PLAN.md).
+- **Current state:** Deployed at `mealy.dev` (frontend) / `api.mealy.dev` (API) since 2026-05-01, behind a single shared household login. v1 productionization is 7 of 8 milestones done (6 shipped, 1 subsumed): M7 (private object storage) shipped 2026-09-11, M8 (launch release) in planning — see [IMPLEMENTATION_PLAN.md → Phase 2](./IMPLEMENTATION_PLAN.md).
 - **Target state:** v1 launch complete; a second household gets its own deployment (single-tenant by design).
 - **Tech stack:** FastAPI backend, React 19 frontend, PostgreSQL database — on Fly.io, Vercel, Upstash Redis and Cloudflare R2 ([TECH_STACK.md](./TECH_STACK.md))
 

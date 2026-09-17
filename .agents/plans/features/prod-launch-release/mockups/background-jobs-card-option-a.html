@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings · Background jobs · Option A (mockup)</title>
+<!--
+  Design-review mockup for M8 item 15a (prod-launch-release plan).
+  Option A: Headline, what it means, then all four jobs with their ages, in every state that has a reading.
+  Everything except the "Background jobs" card and the top alert reproduces the existing
+  Settings page (FamilyMembersPage.jsx) with the project's tokens (FRONTEND_GUIDELINES.md).
+  The floating panel at the bottom right is mockup chrome, not part of the design.
+  Breakpoints use container queries on .frame so the "Phone 375" preview is exact.
+-->
+<style>
+:root{
+  --page-from:#FAF7F2; --page-to:#F5F0E8; --rail:#EBE5DA; --card:#FFFDFB; --border:#E8E2D9; --panel:#F5F0E8;
+  --tp:#3D3833; --ts:#6B645A; --tm:#9A9287; --label-green:#5D8A61;
+  --accent:#D97452; --accent-hover:#C4613F; --link:#A34E32; --ring:#D97452;
+  --active-bg:#FFE8DF; --active-fg:#C4613F; --hover-bg:#F5F0E8;
+  --btn2-bg:#EBE5DA; --btn2-fg:#6B645A; --input-bg:#FFFFFF; --input-border:#E8E2D9;
+  --bad-text:#DC2626; --alert-text:#B91C1C; --dot-ok:#6B9A70; --dot-bad:#EF4444; --dot-unknown:#9A9287;
+  --pill-ok-bg:#DCFCE7; --pill-ok-fg:#15803D; --danger:#DC2626; --dashed:#F0A48C;
+  --header-bg:rgba(255,253,251,.9);
+}
+.dark{
+  --page-from:#111827; --page-to:#1F2937; --rail:#1F2937; --card:#1F2937; --border:#374151; --panel:rgba(55,65,81,.35);
+  --tp:#F3F4F6; --ts:#9CA3AF; --tm:#6B7280; --label-green:#9CA3AF;
+  --accent:#2563EB; --accent-hover:#1D4ED8; --link:#60A5FA; --ring:#3B82F6;
+  --active-bg:#2563EB; --active-fg:#FFFFFF; --hover-bg:#1F2937;
+  --btn2-bg:#374151; --btn2-fg:#D1D5DB; --input-bg:#374151; --input-border:#4B5563;
+  --bad-text:#F87171; --alert-text:#F87171; --dot-ok:#4ADE80; --dot-bad:#F87171; --dot-unknown:#6B7280;
+  --pill-ok-bg:rgba(20,83,45,.3); --pill-ok-fg:#4ADE80; --danger:#F87171; --dashed:#1D4ED8;
+  --header-bg:rgba(17,24,39,.8);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Roboto','Oxygen','Ubuntu','Cantarell','Fira Sans','Droid Sans','Helvetica Neue',sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;background:#CFC9BF}
+body.phone{padding:24px 0 160px}
+.frame{container-type:inline-size;margin:0 auto}
+body.phone .frame{width:375px;box-shadow:0 12px 40px rgba(0,0,0,.28)}
+.app{min-height:100vh;background:linear-gradient(to bottom right,var(--page-from),var(--page-to));color:var(--tp)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+button,input,select{font:inherit}
+
+/* ---------- app chrome (existing) ---------- */
+.rail{display:none;position:fixed;left:0;top:0;bottom:0;width:80px;background:var(--rail);border-right:1px solid var(--border);flex-direction:column;align-items:center;padding:32px 0;gap:16px;z-index:20}
+.rail a{display:flex;flex-direction:column;align-items:center;justify-content:center;width:56px;height:56px;border-radius:12px;color:var(--ts);text-decoration:none;font-size:9px;gap:2px}
+.rail a svg{width:24px;height:24px}
+.rail a.active{background:var(--active-bg);color:var(--active-fg);box-shadow:0 10px 15px -3px rgba(0,0,0,.1)}
+.mhead{position:sticky;top:0;z-index:30;height:64px;background:var(--header-bg);backdrop-filter:blur(4px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 16px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.mhead button{padding:8px;border:0;background:none;color:var(--ts);border-radius:8px;display:flex}
+.mhead span{font-weight:600;color:var(--tp)}
+main{max-width:64rem;margin:0 auto;padding:24px 16px}
+.pagehead{margin-bottom:24px}
+h1{font-size:1.25rem;line-height:1.75rem;font-weight:700;letter-spacing:-.025em;margin:0;color:var(--tp)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px}
+.card + .card{margin-top:24px}
+.h2{font-size:1.125rem;line-height:1.75rem;font-weight:600;margin:0 0 16px;color:var(--tp)}
+.h2.xl{font-size:1.25rem;margin-bottom:24px}
+.h3{font-size:.875rem;font-weight:600;margin:0 0 12px;color:var(--tp)}
+.desc{font-size:.875rem;line-height:1.25rem;color:var(--tm);margin:0 0 12px}
+.fm{max-width:32rem;margin:0 auto}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:24px;display:flex;gap:12px;align-items:center}
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:9999px;color:#fff;font-weight:600;flex-shrink:0}
+.avatar.add{background:var(--btn2-bg);color:var(--tm)}
+.input,.select{width:100%;padding:8px 12px;border:1px solid var(--input-border);border-radius:8px;background:var(--input-bg);color:var(--tp);font-size:.875rem}
+.input::placeholder{color:var(--tm)}
+.btn-primary{padding:8px 16px;background:var(--accent);color:#fff;border:0;border-radius:8px;font-weight:500;font-size:.875rem;white-space:nowrap}
+.btn-secondary{padding:10px 16px;background:var(--btn2-bg);color:var(--btn2-fg);border:0;border-radius:8px;font-size:1rem;width:100%}
+.eyebrow{font-size:.75rem;font-weight:500;color:var(--label-green);text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px}
+.members{display:grid;gap:8px}
+.member{display:flex;align-items:center;gap:12px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:.9375rem}
+.field-label{display:block;font-size:.875rem;font-weight:500;margin-bottom:4px;color:var(--tp)}
+.stack-3>*+*{margin-top:12px}
+.hint{font-size:.75rem;color:var(--tm);margin:4px 0 0}
+.integration{border:1px solid var(--border);border-radius:12px;padding:16px}
+.int-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.int-actions{display:flex;gap:8px;flex-shrink:0}
+.int-actions button{font-size:.75rem;padding:6px 12px;border:0;background:none;border-radius:8px;font-weight:500;color:var(--link)}
+.int-actions button.danger{color:var(--danger)}
+.meta{font-size:.75rem;color:var(--tm);margin:0}
+.line{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.pill{font-size:.75rem;padding:2px 8px;border-radius:9999px;font-weight:500;background:var(--pill-ok-bg);color:var(--pill-ok-fg)}
+.email{font-size:.875rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.divider{border-top:1px solid var(--border);margin-top:12px;padding-top:12px}
+.connect{margin-top:16px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:10px 16px;font-size:.875rem;font-weight:500;color:var(--link);background:none;border:1px dashed var(--dashed);border-radius:12px}
+.lastsync{font-size:.75rem;margin:2px 0 0;display:flex;align-items:center;gap:6px;color:var(--ts)}
+.lastsync.bad{color:var(--bad-text)}
+.meal-grid{display:grid;gap:24px}
+.slot{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:.875rem}
+.slot i{width:12px;height:12px;border-radius:4px;display:inline-block}
+.slot small{margin-left:auto;color:var(--tm)}
+.preview{border:1px solid var(--border);border-radius:12px;padding:12px;font-size:.75rem;color:var(--tm);min-height:120px}
+
+/* ---------- NEW: top alert (15a) ---------- */
+.dot{display:inline-block;width:6px;height:6px;border-radius:9999px;flex-shrink:0;margin-top:7px}
+.dot.ok{background:var(--dot-ok)} .dot.bad{background:var(--dot-bad)} .dot.unknown{background:var(--dot-unknown)}
+/* inline text, not flex: wraps like a sentence; the link's vertical padding enlarges its hit
+   area to 44px on phones without changing the line height */
+.alert{margin:8px 0 0;font-size:.875rem;line-height:1.25rem;color:var(--alert-text)}
+.alert .dot{vertical-align:middle;margin:0 6px 2px 0}
+.alert a{padding:12px 0;white-space:nowrap;font-weight:500;color:var(--link);text-decoration:underline;text-underline-offset:2px;border-radius:4px}
+.alert a:hover{text-decoration-thickness:2px}
+.alert a:focus-visible,.toggle:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ring)}
+
+/* ---------- NEW: Background jobs card (15a) ---------- */
+.jobs-h2{scroll-margin-top:80px}
+.jobs-h2:focus{outline:none}
+.jobs-desc{font-size:.875rem;line-height:1.25rem;color:var(--ts);margin:0 0 12px;max-width:65ch}
+.headline{display:flex;align-items:flex-start;gap:6px;font-size:.875rem;line-height:1.25rem;font-weight:500;color:var(--tp);margin:0}
+.headline.bad{color:var(--bad-text)}
+.cons{font-size:.875rem;line-height:1.25rem;color:var(--ts);margin:4px 0 0;max-width:65ch}
+.rows{margin:16px 0 0;display:grid;row-gap:12px}
+.row{margin:0}
+.row dt{font-size:.875rem;line-height:1.25rem;color:var(--tp)}
+.row dd{margin:0;font-size:.875rem;line-height:1.25rem;color:var(--ts)}
+.row dd.bad{color:var(--bad-text)}
+.foot{font-size:.75rem;line-height:1rem;color:var(--ts);margin:12px 0 0}
+.others{font-size:.875rem;line-height:1.25rem;color:var(--ts);margin:12px 0 0}
+.toggle{margin:12px 0 0 -4px;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 4px;font-size:.875rem;font-weight:500;color:var(--link);background:none;border:0;border-radius:8px;cursor:pointer}
+.toggle svg{width:16px;height:16px}
+.toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+
+@container (min-width:640px){
+  .app{padding-left:80px}
+  .rail{display:flex}
+  .mhead{display:none}
+  main{padding:32px 24px}
+  .pagehead{margin-bottom:32px}
+  h1{font-size:1.5rem;line-height:2rem}
+  .btn-secondary{width:auto}
+  .alert a{padding:0}
+  .jobs-h2{scroll-margin-top:24px}
+  .rows{row-gap:8px}
+  .row{display:grid;grid-template-columns:11rem 1fr;column-gap:16px}
+  .toggle{min-height:32px}
+}
+@container (min-width:1024px){
+  main{padding:32px}
+  h1{font-size:1.875rem;line-height:2.25rem}
+  .meal-grid{grid-template-columns:1fr 240px}
+}
+
+/* ---------- mockup chrome (not part of the design) ---------- */
+.mock{position:fixed;right:16px;bottom:16px;z-index:100;width:300px;background:#1C1A17;color:#F5F0E8;border-radius:12px;padding:12px 14px;font-size:12px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.mock b{font-size:13px}
+.mock p{margin:4px 0 8px;color:#CFC9BF}
+.mock label{display:flex;align-items:center;gap:6px;margin-top:6px}
+.mock select{width:100%;margin-top:4px;padding:4px;border-radius:6px;border:0;font-size:12px}
+.mock .seg{display:flex;gap:6px;margin-top:6px}
+.mock .seg button{flex:1;padding:4px;border-radius:6px;border:1px solid #57524A;background:#2A2723;color:#F5F0E8;font-size:12px;cursor:pointer}
+.mock .seg button[aria-pressed="true"]{background:#F5F0E8;color:#1C1A17}
+.mock .say{margin-top:8px;padding:6px 8px;border-radius:6px;background:#2A2723;color:#CFC9BF;min-height:30px}
+.mock .note{margin-top:6px;color:#8F887D;font-size:11px}
+</style>
+</head>
+<body>
+<div class="frame">
+<div class="app" id="app">
+  <aside class="rail" aria-label="Primary">
+    <a href="#"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>Dashboard</a>
+    <a href="#"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Lists</a>
+    <a href="#"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Routines</a>
+    <a href="#"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z"/></svg>Mealboard</a>
+    <a href="#" class="active" aria-current="page"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.8 3-1.8 3.4 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001 2.5c1.8.5 1.8 3 0 3.5a1.7 1.7 0 00-1 2.5c.9 1.6-.9 3.3-2.4 2.4a1.7 1.7 0 00-2.6 1.1c-.4 1.8-3 1.8-3.4 0a1.7 1.7 0 00-2.6-1.1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 00-1-2.5c-1.8-.5-1.8-3 0-3.5a1.7 1.7 0 001-2.5c-.9-1.6.9-3.3 2.4-2.4a1.7 1.7 0 002.6-1.1z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Settings</a>
+  </aside>
+  <header class="mhead">
+    <button type="button" aria-label="Open menu"><svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <span>Family Planner</span>
+  </header>
+
+  <main>
+    <header class="pagehead">
+      <h1>Settings</h1>
+      <div id="alert-slot"></div>
+    </header>
+
+    <div class="card">
+      <div class="fm">
+        <h2 class="h2 xl">Family Members</h2>
+        <div class="panel">
+          <span class="avatar add" aria-hidden="true">+</span>
+          <input class="input" placeholder="Add a family member...">
+          <button class="btn-primary" type="button">Add</button>
+        </div>
+        <p class="eyebrow">Members</p>
+        <div class="members">
+          <div class="member"><span class="avatar" style="background:#D4695A">D</span>Dana</div>
+          <div class="member"><span class="avatar" style="background:#5A80B0">S</span>Sam</div>
+          <div class="member"><span class="avatar" style="background:#5E9E6B">M</span>Mia</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="h2">Timezone</h2>
+      <p class="desc">Synced calendar events will be displayed in this timezone.</p>
+      <div class="stack-3">
+        <div>
+          <label class="field-label" for="tz">Timezone</label>
+          <input id="tz" class="input" placeholder="Search timezones..." style="margin-bottom:8px">
+          <select class="select" aria-label="Timezone"><option>America/Los_Angeles</option></select>
+          <p class="hint">Current: <strong>America/Los_Angeles</strong></p>
+        </div>
+        <button class="btn-primary" type="button">Save Timezone</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="h2">Calendar Integrations</h2>
+      <div class="integration">
+        <div class="int-top">
+          <div style="min-width:0;flex:1">
+            <div class="line"><span class="email">dana.family@icloud.com</span></div>
+            <div class="line"><span class="meta">Calendar:</span><span class="pill">Active</span></div>
+            <p class="meta">Dana · 2 calendars</p>
+            <p class="lastsync" id="cal-sync"></p>
+          </div>
+          <div class="int-actions"><button type="button">Sync Now</button><button type="button" class="danger">Disconnect</button></div>
+        </div>
+        <div class="divider">
+          <div class="int-top">
+            <div style="flex:1">
+              <div class="line"><span class="meta">Reminders:</span><span class="pill">Active</span></div>
+              <p class="meta">3 lists</p>
+              <p class="lastsync" id="rem-sync"></p>
+            </div>
+            <div class="int-actions"><button type="button">Sync Now</button><button type="button" class="danger">Disconnect</button></div>
+          </div>
+        </div>
+      </div>
+      <button class="connect" type="button">+ Connect iCloud Calendar</button>
+    </div>
+
+    <div class="card">
+      <h2 class="h2">Mealboard</h2>
+      <div class="meal-grid">
+        <div>
+          <h3 class="h3">Meal slots</h3>
+          <div class="members">
+            <div class="slot"><i style="background:#BFA04A"></i>Breakfast<small>7:30 AM</small></div>
+            <div class="slot"><i style="background:#5E9E6B"></i>Lunch<small>12:00 PM</small></div>
+            <div class="slot"><i style="background:#D4695A"></i>Dinner<small>6:00 PM</small></div>
+          </div>
+        </div>
+        <div><h3 class="h3">Day preview</h3><div class="preview">Breakfast · Lunch · Dinner</div></div>
+      </div>
+    </div>
+
+    <section class="card" aria-labelledby="background-jobs" id="jobs-card">
+      <h2 class="h2 jobs-h2" id="background-jobs" tabindex="-1">Background jobs</h2>
+      <p class="jobs-desc">Work the app does on its own: iCloud sync and clearing out deleted items and unused photos.</p>
+      <div id="jobs-body"></div>
+      <p class="sr-only" role="status" id="jobs-status"></p>
+    </section>
+
+    <div class="card">
+      <h2 class="h2">Account</h2>
+      <button class="btn-secondary" type="button">Sign out</button>
+    </div>
+  </main>
+</div>
+</div>
+
+<aside class="mock" aria-label="Mockup controls">
+  <b>Option A · Always-visible list</b>
+  <p>Headline, what it means, then all four jobs with their ages, in every state that has a reading.</p>
+  <label for="state" style="display:block">State (simulates a 30 s poll)</label>
+  <select id="state"></select>
+  <label><input type="checkbox" id="dark"> Dark mode</label>
+  <div class="seg" role="group" aria-label="Viewport">
+    <button type="button" id="w-desk" aria-pressed="true">Desktop</button>
+    <button type="button" id="w-phone" aria-pressed="false">Phone 375</button>
+  </div>
+  <div class="say" id="say">Screen reader: (nothing announced on first reading)</div>
+  <div class="note">Controls are mockup chrome, not part of the design.</div>
+</aside>
+
+<script>
+const JOBS = [
+  { key: 'cal', label: 'iCloud calendar sync', every: 'every 10 min', cons: 'If you use iCloud sync, new or changed events may not show up yet.' },
+  { key: 'rem', label: 'iCloud reminders sync', every: 'every 10 min', cons: 'If you use iCloud sync, reminder changes may not sync yet.' },
+  { key: 'del', label: 'Deleted item cleanup', every: 'every hour', cons: "Nothing you'll notice yet." },
+  { key: 'pho', label: 'Unused photo cleanup', every: 'every hour', cons: "Nothing you'll notice yet." },
+]
+const fresh = (age) => ({ age, stale: false })
+const stale = (age) => ({ age, stale: true })
+const never = { age: null, stale: false }
+const failing = (age) => ({ age, stale: true, err: true })
+const rowsOf = (cal, rem, del, pho) => ({ cal, rem, del, pho })
+
+// [id, label, reading]; ages are minutes since last_success_at
+const STATES = [
+  ['running', '6 · Running', { rows: rowsOf(fresh(4), fresh(4), fresh(32), fresh(32)) }],
+  ['refresh', "6 · Running, couldn't refresh (2B)", { rows: rowsOf(fresh(5), fresh(5), fresh(33), fresh(33)), footnote: true }],
+  ['behind1', '4 · Behind, one job', { rows: rowsOf(fresh(4), fresh(4), fresh(32), stale(184)) }],
+  ['behind2', '4 · Behind, two jobs', { rows: rowsOf(stale(52), fresh(6), fresh(32), stale(184)) }],
+  ['stopped', '3 · Stopped', { rows: rowsOf(stale(181), stale(181), stale(190), stale(190)) }],
+  ['cantrecord', "2 · Can't record", { rows: rowsOf(failing(41), fresh(4), fresh(32), fresh(32)) }],
+  ['waiting', '5 · Waiting for first runs', { rows: rowsOf(fresh(2), fresh(2), never, never) }],
+  ['cantcheck', "1 · Can't check", { cantCheck: true }],
+  ['loading', 'Loading (after 200 ms)', { loading: true }],
+]
+
+function durationSince(min) {
+  if (min < 60) return `${min} min`
+  if (min < 1440) return `${Math.floor(min / 60)} hr`
+  const d = Math.floor(min / 1440)
+  return `${d} day${d !== 1 ? 's' : ''}`
+}
+const relativeTime = (min) => (min < 1 ? 'just now' : `${durationSince(min)} ago`)
+function absolute(min) {
+  const d = new Date(Date.now() - min * 60000)
+  return { iso: d.toISOString(), title: d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }
+}
+
+// The 15a precedence table: first matching state wins; the headline follows the worst job.
+function deriveJobsState(reading) {
+  if (reading.loading) return { n: 0, tone: 'unknown', headline: 'Checking…', rows: [], stale: [], cons: [] }
+  if (reading.cantCheck) return { n: 1, tone: 'unknown', headline: "Can't check right now", rows: [], stale: [], cons: [] }
+  const rows = JOBS.map((job) => ({ ...job, ...reading.rows[job.key] }))
+  const staleRows = rows.filter((r) => r.stale)
+  let n
+  if (staleRows.some((r) => r.err)) n = 2
+  else if (staleRows.length === rows.length) n = 3
+  else if (staleRows.length) n = 4
+  else if (rows.some((r) => r.age === null)) n = 5
+  else n = 6
+  const newest = Math.min(...rows.filter((r) => r.age !== null).map((r) => r.age))
+  const handoff = ' If this lasts more than an hour, tell whoever set up this app.'
+  const headline = {
+    2: "Can't record job runs",
+    3: `Nothing has run in ${durationSince(newest)}`,
+    4: `${staleRows.length} ${staleRows.length === 1 ? 'job is' : 'jobs are'} behind schedule`,
+    5: 'Waiting for the first runs',
+    6: 'All running on schedule',
+  }[n]
+  let cons = []
+  if (n === 2) cons = ["They may still be running, but the app can't confirm it." + handoff]
+  if (n === 3) cons = ["iCloud events and reminders won't sync until this is fixed." + handoff]
+  if (n === 4) {
+    const lines = [...new Set(staleRows.map((r) => r.cons))]
+    const visible = lines.filter((l) => !l.startsWith('Nothing'))
+    cons = visible.length ? visible : lines
+  }
+  const alert =
+    n === 2 ? "Background jobs can't be recorded"
+    : n === 3 ? 'Background jobs have stopped'
+    : n === 4 ? (staleRows.length === 1 ? `${staleRows[0].label} is behind schedule` : `${staleRows.length} background jobs are behind schedule`)
+    : null
+  return { n, tone: n >= 2 && n <= 4 ? 'bad' : n === 6 ? 'ok' : 'unknown', headline, cons, alert, rows, stale: staleRows, footnote: !!reading.footnote }
+}
+
+function rowHtml(r) {
+  let text, bad = false
+  if (r.err) { text = "can't record runs"; bad = true }
+  else if (r.stale) { text = `last ran ${relativeTime(r.age)} · overdue`; bad = true }
+  else if (r.age === null) text = `hasn't run yet · runs ${r.every}`
+  if (r.age === null) return `<div class="row"><dt>${r.label}</dt><dd>${text}</dd></div>`
+  const t = absolute(r.age)
+  if (!text) text = `ran ${relativeTime(r.age)}`
+  return `<div class="row"><dt>${r.label}</dt><dd class="${bad ? 'bad' : ''}"><time datetime="${t.iso}" title="${t.title}">${text}</time></dd></div>`
+}
+const rowsHtml = (rows) => `<dl class="rows">${rows.map(rowHtml).join('')}</dl>`
+const headlineHtml = (d, text = d.headline) =>
+  `<p class="headline ${d.tone === 'bad' ? 'bad' : ''}"><span class="dot ${d.tone}" aria-hidden="true"></span><span>${text}</span></p>`
+const consHtml = (d) => d.cons.map((c) => `<p class="cons">${c}</p>`).join('')
+const footHtml = (d) => (d.footnote ? `<p class="foot">Couldn't refresh · showing results from 1 min ago</p>` : '')
+const idleHtml = (d) => headlineHtml(d) + (d.n === 1 ? '<p class="cons">Trying again every 30 seconds.</p>' : '')
+
+// ---------- Option A: Always-visible list ----------
+const ui = { expanded: false }
+function renderBody(d) {
+  if (d.n <= 1) return idleHtml(d)
+  return headlineHtml(d) + consHtml(d) + rowsHtml(d.rows) + footHtml(d)
+}
+
+// ---------- page wiring (shared) ----------
+let current = 'running'
+let previousN = null
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+function render() {
+  const reading = STATES.find((s) => s[0] === current)[2]
+  const d = deriveJobsState(reading)
+  document.getElementById('jobs-body').innerHTML = renderBody(d)
+  const slot = document.getElementById('alert-slot')
+  slot.innerHTML = d.alert
+    ? `<p class="alert"><span class="dot bad" aria-hidden="true"></span>${d.alert} <span aria-hidden="true">·</span> <a href="#background-jobs" id="alert-link">See background jobs</a></p>`
+    : ''
+  const link = document.getElementById('alert-link')
+  if (link) link.addEventListener('click', jumpToJobs)
+  const toggle = document.getElementById('jobs-toggle')
+  if (toggle) toggle.addEventListener('click', () => { ui.expanded = !ui.expanded; render(); document.getElementById('jobs-toggle').focus() })
+
+  // iCloud "Last synced" lines follow the same fixture (sage dot + text-secondary; 30-min overdue rule)
+  const calAge = reading.rows ? reading.rows.cal.age ?? 4 : 4
+  const remAge = reading.rows ? reading.rows.rem.age ?? 4 : 4
+  for (const [id, age] of [['cal-sync', calAge], ['rem-sync', remAge]]) {
+    const el = document.getElementById(id)
+    const overdue = age > 30
+    el.className = `lastsync ${overdue ? 'bad' : ''}`
+    el.innerHTML = `<span class="dot ${overdue ? 'bad' : 'ok'}" aria-hidden="true" style="margin-top:0"></span>Last synced ${relativeTime(age)}${overdue ? ' · sync overdue' : ''}`
+  }
+
+  // One polite announcement, only when the state number changes after a first real reading
+  const status = document.getElementById('jobs-status')
+  const say = document.getElementById('say')
+  if (previousN !== null && previousN >= 1 && d.n >= 1 && d.n !== previousN) {
+    status.textContent = `Background jobs: ${d.headline}.`
+    say.textContent = `Screen reader: “Background jobs: ${d.headline}.”`
+  } else {
+    say.textContent = previousN === null || previousN === 0 ? 'Screen reader: (nothing announced on first reading)' : 'Screen reader: (state unchanged, nothing announced)'
+  }
+  if (d.n >= 1) previousN = d.n
+  else if (previousN === null) previousN = 0
+}
+
+function jumpToJobs(event) {
+  event.preventDefault()
+  if (typeof onJump === 'function') onJump()
+  const h2 = document.getElementById('background-jobs')
+  h2.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  h2.focus({ preventScroll: true })
+}
+
+const select = document.getElementById('state')
+select.innerHTML = STATES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')
+select.addEventListener('change', () => { current = select.value; render() })
+document.getElementById('dark').addEventListener('change', (e) => document.documentElement.classList.toggle('dark', e.target.checked))
+for (const [id, phone] of [['w-desk', false], ['w-phone', true]]) {
+  document.getElementById(id).addEventListener('click', () => {
+    document.body.classList.toggle('phone', phone)
+    document.getElementById('w-desk').setAttribute('aria-pressed', String(!phone))
+    document.getElementById('w-phone').setAttribute('aria-pressed', String(phone))
+  })
+}
+render()
+</script>
+</body>
+</html>
