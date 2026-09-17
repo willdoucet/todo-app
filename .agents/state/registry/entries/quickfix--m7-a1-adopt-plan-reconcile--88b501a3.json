@@ -1,16 +1,19 @@
 {
   "branch": "quickfix/m7-a1-adopt-plan-reconcile",
+  "commit": "9ec5c06",
+  "completed": "2026-09-17",
   "created_at": "2026-09-17T18:17:35Z",
-  "implementation_status": "implementing",
+  "implementation_status": "shipped",
   "key": "quickfix:m7-a1-adopt-plan-reconcile",
   "kind": "quickfix",
   "note_path": null,
   "plan_mode": "quickfix",
   "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/54",
   "registry_version": 3,
   "review_status": [],
   "task_id": null,
   "title": "Reconcile M7 plan adopt wording with shipped Eng A1 decision",
-  "updated_at": "2026-09-17T18:17:35Z",
-  "workflow_status": "implementing"
+  "updated_at": "2026-09-17T18:20:57Z",
+  "workflow_status": "shipped"
 }

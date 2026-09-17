@@ -68,3 +68,12 @@
 - Tests: none (docs only); the listed names match the executable, non-underscore files in `.agents/bin/` exactly
 - Docs: development-commands.md (Critical Rule) updated; AGENTS.md pointer unchanged
 - Branch: quickfix/helper-list-design-sync · PR: https://github.com/willdoucet/todo-app/pull/52
+
+## 2026-09-17 — m7-a1-adopt-plan-reconcile
+- Source: free text (found while reading shipped plans for cross-review overrides; evidence case 2 for the workflow-rereview-utc plan)
+- What: strike the never-shipped adopt-time rejection rule in the M7 `prod-r2-storage` plan (Adopt bullet + adversarial summary bullet) with a dated reconciliation note; correct the `asset_lifecycle` invariant docstring to "one key per entity, accepted not enforced"; pin the recipe form's one-key-in-two-columns flow with a test
+- Why: the plan carried both Eng review A1 (accept shared keys) and the adversarial review's opposite rule (reject them); PR #44 shipped A1, so the plan claimed a control that never existed. Decided with the user: A1 stands. No behaviour change
+- Files: .agents/plans/features/prod-r2-storage/prod-r2-storage-plan-20260715-201232.md, backend/app/services/asset_lifecycle.py, backend/tests/integration/test_asset_lifecycle.py
+- Tests: test_asset_lifecycle.py::TestItemHooks::test_recipe_form_shares_one_key_across_icon_and_image; backend suite 915 passed, 3 skipped
+- Docs: BACKEND_STRUCTURE.md (Code Organization) states the real adopt behaviour; LESSONS.md Bug Log row
+- Branch: quickfix/m7-a1-adopt-plan-reconcile · PR: https://github.com/willdoucet/todo-app/pull/54
