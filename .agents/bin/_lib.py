@@ -620,12 +620,179 @@ def note_key(note_rel: str, task_id: str | None) -> str:
 # Review log (JSONL)
 # --------------------------------------------------------------------------
 
+# The four status words a review may write, and the only ones `review-log` accepts.
+# `skills/_shared/obsidian-sync.md` holds the one human-readable definition; test_lib
+# asserts the two agree. Words written before 1.1.0 read through LEGACY_STATUS_MAP and
+# are never rewritten.
+REVIEW_STATUSES = ("clean", "issues_open", "resolved", "done")
+
+# Review tiers in pipeline order. `skill` is the name a review logs under; `invoke` is
+# the slash command that runs it (adversarial-subagent runs inside review-implementation,
+# so the two differ); `gates=False` rows are displayed only: office-hours never enters
+# `missing`, `missing_to_ship`, the Open list, or the next step.
+REVIEW_TIERS = [
+    {"label": "Office hours", "short": "OH", "skill": "office-hours", "invoke": "/office-hours", "gates": False},
+    {"label": "CEO", "short": "CEO", "skill": "plan-ceo-review", "invoke": "/plan-ceo-review", "gates": True},
+    {"label": "Eng", "short": "Eng", "skill": "plan-eng-review", "invoke": "/plan-eng-review", "gates": True},
+    {"label": "Adversarial", "short": "Adv", "skill": "plan-adversarial-review", "invoke": "/plan-adversarial-review", "gates": True},
+    {"label": "Design", "short": "Design", "skill": "plan-design-review", "invoke": "/plan-design-review", "gates": True},
+    {"label": "Impl review", "short": "Impl", "skill": "review-implementation", "invoke": "/review-implementation", "gates": True},
+    {"label": "Adv subagent", "short": "AdvSub", "skill": "adversarial-subagent", "invoke": "/review-implementation", "gates": True},
+    {"label": "QA", "short": "QA", "skill": "qa", "invoke": "/qa", "gates": True},
+    {"label": "Design audit", "short": "Audit", "skill": "design-review", "invoke": "/design-review", "gates": True},
+    {"label": "Final", "short": "Final", "skill": "final-review", "invoke": "/final-review", "gates": True},
+    {"label": "Ship", "short": "Ship", "skill": "ship", "invoke": "/ship", "gates": True},
+]
+
+PLAN_STAGE_SKILLS = ("plan-ceo-review", "plan-eng-review", "plan-adversarial-review", "plan-design-review")
+SHIP_GATE_SKILLS = ("review-implementation", "final-review")
+SHIP_STAGE_SKILLS = ("review-implementation", "adversarial-subagent", "qa", "design-review", "final-review")
+
+
+def tier_for(skill: str | None) -> dict | None:
+    for tier in REVIEW_TIERS:
+        if tier["skill"] == skill:
+            return tier
+    return None
+
+
+def gating_tiers() -> list[dict]:
+    return [t for t in REVIEW_TIERS if t["gates"]]
+
+
+def can_resolve(failed_skill: str, resolver: str) -> bool:
+    """Whether `resolver` may close a failed `failed_skill` entry. `operator` always. Otherwise a
+    gating tier that is neither the failed review itself nor `ship` (which reviews nothing), and
+    for a failure at the ship stage only another ship-stage tier: a plan review never read the
+    code. `review-log` enforces it on write; `workflow-state` suggests only eligible resolvers."""
+    if resolver == "operator":
+        return True
+    if resolver in (failed_skill, "ship"):
+        return False
+    tier = tier_for(resolver)
+    if not tier or not tier["gates"]:
+        return False
+    if failed_skill in SHIP_STAGE_SKILLS:
+        return resolver in SHIP_STAGE_SKILLS
+    return True
+
+
+# One review's state per plan. Every transition is an appended line; nothing is rewritten.
+#
+#                  review runs, logs clean / done
+#    missing ────────────────────────────────────▶ passed ◀────────────┐
+#       │                                            ▲                 │ re-run passes
+#       │ review runs, logs issues_open              │ re-run passes   │
+#       ▼                                            │                 │
+#    failed ──── review-log --status resolved ──────▶ resolved ────────┤
+#       ▲          resolved_by = another gating tier      │            │
+#       │          whose latest entry is passed at        │ re-run logs issues_open
+#       │          ts >= failure, or operator; note; once │
+#       └────────────────────────────────────────────────┘
+#
+#    ok = passed | resolved · gates only when the tier gates
+#
+# Legacy words (written before 1.1.0) read through this map, keyed by (skill, status)
+# with a (None, status) fallback. `issues_found` meant "hardened, fixed in place" for
+# plan-adversarial-review but "not every issue fixed" for qa and design-review, and
+# review-implementation / final-review never defined it, so the conservative reading
+# wins there. `done`, `cleared`, and `pass` were 1.0.0's passing words. Anything unmapped
+# reads as failed: an unreadable or unknown status never passes.
+LEGACY_STATUS_MAP = {
+    ("plan-adversarial-review", "issues_found"): "passed",
+    ("qa", "issues_found"): "failed",
+    ("design-review", "issues_found"): "failed",
+    (None, "issues_found"): "failed",
+    (None, "cleared"): "passed",
+    (None, "pass"): "passed",
+    (None, "done"): "passed",
+}
+
+
+def review_disposition(entry: dict | None) -> str:
+    """"missing" | "passed" | "failed" | "resolved" for one review's latest entry.
+
+    `resolved` counts only with a `resolved_by` the CLI would have accepted: `operator`, or a
+    gating tier `can_resolve` allows for this skill (never the review itself, never `ship`,
+    and a ship-stage failure only by a ship-stage resolver). The target skill must itself be
+    a gating tier. A `superseded_by_failure` key, set by `reviews_for_plan` when a later
+    failure of the same review is not the one the resolution names, also reads as failed.
+    A missing or non-string status reads as failed."""
+    if entry is None:
+        return "missing"
+    status = entry.get("status")
+    if not isinstance(status, str) or not status.strip():
+        return "failed"
+    status = status.strip().lower()
+    if status == "resolved":
+        by = entry.get("resolved_by")
+        if not isinstance(by, str) or not by.strip():
+            return "failed"
+        skill = entry.get("skill")
+        target = tier_for(skill)
+        if not target or not target["gates"]:
+            return "failed"
+        if not can_resolve(skill, by):
+            return "failed"
+        if entry.get("superseded_by_failure"):
+            return "failed"
+        return "resolved"
+    if status == "clean":
+        return "passed"
+    if status == "issues_open":
+        return "failed"
+    skill = entry.get("skill")
+    return LEGACY_STATUS_MAP.get((skill, status)) or LEGACY_STATUS_MAP.get((None, status)) or "failed"
+
+
+def review_ok(entry: dict | None) -> bool:
+    return review_disposition(entry) in ("passed", "resolved")
+
+
+def review_ts(entry: dict | None) -> str:
+    """An entry's `ts` for ordering: the string as written, else "". Every comparison of
+    timestamps goes through here so a null or numeric `ts` (raw appends; the CLI rejects
+    them) can never raise `TypeError` inside a reader, where the banner would swallow it."""
+    ts = (entry or {}).get("ts")
+    return ts if isinstance(ts, str) else ""
+
+
+SUMMARY_SUFFIX = "-summary.md"
+
+
+def review_plan_name(entry: dict) -> str | None:
+    """The plan file an entry counts against. Entries migrated from the pre-1.0 log were
+    logged against `<plan>-summary.md`; they attach to the sibling plan. `find_plan_files`
+    excludes summaries and `review-log` normalizes a supplied name through this on write."""
+    plan = entry.get("plan")
+    if isinstance(plan, str) and plan.endswith(SUMMARY_SUFFIX):
+        return plan[: -len(SUMMARY_SUFFIX)] + ".md"
+    return plan
+
 
 def review_log_path(root: Path, cfg: dict) -> Path:
     return state_dir(root, cfg) / "review-log.jsonl"
 
 
+# Characters `str.splitlines()` treats as line boundaries but `json.dumps(ensure_ascii=False)`
+# leaves raw (it escapes only U+0000-U+001F). Written unescaped, one of them inside a note
+# splits the record in two on read and every review command refuses until the file is
+# hand-edited. `\uXXXX` is valid JSON and round-trips through `json.loads`.
+_JSON_LINE_BREAKS = {"\u2028": "\\u2028", "\u2029": "\\u2029", "\x85": "\\u0085"}
+
+
+def review_log_line(entry: dict) -> str:
+    """One JSONL record: sorted keys, non-ASCII kept, the three raw line separators escaped."""
+    line = json.dumps(entry, sort_keys=True, ensure_ascii=False)
+    for raw, escaped in _JSON_LINE_BREAKS.items():
+        line = line.replace(raw, escaped)
+    return line
+
+
 def review_log_append(root: Path, cfg: dict, entry: dict) -> dict:
+    """Append one entry. Permissive by design: the CLI (`review-log`) validates; the test
+    helper and the legacy migration write raw lines through here. The serialized line never
+    contains a character the reader would take for a line break (`review_log_line`)."""
     entry = dict(entry)
     entry.setdefault("ts", now_iso())
     entry.setdefault("harness", detect_harness())
@@ -640,24 +807,67 @@ def review_log_append(root: Path, cfg: dict, entry: dict) -> dict:
     path = review_log_path(root, cfg)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, sort_keys=True, ensure_ascii=False) + "\n")
+        fh.write(review_log_line(entry) + "\n")
     return entry
 
 
-def review_log_read(root: Path, cfg: dict) -> list[dict]:
+# Reading the log — the contract every caller relies on:
+#
+#   file ──read as UTF-8──▶ decode fails? ──yes──▶ ([], [0])   0 = the file itself
+#     │ ok
+#     ▼
+#   str.splitlines()          (a trailing newline is not a record; split("\n") would
+#     │                        fail-close every well-formed log)
+#     ├─ blank / whitespace  ─▶ skipped, NOT unreadable (it still occupies a line number)
+#     ├─ json.loads fails    ─▶ unreadable, 1-based line number recorded
+#     ├─ value not a dict    ─▶ unreadable ("1", "[]", '"x"' parse but are not entries)
+#     └─ dict                ─▶ entry
+#
+#   Never raises on any of those. The session banner runs inside `except Exception:
+#   pass`, so a raise here would print nothing and the gate would stand open; the count
+#   is data the callers act on: review-log and review-read exit 2, workflow-state prints
+#   `Warn:` and reports NOT CLEARED.
+def review_log_scan(root: Path, cfg: dict) -> tuple[list[dict], list[int]]:
+    """(entries, unreadable_line_numbers). Line numbers are 1-based; `[0]` means the
+    file itself could not be decoded."""
     path = review_log_path(root, cfg)
     if not path.exists():
-        return []
-    out = []
-    for line in read_text(path).splitlines():
-        line = line.strip()
-        if not line:
+        return [], []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return [], [0]
+    entries: list[dict] = []
+    bad: list[int] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
             continue
         try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            bad.append(number)
             continue
-    return out
+        if not isinstance(obj, dict):
+            bad.append(number)
+            continue
+        entries.append(obj)
+    return entries, bad
+
+
+def review_log_read(root: Path, cfg: dict) -> tuple[list[dict], int]:
+    """(entries, unreadable). See `review_log_scan` for the contract; never raises."""
+    entries, bad = review_log_scan(root, cfg)
+    return entries, len(bad)
+
+
+def unreadable_message(bad_lines: list[int]) -> str:
+    if bad_lines == [0]:
+        return "review log is not valid UTF-8; resolve the conflict (keep both sides) before any review command"
+    numbers = ", ".join(str(n) for n in bad_lines)
+    return (
+        f"review log has {len(bad_lines)} unreadable line(s): {numbers}; "
+        "resolve the conflict (keep both sides) before any review command"
+    )
 
 
 REVIEW_STD_FIELDS = ("skill", "ts", "status", "branch", "plan", "commit", "harness")
@@ -668,17 +878,65 @@ def review_extra(entry: dict) -> dict:
     return {k: v for k, v in entry.items() if k not in REVIEW_STD_FIELDS}
 
 
+# Characters that would split a `|`-delimited review-read / dashboard row. Includes every
+# `str.splitlines()` separator plus the field delimiters; a note holding one is JSON-quoted.
+REVIEW_ROW_SEPARATORS = "|,\n\r\u2028\u2029\x85"
+
+
+def fmt_review_value(v: Any) -> str:
+    """Bare string unless it carries a row separator; then, and for any non-string, JSON.
+
+    `ensure_ascii=True` so U+2028/U+2029/U+0085 become `\\uXXXX` and cannot split the row
+    the way `json.dumps(ensure_ascii=False)` would leave them raw inside the quotes."""
+    if isinstance(v, str) and not any(c in v for c in REVIEW_ROW_SEPARATORS):
+        return v
+    return json.dumps(v, ensure_ascii=True)
+
+
 def reviews_for_plan(root: Path, cfg: dict, plan_name: str) -> dict[str, dict]:
-    """Latest entry per skill logged against this plan file. Age is not a factor."""
-    latest: dict[str, dict] = {}
-    for e in review_log_read(root, cfg):
-        if e.get("plan") != plan_name:
+    """Latest entry per skill logged against this plan file (summary-named legacy entries
+    attach to their plan). Ordered by `ts`, never by line position; on an equal `ts` the
+    later line wins. Age is not a factor. Unreadable lines are ignored here; callers that
+    gate read the count from `review_log_read`.
+
+    A `resolved` entry clears only the failure it names (`resolves_ts`). When another failed
+    entry of the same review sits after that one and at or before the resolution (a re-run on
+    another branch that union-merged in later, or a resolution that names nothing), or when
+    `resolves_ts` matches no prior failure, or when two failures share that timestamp, the
+    returned copy carries `superseded_by_failure=<that ts>` and reads as failed."""
+    history: dict[str, list[dict]] = {}
+    entries, _unreadable = review_log_read(root, cfg)
+    for e in entries:
+        if review_plan_name(e) != plan_name:
             continue
         skill = e.get("skill")
         if not skill:
             continue
-        if skill not in latest or e.get("ts", "") >= latest[skill].get("ts", ""):
-            latest[skill] = e
+        history.setdefault(skill, []).append(e)
+    latest: dict[str, dict] = {}
+    for skill, items in history.items():
+        items.sort(key=review_ts)  # stable: equal ts keeps file order, so the later line wins
+        newest = items[-1]
+        if isinstance(newest.get("status"), str) and newest["status"].strip().lower() == "resolved":
+            named = newest.get("resolves_ts")
+            named = named if isinstance(named, str) else ""
+            resolution_ts = review_ts(newest)
+            covered = 0
+            extra = None
+            for e in items[:-1]:
+                if review_disposition(e) != "failed":
+                    continue
+                ets = review_ts(e)
+                if ets == named:
+                    covered += 1
+                elif named < ets <= resolution_ts:
+                    extra = ets
+                    break
+            if extra:
+                newest = dict(newest, superseded_by_failure=extra)
+            elif covered != 1:
+                newest = dict(newest, superseded_by_failure=named or "unmatched")
+        latest[skill] = newest
     return latest
 
 

@@ -58,6 +58,17 @@ filename, commit, and harness:
 "$BIN/review-log" --skill SKILL_NAME --status STATUS --field key=value ...
 ```
 
-`STATUS` is `clean` when there are no unresolved decisions and no critical gaps, otherwise
-`issues_open`. Skills that fix in place (`qa`, `design-review`, `plan-adversarial-review`) log
-`issues_found` with a count. Add `--field model=<name>` when you know which model you are.
+`STATUS` is one of four words, each with one meaning in every skill. `review-log` rejects any
+other word; a locally edited skill that still writes an old one gets an error naming these four.
+
+| Status | Meaning | Disposition | Written by |
+|---|---|---|---|
+| `clean` | Nothing the review found is left open: it found nothing, or every finding was fixed in place, recorded in the plan as a decided and accepted limitation, or deferred to TODOS.md with the user's approval. Counts (`found`, `fixed`, `deferred`, `critical_gaps_open`, …) carry the detail | passed | every review |
+| `issues_open` | Something the review found is neither fixed nor decided | failed | every review |
+| `resolved` | A later record closing a failed review's open items; see `_shared/dashboard.md` → "When the next step names a review that ran with issues open" | resolved | `review-log`, on behalf of a resolver other than the review itself |
+| `done` | The step completed; no findings semantics | passed | `ship` only |
+
+A review is **ok** when its disposition is `passed` or `resolved`. Never `fixed`, `skipped`,
+`pass`, `cleared`, or `issues_found`. Add `--field model=<name>` when you know which model you
+are. Entries written before this vocabulary are read through a compatibility map and never
+rewritten; the REVIEW REPORT row carries the same word the entry does (`_shared/plan-footer.md`).

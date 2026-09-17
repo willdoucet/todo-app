@@ -84,6 +84,7 @@
       "CLAUDE.md",
       "README.md",
       ".gitignore",
+      ".gitattributes",
       "**/*.png",
       "**/*.jpg",
       "**/*.svg"

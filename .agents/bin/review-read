@@ -6,10 +6,14 @@ Usage:
     review-read --plan NAME [--json]  same, for a named plan file
     review-read --all [--json]        every entry, newest first, with the plan column
 
-Text output, one line per row:
-    plan mode:  skill|ts|status|k=v,k=v
-    --all:      plan|skill|ts|status|k=v,k=v
-JSON output: {"plan": NAME, "reviews": {skill: entry}} or {"entries": [entry, ...]}.
+Text output, one line per row; `disposition` is passed, failed, or resolved
+(see `_lib.review_disposition`):
+    plan mode:  skill|ts|status|disposition|k=v,k=v
+    --all:      plan|skill|ts|status|disposition|k=v,k=v
+JSON output: {"plan": NAME, "reviews": {skill: entry}} or {"entries": [entry, ...]}; every
+entry carries "disposition". A log with unreadable lines is an error (exit 2; the envelope
+names the lines and carries "unreadable": N); nothing is printed as if a partial parse were
+the whole log.
 """
 
 from __future__ import annotations
@@ -33,8 +37,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def fmt_extra(entry: dict) -> str:
-    extra = _lib.review_extra(entry)
-    return ",".join(f"{k}={v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)}" for k, v in sorted(extra.items()))
+    return ",".join(f"{k}={_lib.fmt_review_value(v)}" for k, v in sorted(_lib.review_extra(entry).items()))
+
+
+def with_disposition(entry: dict) -> dict:
+    return dict(entry, disposition=_lib.review_disposition(entry))
 
 
 def main() -> int:
@@ -42,18 +49,27 @@ def main() -> int:
     root = _lib.repo_root()
     cfg = _lib.load_config(root)
 
+    entries, bad = _lib.review_log_scan(root, cfg)
+    if bad:
+        raise _lib.FrameworkError(_lib.unreadable_message(bad), code=2, unreadable=len(bad), lines=bad)
+
     if args.all:
-        entries = sorted(_lib.review_log_read(root, cfg), key=lambda e: e.get("ts", ""), reverse=True)
+        entries = sorted(entries, key=_lib.review_ts, reverse=True)
         if args.json:
-            return _lib.print_json({"entries": entries})
+            return _lib.print_json({"entries": [with_disposition(e) for e in entries]})
         if not entries:
             print("(no reviews logged)")
             return 0
         for e in entries:
-            print(f"{e.get('plan') or '-'}|{e.get('skill', '')}|{e.get('ts', '')}|{e.get('status', '')}|{fmt_extra(e)}")
+            print(
+                f"{e.get('plan') or '-'}|{e.get('skill', '')}|{e.get('ts', '')}|{e.get('status', '')}"
+                f"|{_lib.review_disposition(e)}|{fmt_extra(e)}"
+            )
         return 0
 
     plan_name = args.plan
+    if plan_name:
+        plan_name = _lib.review_plan_name({"plan": plan_name}) or plan_name
     if not plan_name:
         branch = _lib.current_branch(root)
         plan = _lib.latest_plan(root, cfg, branch) if branch else None
@@ -66,12 +82,12 @@ def main() -> int:
 
     reviews = _lib.reviews_for_plan(root, cfg, plan_name)
     if args.json:
-        return _lib.print_json({"plan": plan_name, "reviews": reviews})
+        return _lib.print_json({"plan": plan_name, "reviews": {k: with_disposition(v) for k, v in reviews.items()}})
     if not reviews:
         print(f"(no reviews for plan: {plan_name})")
         return 0
-    for skill, e in sorted(reviews.items(), key=lambda kv: kv[1].get("ts", "")):
-        print(f"{skill}|{e.get('ts', '')}|{e.get('status', '')}|{fmt_extra(e)}")
+    for skill, e in sorted(reviews.items(), key=lambda kv: _lib.review_ts(kv[1])):
+        print(f"{skill}|{e.get('ts', '')}|{e.get('status', '')}|{_lib.review_disposition(e)}|{fmt_extra(e)}")
     return 0
 
 
