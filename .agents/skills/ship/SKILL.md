@@ -41,8 +41,8 @@ References in this directory, loaded when the procedure reaches them:
 
 ## Use when
 
-- `workflow-state --next` names `/ship`: `/review-implementation` and `/final-review` are both
-  clean for the current plan file.
+- `workflow-state --next` names `/ship`: `missing_to_ship` is empty (implementation and final
+  review ok — passed or resolved — and no gating review of any tier is failed).
 - A hotfix branch must land before the second review can happen. One question, recorded.
 - A previous ship was interrupted. Every step re-verifies; commits and a pull request that
   already exist are reused and updated, never duplicated.
@@ -93,9 +93,11 @@ MISSING=$("$BIN/workflow-state" --dashboard --json | python3 -c 'import json,sys
 echo "VERDICT: $VERDICT — missing: $MISSING"
 ```
 
-`CLEARED TO SHIP` means `review-implementation` and `final-review` both logged `clean`
-against this plan file. Anything else: print the missing skills and stop with
-`NEEDS_CONTEXT`, unless the branch name starts with `hotfix/`. Only then ask one question:
+`CLEARED TO SHIP` means `missing_to_ship` is empty: implementation and final review are ok
+(passed or resolved) against this plan file, and no gating review of any tier is failed. A
+review that ran with issues open appears there as `<skill> (issues open)` and clears only by a
+re-run or a `resolved` entry (`_shared/dashboard.md`). Anything else: print the missing skills
+and stop with `NEEDS_CONTEXT`, unless the branch name starts with `hotfix/`. Only then ask one question:
 
 ```
 RECOMMENDATION: Choose A because the missing review is the shipping gate. Completeness: 10/10

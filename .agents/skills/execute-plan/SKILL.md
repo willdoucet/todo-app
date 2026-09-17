@@ -63,6 +63,22 @@ Follow the preamble. Then:
 If on the base branch, ask the user (one question) to create the branch named in the plan's
 registry entry, or to name one. Create it and re-run `ctx`. Never implement on the base branch.
 
+Then the gate. `--next` must name this skill and the review log must be whole; read both from
+the JSON, never from the banner text or a substring of a reason:
+
+```bash
+"$BIN/workflow-state" --next --json | python3 -c '
+import json, sys
+d = json.load(sys.stdin); n = d.get("next") or {}
+ok = d.get("unreadable") == 0 and n.get("skill") == "/execute-plan"
+print("cleared for implementation" if ok else "NOT CLEARED: " + str(n.get("skill")) + " — " + str(n.get("reason")))
+sys.exit(0 if ok else 1)'
+```
+
+A non-zero exit means stop with `NEEDS_CONTEXT`, naming what `--next` named (a review that ran
+with issues open, or the unreadable-log reason). Never start implementation past an open
+review; "optional" governs only a review that never ran.
+
 ### 2. Resolve the plan and read its frontmatter before anything else
 
 Follow `_shared/plan-discovery.md`, including its metadata step. The first concrete command

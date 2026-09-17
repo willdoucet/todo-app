@@ -82,7 +82,9 @@ the same model in the same harness tends to find the same things.
 "$BIN/review-read" --json | python3 -c '
 import json, sys
 e = (json.load(sys.stdin).get("reviews") or {}).get("plan-eng-review") or {}
-print("eng_status=%s eng_harness=%s eng_model=%s" % (e.get("status", "none"), e.get("harness", "unknown"), e.get("model", "unknown")))'
+d = e.get("disposition", "none")
+h, m = (e.get("harness", "unknown"), e.get("model", "unknown")) if d != "resolved" else ("unknown", "unknown")
+print("eng_status=%s eng_disposition=%s eng_harness=%s eng_model=%s" % (e.get("status", "none"), d, h, m))'
 echo "this_harness=$HARNESS"
 ```
 
@@ -90,7 +92,20 @@ echo "this_harness=$HARNESS"
   question whether to proceed.
 - `eng_harness` equals `$HARNESS` and `eng_model` equals the model you are: warn in one line
   ("same harness and model as eng review; a different family would find more") and continue.
+- `eng_disposition=resolved`: the latest eng entry is a resolution record, not a run, so its
+  provenance is unknown; treat it as a different family and continue.
 - Keep all four values. They go into the provenance section in step 10.
+
+Then list every earlier review with its disposition:
+
+```bash
+"$BIN/review-read"
+```
+
+For every earlier review whose disposition is `failed`, read its open items and decide as you
+go: if this review closes one, say where in the plan you closed it and note it for completion;
+if it stays open, carry it forward in your own summary so the next review sees it. Never leave
+a failed review unmentioned.
 
 ### 3. Locate the test artifact by its exact path
 
@@ -220,14 +235,20 @@ On `DONE` or `DONE_WITH_CONCERNS`, run the obsidian-sync block with `STATUS_VALU
 `REVIEW_VALUE` both `adversarial-reviewed`. On `BLOCKED` or `NEEDS_CONTEXT`, set only
 `implementation_status` and `reason`.
 
-Persist the result. `clean` means the passes changed nothing; `issues_found` means the plan or
-artifact was hardened, with counts:
+Persist the result, with counts:
 
 ```bash
-"$BIN/review-log" --skill plan-adversarial-review --status clean|issues_found \
+"$BIN/review-log" --skill plan-adversarial-review --status "$STATUS" \
   --field mode=RED_TEAM --field passes=7 \
   --field fixed=N --field remaining=N --field model=<your model>
 ```
+
+`STATUS` is `clean` when every finding was folded into the plan or recorded there as a decided,
+accepted limitation (`fixed=N` and `remaining=N` carry the detail); otherwise `issues_open`. The
+words are defined once in `_shared/obsidian-sync.md` → Review log. Then, per `_shared/dashboard.md` → "When the next step names a review that ran with issues
+open", log one `resolved` entry for each earlier failed review this review closed, **after**
+your own entry above (the resolver's latest entry must be passed and not earlier than the
+failure).
 
 Then:
 

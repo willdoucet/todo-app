@@ -351,6 +351,16 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Priority:** P3
 **Depends on:** M8 PR1b shipped (`BackgroundJobsAlert`, `useBackgroundJobs`, `/healthz.jobs`).
 
+## P3 — Confirm boto3 default checksums against R2 at the first M8 release (leaked M7 finding)
+**What:** During M8's first executed release, run the RUNBOOK's R2 smoke upload with boto3's default checksum settings and confirm the object lands and reads back. If it fails or R2 rejects the checksum headers, pin `request_checksum_calculation` and `response_checksum_validation` to `when_required` in `backend/app/storage/r2.py`'s client config and record the decision in TECH_STACK → Object storage.
+**Why:** boto3 1.36+ sends CRC32 checksums by default. R2 had a documented incident with that default (January 2025, marked resolved) and Cloudflare's current R2 boto3 docs use the default client, so it is probably fine — but it has never been verified on this deployment. M7's final adversarial pass (PR #44, 2026-09-11) logged it as "investigate at runbook smoke" and it reached neither the M8 plan nor this file: the one M7 finding that leaked.
+**Pros:** (a) One smoke upload, already in the runbook; (b) closes the last open M7 adversarial finding with evidence; (c) if it fails, the fix is two client parameters.
+**Cons:** (a) Adds one line to an M8 runbook that is already long; (b) a pass proves only the current boto3 pin, so a future bump re-opens the question — note the pin in the log row.
+**Context:** Found by `/plan-eng-review` of `workflow-review-resolution` on 2026-09-16 while executing that plan's Assignment (check whether M7's four `adversarial-subagent` findings logged `issues_open` at 2026-09-11T16:19:20Z were fixed before merge; the M7 plan's Final Review row lists this one as deferred). Where to start: `infra/RUNBOOK.md` smoke section once M8 PR1a lands; `backend/app/storage/r2.py` for the client; `backend/uv.lock` for the boto3 version in the log row.
+**Effort:** S (human: ~30 min / CC: ~10 min)
+**Priority:** P3
+**Depends on:** M8 PR1a merged (`infra/RUNBOOK.md` exists) and its first executed release.
+
 ---
 
 # Completed

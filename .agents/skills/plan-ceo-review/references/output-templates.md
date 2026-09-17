@@ -120,8 +120,9 @@ Cover every ASCII diagram in files the plan touches. "None found" is a valid res
   +====================================================================+
 ```
 
-The values feed the review log: `UNRESOLVED` from the last row, `CRITICAL_GAPS` from the
-failure-modes row, `MODE` from the first.
+The values feed the review log: `UNRESOLVED` from the last row, `CRITICAL_GAPS_FOUND` and
+`CRITICAL_GAPS_OPEN` from the failure-modes row (found, and still open after this review),
+`MODE` from the first.
 
 ## Completion box, epic variant
 
@@ -149,5 +150,5 @@ failure-modes row, `MODE` from the first.
   +====================================================================+
 ```
 
-For epics, `CRITICAL_GAPS` in the review log is the number of milestones without a rollback
-(row E3).
+For epics, `CRITICAL_GAPS_FOUND` in the review log is the number of milestones without a
+rollback (row E3) and `CRITICAL_GAPS_OPEN` how many of those the review left unresolved.

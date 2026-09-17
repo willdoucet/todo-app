@@ -157,6 +157,10 @@ Map, and report before Step 0:
 - Prior design reviews of this plan in the review-read output. A prior `plan-design-review`
   entry makes this a rerun: passes that scored 8 or above get a quick pass, passes below 8 get
   the full treatment.
+- Earlier reviews whose disposition is `failed` in that output. For every earlier review whose disposition is `failed`, read its open items and decide as you
+  go: if this review closes one, say where in the plan you closed it and note it for completion;
+  if it stays open, carry it forward in your own summary so the next review sees it. Never leave
+  a failed review unmentioned.
 - Retrospective: the git log for earlier design-review cycles. Areas flagged before are
   reviewed harder now.
 
@@ -371,7 +375,11 @@ state per the obsidian-sync block with `STATUS_VALUE=design-reviewed` and
 ```
 
 `STATUS` is `clean` when `OVERALL_SCORE` is 8 or above and `UNRESOLVED` is zero, otherwise
-`issues_open`. Add `--field model=<name>` when you know which model you are.
+`issues_open`. The words are defined once in `_shared/obsidian-sync.md` → Review log. Add
+`--field model=<name>` when you know which model you are. Then, per `_shared/dashboard.md` → "When the next step names a review that ran with issues
+open", log one `resolved` entry for each earlier failed review this review closed, **after**
+your own entry above (the resolver's latest entry must be passed and not earlier than the
+failure).
 
 Then:
 

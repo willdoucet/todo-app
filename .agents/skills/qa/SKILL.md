@@ -345,8 +345,10 @@ add a Corrections Log row.
   --field health_before=X --field health_after=Y --field model=<your model, when known>
 ```
 
-`STATUS` is `done` when no issue was found or every found issue was verified fixed; otherwise
-`issues_found`. With `--report-only`, `fixed=0` and `health_after` equals `health_before`.
+`STATUS` is `clean` when no issue was found, or every found issue was verified fixed or deferred
+to TODOS.md with the user's approval per the tier rules (`deferred=N` counts them); otherwise
+`issues_open`. The words are defined once in `_shared/obsidian-sync.md` → Review log. With
+`--report-only`, `fixed=0` and `health_after` equals `health_before`.
 
 Update the `QA` row of `## REVIEW REPORT` in `$_PLAN_FILE` per `_shared/plan-footer.md`:
 status, health before → after, and a one-line findings summary. Edit in place; preserve the

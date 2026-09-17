@@ -273,7 +273,10 @@ Continuing without adversarial review."
   --field tier=medium|large --field issues_found=N
 ```
 
-`STATUS` is `clean` with no findings, otherwise `issues_open`.
+`STATUS` is `clean` with no findings, otherwise `issues_open`. A failed subagent entry gates
+like any other tier: after fixing its findings, either re-run the subagent (a new entry) or
+resolve it in step 13, after this review's own entry (the command is there; run earlier,
+`review-log` rejects it because the resolver has no passed entry yet).
 
 ### 13. Persist the result and update the plan footer
 
@@ -284,9 +287,19 @@ Continuing without adversarial review."
 ```
 
 `STATUS` is `clean` only when no findings remain unresolved after fix-first and the
-adversarial pass, no critical gap is open, and step 11 passed. Otherwise `issues_open`.
-Counts are what remains unresolved, not what was found. Skip this entry entirely if the
-review stopped in step 1.
+adversarial pass, no critical gap is open, and step 11 passed. Otherwise `issues_open`. The
+words are defined once in `_shared/obsidian-sync.md` → Review log. Counts are what remains
+unresolved, not what was found. Skip this entry entirely if the review stopped in step 1.
+
+Then, when the subagent's entry from step 12 is `issues_open` and this review itself logged
+`clean` (every finding fixed or decided), resolve it, naming where each finding was closed.
+If this review logged `issues_open`, leave the subagent failed: a failed resolver cannot
+vouch. After your own entry, never before:
+
+```bash
+"$BIN/review-log" --skill adversarial-subagent --status resolved \
+  --field resolved_by=review-implementation --field note="<commit or file per finding>"
+```
 
 Update the `Implementation Review` row of `## REVIEW REPORT` in `$_PLAN_FILE` per
 `_shared/plan-footer.md`: status and a one-line findings summary. Edit in place; preserve the
