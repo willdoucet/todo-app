@@ -333,6 +333,32 @@ class TestItemHooks:
         assert (await _asset(db_session, icon_key)).referenced is True
         assert (await _asset(db_session, image_key)).referenced is True
 
+    async def test_recipe_form_shares_one_key_across_icon_and_image(
+        self, client, db_session
+    ):
+        """The recipe form sends ONE upload as both `icon_url` and
+        `recipe_detail.image_url` (ItemFormModal). Same item, two columns, one
+        key — inside the A1 invariant (one key → one ENTITY), and safe only
+        because `adopt` and `storage.delete` are idempotent. A `referenced=false`
+        precondition on adopt would 400 this flow."""
+        url, key = await _upload(client, endpoint="/upload/recipe-image")
+        resp = await client.post("/items/", json=self._recipe_payload(url, url))
+        assert resp.status_code == 201, resp.text
+        assert (await _asset(db_session, key)).referenced is True
+
+        # Replace both columns together, as the form does: the old key is
+        # released twice (second call a no-op); the new key stays live.
+        new_url, new_key = await _upload(client, endpoint="/upload/recipe-image")
+        patch = self._recipe_payload(new_url, new_url)
+        del patch["name"], patch["item_type"]
+        resp = await client.patch(f"/items/{resp.json()['id']}", json=patch)
+        assert resp.status_code == 200, resp.text
+        assert await _asset(db_session, key) is None
+        with pytest.raises(ObjectNotFound):
+            await get_storage().get(key)
+        assert (await _asset(db_session, new_key)).referenced is True
+        assert await get_storage().get(new_key) == PNG
+
     async def test_hard_delete_releases_icon_and_recipe_image(self, client, db_session):
         from app.crud_items import hard_delete_expired_soft_deletes_async
 

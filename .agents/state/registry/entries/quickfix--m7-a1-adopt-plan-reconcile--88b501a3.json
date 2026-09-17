@@ -1,0 +1,16 @@
+{
+  "branch": "quickfix/m7-a1-adopt-plan-reconcile",
+  "created_at": "2026-09-17T18:17:35Z",
+  "implementation_status": "implementing",
+  "key": "quickfix:m7-a1-adopt-plan-reconcile",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Reconcile M7 plan adopt wording with shipped Eng A1 decision",
+  "updated_at": "2026-09-17T18:17:35Z",
+  "workflow_status": "implementing"
+}

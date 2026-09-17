@@ -20,8 +20,13 @@ Ordering (adversarial review — post-commit cleanup):
     the entity write has committed, so a rolled-back edit never erases a
     still-referenced object.
 
-Invariant (A1): each managed key is adopted by at most one entity column, so
-``release`` deletes unconditionally (no refcount).
+Invariant (A1): each managed key is adopted by at most one ENTITY, so
+``release`` deletes unconditionally (no refcount). One entity may hold the key
+in two columns — the recipe form sends one upload as both ``icon_url`` and
+``recipe_detail.image_url`` — which is safe because ``adopt`` and
+``storage.delete`` are idempotent. The invariant is ACCEPTED, not enforced:
+``adopt`` does not reject an already-referenced key, so a second entity given
+the same URL shares the object and loses it when the first releases it.
 """
 
 from __future__ import annotations
