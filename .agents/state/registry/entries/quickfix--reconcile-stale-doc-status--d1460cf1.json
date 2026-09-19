@@ -1,0 +1,16 @@
+{
+  "branch": "quickfix/reconcile-stale-doc-status",
+  "created_at": "2026-09-19T20:59:02Z",
+  "implementation_status": "implementing",
+  "key": "quickfix:reconcile-stale-doc-status",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Reconcile stale status claims across .agents/docs",
+  "updated_at": "2026-09-19T20:59:02Z",
+  "workflow_status": "implementing"
+}

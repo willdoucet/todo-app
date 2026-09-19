@@ -360,7 +360,7 @@ Chosen and shipped in the v1 productionization epic ([plan](../plans/features/pr
 
 ### Object storage (Cloudflare R2)
 
-From the M7 PR2 cutover onward (runbook status: not yet executed), production stores every user
+From the M7 PR2 cutover onward (runbook executed 2026-09-11), production stores every user
 upload in R2 (S3-compatible, via boto3) and serves it back through the authenticated
 `GET /uploads/{key}` route. Dev, CI, and the visual-test stack stay on local
 disk — they must not gain an R2 dependency.
