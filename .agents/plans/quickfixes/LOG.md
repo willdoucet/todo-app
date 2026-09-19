@@ -1,5 +1,17 @@
 # Quickfix log
 
+## 2026-09-19 — prd-mealboard-shipped-status
+
+- Source: free text (stale-doc finding split out of PR #55, which left it because it rewrites PRD narrative)
+- What: mark the mealboard and shopping-list auto-sync as Built in PRD §5, and correct the factual drift found while verifying — aggregation bucket and unique index, count units, removal rule, pre-item-refactor data constraints, and the 1200px → 1280px nav breakpoint
+- Why: IMPLEMENTATION_PLAN Phases 3.5–3.9 shipped April 2026 (commits `90cb121`…`e6d34ea`, PRs #18–#23) while PRD §5 still said "Rebuilding" and §5.5 called shipped code a "Planned Enhancement"; PRD §11 already marked the same items `[x]`, so the document contradicted itself
+- Also: BACKEND_STRUCTURE's `DELETE /meal-entries/{id}` row claimed groceries are removed immediately — removal is scheduled at `UNDO_WINDOW_SECONDS + 1` and no-ops on undo. Fixed the `delete_meal_entry` docstring that the row came from; APP_FLOW:337 already had it right
+- Files: .agents/docs/{PRD,APP_FLOW,BACKEND_STRUCTURE,LESSONS}.md, backend/app/crud_meal_entries.py
+- Tests: tests/integration/test_meal_entries_api.py — 30 passed (Docker); only code change is a docstring, validated by AST parse in the api container
+- Docs: updated 4 docs; doc-guard --staged --dry-run → would pass
+- Follow-up: `test_delete_dispatches_shopping_removal` asserts the remove task is called but not its countdown, so the documented timing is not pinned by a test
+- Branch: quickfix/prd-mealboard-shipped-status · PR: https://github.com/willdoucet/todo-app/pull/56
+
 ## 2026-09-11 — origin-verify-header
 - Source: free text (M7 R2-cutover smoke-check finding)
 - What: require a Cloudflare-set X-Origin-Verify header (matched against the ORIGIN_VERIFY_SECRET Fly secret) in the production host gate, so requests that skip Cloudflare and hit the Fly origin directly are rejected before reaching /auth/*

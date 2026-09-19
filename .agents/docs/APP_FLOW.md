@@ -67,7 +67,7 @@ App (Layout)
 
 ### Mealboard Sub-Navigation
 
-**Location:** Inside MealboardPage, left panel (>=1200px) or dropdown (<1200px)
+**Location:** Inside MealboardPage, left panel (>=1280px, Tailwind `xl`) or dropdown (<1280px)
 
 **Elements:**
 1. **Meal Planner** → `/mealboard/planner` (default)

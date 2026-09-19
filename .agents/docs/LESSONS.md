@@ -516,7 +516,7 @@ Discovered 2026-04-30 during M2 prod-deploy-skeleton Slice 2 (Fly).
 - PostgreSQL runs on `5433`, API on `8000`, Vite on `5173`, Redis on `6379`.
 - TailwindCSS v4 uses custom theme values in `frontend/src/index.css`.
 - Dark mode is class-based on the document root.
-- Mealboard has two responsive breakpoints: `1200px` for header layout (single-row vs. collapsed) and `768px` for the SwimlaneGrid vs. MobileDayView switch (`MealPlannerView.jsx:67`).
+- Mealboard has two responsive breakpoints: `1280px` (Tailwind `xl`) for the planner header layout and the MealboardNav sidebar-vs-dropdown switch (`MealboardPage.jsx:25`, `MealPlannerView.jsx:362`), and `768px` for the SwimlaneGrid vs. MobileDayView switch (`MealPlannerView.jsx:67`). No custom breakpoints in `index.css` — these are Tailwind v4 defaults.
 - iCloud calendar sync uses CalDAV, Celery, and timezone-aware settings from the app settings singleton.
 
 ## Decisions
