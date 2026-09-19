@@ -1,16 +1,19 @@
 {
   "branch": "quickfix/prd-mealboard-shipped-status",
+  "commit": "8575a92",
+  "completed": "2026-09-19",
   "created_at": "2026-09-19T23:36:34Z",
-  "implementation_status": "implementing",
+  "implementation_status": "shipped",
   "key": "quickfix:prd-mealboard-shipped-status",
   "kind": "quickfix",
   "note_path": null,
   "plan_mode": "quickfix",
   "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/56",
   "registry_version": 3,
   "review_status": [],
   "task_id": null,
   "title": "Reconcile PRD mealboard + shopping-list status with shipped code",
-  "updated_at": "2026-09-19T23:36:34Z",
-  "workflow_status": "implementing"
+  "updated_at": "2026-09-19T23:45:26Z",
+  "workflow_status": "shipped"
 }
