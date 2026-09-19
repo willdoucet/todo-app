@@ -1,16 +1,19 @@
 {
   "branch": "quickfix/reconcile-stale-doc-status",
+  "commit": "372e93d",
+  "completed": "2026-09-19",
   "created_at": "2026-09-19T20:59:02Z",
-  "implementation_status": "implementing",
+  "implementation_status": "shipped",
   "key": "quickfix:reconcile-stale-doc-status",
   "kind": "quickfix",
   "note_path": null,
   "plan_mode": "quickfix",
   "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/55",
   "registry_version": 3,
   "review_status": [],
   "task_id": null,
   "title": "Reconcile stale status claims across .agents/docs",
-  "updated_at": "2026-09-19T20:59:02Z",
-  "workflow_status": "implementing"
+  "updated_at": "2026-09-19T21:02:19Z",
+  "workflow_status": "shipped"
 }

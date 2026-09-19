@@ -77,3 +77,12 @@
 - Tests: test_asset_lifecycle.py::TestItemHooks::test_recipe_form_shares_one_key_across_icon_and_image; backend suite 915 passed, 3 skipped
 - Docs: BACKEND_STRUCTURE.md (Code Organization) states the real adopt behaviour; LESSONS.md Bug Log row
 - Branch: quickfix/m7-a1-adopt-plan-reconcile · PR: https://github.com/willdoucet/todo-app/pull/54
+
+## 2026-09-19 — reconcile-stale-doc-status
+- Source: free text (five doc contradictions noticed during the 2026-09-19 /final-review of an unrelated branch)
+- What: fix the stale side of each: R2 runbook executed (TECH_STACK); M7 shipped 2026-09-11 (IMPLEMENTATION_PLAN ×2, PRD ×2); auth built in M3–M5 with JWT + argon2 + single-tenant isolation (PRD feature and security tables); meal entries soft-deleted with a 5-second in-place undo (APP_FLOW); index.css recipe-grid @media rules (FRONTEND_GUIDELINES)
+- Why: each doc contradicted another doc in the set; code, the epic registry, and git log settled every case, and each stale line predated or coincided with the M7 merge
+- Files: .agents/docs/TECH_STACK.md, .agents/docs/IMPLEMENTATION_PLAN.md, .agents/docs/PRD.md, .agents/docs/APP_FLOW.md, .agents/docs/FRONTEND_GUIDELINES.md
+- Tests: none (docs only); re-grep for the stale phrases is clean; PRD.md:36 is byte-identical to prod-launch-release and `git merge-tree` against that branch is clean
+- Docs: updated 5 docs; flagged, not fixed: PRD "Rebuilding" rows + 5.5 "Planned Enhancement (v1.1)" for shipped shopping auto-sync, BACKEND_STRUCTURE meal-entry DELETE "removal immediately" wording
+- Branch: quickfix/reconcile-stale-doc-status · PR: https://github.com/willdoucet/todo-app/pull/55
