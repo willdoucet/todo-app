@@ -696,7 +696,7 @@ Food item payloads swap `recipe_detail` for `food_item_detail: {category, shoppi
 | GET | `/meal-entries/{id}` | Get single meal entry with item + slot + participants eager-loaded |
 | POST | `/meal-entries` | Create meal entry (body: `{date, meal_slot_type_id, item_id \| custom_meal_name, participant_ids?, notes?}`) |
 | PATCH | `/meal-entries/{id}` | Update meal entry (cook-toggle, participants, notes, slot change) |
-| DELETE | `/meal-entries/{id}` | Soft-delete meal entry; hides the row and returns `{entry, undo_token, expires_at}` for a 5-second in-place undo window. Shopping-list groceries are dispatched for removal immediately; undo re-adds them. |
+| DELETE | `/meal-entries/{id}` | Soft-delete meal entry; hides the row and returns `{entry, undo_token, expires_at}` for a 5-second in-place undo window. Shopping-list removal is scheduled with a countdown just past the undo window (`UNDO_WINDOW_SECONDS + 1`), and the task no-ops if the delete was undone; undo also re-dispatches the add. |
 | POST | `/meal-entries/{id}/undo` | Restore a soft-hidden user-undo meal entry. Body: `{undo_token}`. Returns restored entry (200), 404 (never a user-undo row), or 410 (expired / token mismatch / parent item deleted / race loser). |
 
 Post-refactor, meal entries reference items via a single `item_id` field (the old `recipe_id` / `food_item_id` / `item_type` tuple is gone). The response embeds the full `Item` at `entry.item` with its detail eager-loaded.

@@ -1,0 +1,16 @@
+{
+  "branch": "quickfix/prd-mealboard-shipped-status",
+  "created_at": "2026-09-19T23:36:34Z",
+  "implementation_status": "implementing",
+  "key": "quickfix:prd-mealboard-shipped-status",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Reconcile PRD mealboard + shopping-list status with shipped code",
+  "updated_at": "2026-09-19T23:36:34Z",
+  "workflow_status": "implementing"
+}
