@@ -330,7 +330,11 @@ App (Layout)
 
 #### Deleting a Meal Entry
 
-Meal entries are **hard-deleted** (not soft-deleted — only Items have the soft-delete/undo flow). Clicking the red ✕ button on a MealCard fires `DELETE /meal-entries/{id}` and the card disappears immediately. A separate Celery task (`sync_shopping_list_remove`) cleans up the aggregated shopping task contribution for that meal entry.
+Meal entries are **soft-deleted with a 5-second in-place undo** (distinct from the Items flow's 15-second undo toast in 3.4). Clicking the red ✕ button on a MealCard fires `DELETE /meal-entries/{id}`; the backend hides the row (`soft_hidden_at` + `undo_token`) and returns `{entry, undo_token, expires_at}`. `UndoMealCard` takes the card's grid slot: dashed border, a countdown bar that shrinks over 5 seconds (reduced-motion users see a ticking seconds count instead), and an Undo button.
+
+- **Undo path:** Undo within the window → `POST /meal-entries/{id}/undo` with the token → the entry is restored in place and `sync_shopping_list_add` re-adds its groceries. The server accepts the token for 6.5 seconds to absorb network slack; a 404 or 410 drops the card quietly, since the entry is already hidden server-side.
+- **Expiry path:** the undo card disappears and the entry stays hidden; the hourly `hard_delete_expired_soft_deletes` sweep hard-deletes it.
+- **Shopping list:** `sync_shopping_list_remove` is scheduled to run just after the undo window and subtracts the entry's aggregated shopping task contribution; it no-ops if the entry was undone.
 
 ---
 

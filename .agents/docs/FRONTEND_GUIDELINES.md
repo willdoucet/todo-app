@@ -182,7 +182,11 @@ Using Tailwind's default spacing scale (1 unit = 0.25rem = 4px):
 
 ### Custom Breakpoints
 
-None. There are no custom `@media` rules or `@theme` breakpoint overrides in `index.css`; every
+One surface: the Recipes-tab grid. `index.css` has no `@theme` breakpoint overrides, but four
+`max-width` `@media` rules on `.recipe-grid-responsive` (399, 499, 799, 1099px) step that grid from
+one column to five, independent of the Tailwind set (per-width table in FRONTEND_STRUCTURE.md →
+Responsive Breakpoints). The file's other `@media` rules are `prefers-reduced-motion` guards and a
+`min-width: 768px` scrollbar fallback inside `@supports`, not layout breakpoints. Every other
 surface uses the standard set above. The mealboard's own transitions, for reference:
 
 | Surface | Breakpoint | Below | At and above |

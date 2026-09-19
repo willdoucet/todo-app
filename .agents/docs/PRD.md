@@ -33,7 +33,7 @@
 
 ### Project Status
 
-- **Current state:** Deployed at `mealy.dev` (frontend) / `api.mealy.dev` (API) since 2026-05-01, behind a single shared household login. v1 productionization is 6 of 8 milestones done: M7 (private object storage) in review, M8 (launch runbook) next — see [IMPLEMENTATION_PLAN.md → Phase 2](./IMPLEMENTATION_PLAN.md).
+- **Current state:** Deployed at `mealy.dev` (frontend) / `api.mealy.dev` (API) since 2026-05-01, behind a single shared household login. v1 productionization is 7 of 8 milestones done (6 shipped, 1 subsumed): M7 (private object storage) shipped 2026-09-11, M8 (launch release) in planning — see [IMPLEMENTATION_PLAN.md → Phase 2](./IMPLEMENTATION_PLAN.md).
 - **Target state:** v1 launch complete; a second household gets its own deployment (single-tenant by design).
 - **Tech stack:** FastAPI backend, React 19 frontend, PostgreSQL database — on Fly.io, Vercel, Upstash Redis and Cloudflare R2 ([TECH_STACK.md](./TECH_STACK.md))
 
@@ -134,7 +134,7 @@ Designed primarily for nuclear families (2 parents + children), but flexible eno
 | P0 | Responsibilities (Recurring Routines) | Built |
 | P1 | Meal Planning (Flexible Swimlane Calendar) | Rebuilding |
 | P1 | Recipe Management | Built |
-| P1 | User Authentication | Planned — [see plan](../plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md) |
+| P1 | User Authentication | Built (M3–M5, May 2026) — [see plan](../plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md) |
 | P2 | Shopping Lists (with meal auto-sync) | Rebuilding |
 | P2 | Notifications/Reminders | Not Started |
 | P2 | iCloud Calendar Sync | Built |
@@ -658,7 +658,7 @@ Push/PR → GitHub Actions
 - [ ] CD: Manual promotion to production — the M8 runbook is this step
 - [x] Hosting: Production environment live (2026-05-01)
 - [x] Hosting: Managed PostgreSQL (Fly Postgres)
-- [x] Hosting: File storage configured (Cloudflare R2, M7 — pending merge of PR2)
+- [x] Hosting: File storage configured (Cloudflare R2, M7 — cutover 2026-09-11, PR2 #44)
 - [ ] Monitoring: Basic health checks
 - [ ] Monitoring: Error tracking (Sentry or equivalent)
 
@@ -725,9 +725,9 @@ Push/PR → GitHub Actions
 
 | Requirement | Implementation |
 |-------------|----------------|
-| Authentication | JWT tokens (planned) |
-| Password Storage | bcrypt hashing |
-| Data Isolation | Household-scoped queries |
+| Authentication | One shared household login: 15-min JWT access token + rotating HttpOnly refresh cookie (shipped M3–M5; see 5.7) |
+| Password Storage | argon2 hashing |
+| Data Isolation | One deployment per household (single-tenant); no cross-household isolation layer (see 5.7) |
 | File Uploads | Type validation, size limits (5MB) |
 | CORS | Restricted to known origins |
 | SQL Injection | Parameterized queries via SQLAlchemy |
