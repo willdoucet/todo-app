@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
 import json
 import os
 import subprocess
@@ -102,3 +104,13 @@ def registry_put(repo: Path, key: str, entry: dict) -> dict:
 def log_review(repo: Path, plan: Path, skill: str, status: str, ts: str = "2026-09-02T10:00:00Z", **extra) -> dict:
     entry = {"skill": skill, "status": status, "plan": plan.name, "ts": ts, **extra}
     return _lib.review_log_append(repo, load_cfg(repo), entry)
+
+
+def load_helper(name: str):
+    """Import a bin helper in-process (they carry no .py suffix), for a test that must count calls
+    into `_lib`; the helper's `import _lib` resolves to the same module object as `_repo._lib`."""
+    loader = importlib.machinery.SourceFileLoader(name.replace("-", "_"), str(BIN / name))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module

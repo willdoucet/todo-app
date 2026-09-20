@@ -53,7 +53,7 @@ def test_mark_then_check_then_drift(tmp_path):
     m = marker(repo)
     assert m["schema_version"] == 1
     assert m["synced_repo_sha"] == repo_sha and m["synced_design_sha"] == design_sha
-    assert m["watched_files"] == WATCHED and m["claude_design_org_url"] == "https://example.test/org/1"
+    assert m["watched_files"] == WATCHED and m["design_tool_url"] == "https://example.test/org/1"
     assert m["synced_at"].endswith("Z")
 
     proc = R.run(repo, "design-sync-check")
@@ -72,7 +72,7 @@ def test_mark_then_check_then_drift(tmp_path):
 
     # re-marking without --org-url preserves the URL and clears the drift
     R.run(repo, "design-sync-mark")
-    assert marker(repo)["claude_design_org_url"] == "https://example.test/org/1"
+    assert marker(repo)["design_tool_url"] == "https://example.test/org/1"
     assert marker(repo)["synced_design_sha"] == new_design_sha
     assert R.run(repo, "design-sync-check").returncode == 0
 

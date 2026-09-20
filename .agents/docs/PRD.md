@@ -132,10 +132,10 @@ Designed primarily for nuclear families (2 parents + children), but flexible eno
 |----------|---------|--------|
 | P0 | Task Management (Lists & Tasks) | Built |
 | P0 | Responsibilities (Recurring Routines) | Built |
-| P1 | Meal Planning (Flexible Swimlane Calendar) | Rebuilding |
+| P1 | Meal Planning (Flexible Swimlane Calendar) | Built (Phases 3.6–3.8b, April 2026) |
 | P1 | Recipe Management | Built |
-| P1 | User Authentication | Planned — [see plan](../plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md) |
-| P2 | Shopping Lists (with meal auto-sync) | Rebuilding |
+| P1 | User Authentication | Built (M3–M5, May 2026) — [see plan](../plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md) |
+| P2 | Shopping Lists (with meal auto-sync) | Built (Phase 3.6, April 2026) |
 | P2 | Notifications/Reminders | Not Started |
 | P2 | iCloud Calendar Sync | Built |
 | P3 | Family Member Management | Built |
@@ -290,9 +290,9 @@ Each swimlane band has a gradient background matching its slot type color, with 
 
 | Breakpoint | Layout |
 |------------|--------|
-| < 768px | Swimlanes stack vertically or switch to day-focused card view |
-| 768px - 1199px | Full swimlane grid, no mealboard nav panel (dropdown instead). Sidebar remains |
-| >= 1200px | Full swimlane grid + app sidebar (80px) + mealboard nav panel (224px) |
+| < 768px | Day-focused card view (`MobileDayView`) instead of the swimlane grid |
+| 768px - 1279px | Full swimlane grid, no mealboard nav panel (dropdown instead). App sidebar remains |
+| >= 1280px | Full swimlane grid + app sidebar (80px) + mealboard nav panel (224px) |
 
 #### Meal Slot Configuration (Settings)
 
@@ -305,10 +305,8 @@ New "Mealboard" card section on the main app Settings page. Two-column layout:
 
 - Date: Required
 - Meal Slot Type: Required, FK to MealSlotType
-- Item Type: Required, enum (recipe, food_item, custom)
-- Recipe ID: Optional, FK to Recipe (when item_type = "recipe")
-- Food Item ID: Optional, FK to FoodItem (when item_type = "food_item")
-- Custom Meal Name: Optional, max 200 characters (when item_type = "custom")
+- Item: Optional, FK to Item (`item_id`) — the unified Item model discriminates recipe vs food_item via `items.item_type`
+- Custom Meal Name: Optional, max 200 characters (when `item_id` is NULL)
 - Notes: Optional, max 500 characters
 - Servings: Optional integer, overrides recipe default (only for recipe items)
 - Sort Order: Integer, ordering within a slot on a day
@@ -363,26 +361,26 @@ Categories: Produce, Protein, Dairy, Pantry, Frozen, Bakery, Beverages, Other
 
 ---
 
-### 5.5 Shopping Lists
+### 5.5 Shopping Lists (Built)
 
 **Purpose:** Manage grocery shopping with optional recipe integration.
 
-#### Current Implementation (v1.0)
+#### Manual List Management (v1.0)
 
 - Links to existing task list (reuses task infrastructure)
 - Manual item entry
 - Completion toggle per item
 - Persistent list selection via localStorage
 
-#### Planned Enhancement (v1.1) — Auto-Sync with Ingredient Aggregation
+#### Auto-Sync with Ingredient Aggregation (v1.1 — Built, Phase 3.6, April 2026)
 
 | Feature | Description | Acceptance Criteria |
 |---------|-------------|---------------------|
 | Auto-sync from Meals | When a recipe or food item is added to the mealboard, its ingredients are automatically written to the linked shopping list via Celery background task | Ingredients appear as tasks; `shopping_sync_status` tracks success/failure per meal |
-| Ingredient Aggregation | Same ingredient from multiple meals is consolidated by name + unit group | Quantities converted to common base unit, summed, and displayed in user's preferred measurement system (Imperial/Metric) |
-| Subtraction on Removal | When a meal is removed from the planner, its ingredient contributions are subtracted from shopping tasks | Tasks at zero quantity are deleted; checked-off (purchased) items are never modified |
-| Predefined Unit System | Recipe ingredient units use a predefined dropdown (not freeform text) to enable reliable conversion | Units grouped by Weight (lb, oz, g, kg), Volume (cup, tbsp, tsp, ml, l, fl oz, quart, pint, gallon), Count (piece, clove, slice, bunch, can, package, head, stalk, sprig), and None |
-| Concurrency Safety | Aggregation uses a unique constraint on (list_id, aggregation_key_name, aggregation_unit_group) with SELECT FOR UPDATE and constraint-violation retry | No duplicate shopping items even under concurrent Celery workers |
+| Ingredient Aggregation | Same ingredient from multiple meals is consolidated by canonical name + aggregation unit | Weight/volume quantities converted to a base unit (g/ml), summed, and displayed in the user's preferred measurement system (Imperial/Metric). Count units aggregate only with the same unit |
+| Subtraction on Removal | When a meal is removed from the planner, its ingredient contributions are subtracted from shopping tasks | Tasks with no remaining source meals are deleted; checked-off (purchased) items are never modified |
+| Predefined Unit System | Recipe ingredient units use a predefined dropdown (not freeform text) to enable reliable conversion | Units grouped by Weight (lb, oz, g, kg), Volume (cup, tbsp, tsp, ml, l, fl oz, quart, pint, gallon), Count (each, piece, clove, slice, bunch, can, package, head, stalk, sprig, ear), and None |
+| Concurrency Safety | Aggregation uses the partial unique index `uq_task_ingredient_aggregate` on (list_id, aggregation_source, aggregation_key_name, aggregation_unit), `NULLS NOT DISTINCT`, with SELECT FOR UPDATE and constraint-violation retry | No duplicate shopping items even under concurrent Celery workers |
 | Shopping Card | Top-bar card on mealboard shows linked list status: no list, item count, or empty | Three states with link modal flow; warning indicator when sync fails |
 
 ---
@@ -658,7 +656,7 @@ Push/PR → GitHub Actions
 - [ ] CD: Manual promotion to production — the M8 runbook is this step
 - [x] Hosting: Production environment live (2026-05-01)
 - [x] Hosting: Managed PostgreSQL (Fly Postgres)
-- [x] Hosting: File storage configured (Cloudflare R2, M7 — pending merge of PR2)
+- [x] Hosting: File storage configured (Cloudflare R2, M7 — cutover 2026-09-11, PR2 #44)
 - [ ] Monitoring: Basic health checks
 - [ ] Monitoring: Error tracking (Sentry or equivalent)
 
@@ -725,9 +723,9 @@ Push/PR → GitHub Actions
 
 | Requirement | Implementation |
 |-------------|----------------|
-| Authentication | JWT tokens (planned) |
-| Password Storage | bcrypt hashing |
-| Data Isolation | Household-scoped queries |
+| Authentication | One shared household login: 15-min JWT access token + rotating HttpOnly refresh cookie (shipped M3–M5; see 5.7) |
+| Password Storage | argon2 hashing |
+| Data Isolation | One deployment per household (single-tenant); no cross-household isolation layer (see 5.7) |
 | File Uploads | Type validation, size limits (5MB) |
 | CORS | Restricted to known origins |
 | SQL Injection | Parameterized queries via SQLAlchemy |

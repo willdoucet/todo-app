@@ -46,7 +46,7 @@
    - Notifications/reminders
 
 2. **Active work**
-   - **Phase 2 — v1 Productionization** (epic `v1-productionization`): M7 private object storage on Cloudflare R2 is implemented and in pre-landing review on `prod-r2-storage`; M8 launch runbook is next. The mealboard overhaul that used to sit here shipped in April (Phases 3.5–3.9 below).
+   - **Phase 2 — v1 Productionization** (epic `v1-productionization`): M7 private object storage on Cloudflare R2 shipped 2026-09-11 (PR1 #41, PR2 #44; cutover the same day); M8 launch runbook is next. The mealboard overhaul that used to sit here shipped in April (Phases 3.5–3.9 below).
 
 3. **Polish Items**
    - Loading states
@@ -534,7 +534,7 @@ function RecipeCardSkeleton() {
 2. ~~**Phase 1.4** - iCloud Calendar Integration~~ ✅ Complete (CalDAV + Celery + two-way sync + 57 new tests)
 3. ~~**Phase 1.6** - Task Model Enhancement~~ ✅ Complete (priority, subtasks, sections, sync metadata)
 4. ~~**Phase 1.7** - iCloud Reminders Sync~~ ✅ Complete (CalDAV VTODO + Celery + two-way sync + 26 new tests)
-5. **Phase 2** - v1 Productionization (deployed since M2, 2026-05-01; auth live since M5; M7 storage in review; M8 launch runbook remaining)
+5. **Phase 2** - v1 Productionization (deployed since M2, 2026-05-01; auth live since M5; M7 storage shipped 2026-09-11; M8 launch runbook remaining)
 
 ### High Priority (v1 Polish)
 

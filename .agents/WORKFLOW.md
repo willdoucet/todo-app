@@ -144,7 +144,9 @@ current plan file. Age is informational only. Every entry's `status` is one of `
 `issues_open`, `resolved`, `done`, defined once in `skills/_shared/obsidian-sync.md` → Review
 log; `review-log` refuses any other word, and `workflow-state` gates on their dispositions: a
 review that ran and did not pass blocks its stage until it is re-run or resolved, while a
-review that never ran is merely optional.
+review that never ran is merely optional. A review that a later review sent back (`--rereview`
+on the declarer's entry) reads `stale` and blocks until it runs again; see
+`skills/_shared/dashboard.md` → "When your review changes what an earlier review approved".
 
 ## Artifacts at completion
 
@@ -188,10 +190,11 @@ All state is in the repo, so any step can run in any harness.
 ## Vocabulary
 
 - **safe branch**: the branch name with `/` replaced by `-`; names the plan folder.
-- **plan file**: `plans/features/<safe-branch>/<safe-branch>-plan-<YYYYMMDD-HHMMSS>.md`.
+- **plan file**: `plans/features/<safe-branch>/<safe-branch>-plan-<YYYYMMDD-HHMMSS>.md`; the
+  timestamp is UTC (`ctx`'s `TIMESTAMP`).
 - **summary file**: the plan's sibling `-summary.md`, the running execution log.
 - **test artifact**: `plans/testing/<safe-branch>-test-artifact.md`, written by eng review.
-- **epic file**: `plans/epics/<slug>/<slug>-epic-<YYYYMMDD-HHMMSS>.md`.
+- **epic file**: `plans/epics/<slug>/<slug>-epic-<YYYYMMDD-HHMMSS>.md`, the timestamp in UTC.
 - **quickfix log**: `plans/quickfixes/LOG.md`, one block per completed quickfix.
 - **doc map**: the path-to-doc ownership table in `config.json`.
 - **ready-for-review**: execute-plan finished; reviews may begin.

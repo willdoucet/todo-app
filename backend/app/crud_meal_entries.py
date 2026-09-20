@@ -268,8 +268,11 @@ async def delete_meal_entry(db: AsyncSession, entry_id: int):
     goes through `visible_meal_entries_stmt()`. The hourly sweeper hard-deletes
     soft-hidden user-undo rows once they're past the 15-second grace window.
 
-    Shopping-list groceries leave the list immediately (per CEO review 1.1):
-    undo restores them by re-dispatching `sync_shopping_list_add`.
+    Shopping-list groceries are scheduled for removal just past the undo window
+    (`UNDO_WINDOW_SECONDS + 1`s), not immediately: the remove task re-reads
+    `soft_hidden_at` at execution time and no-ops when the delete was undone.
+    Undo also re-dispatches `sync_shopping_list_add` as a belt-and-braces
+    restore. (Supersedes the immediate-removal design from CEO review 1.1.)
 
     Returns a dict with the fresh MealEntry row + undo metadata, or None if the
     entry didn't exist (or was already soft-hidden — mirrors "someone else

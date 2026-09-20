@@ -2,17 +2,36 @@
 """Append one validated entry to the review log (state/review-log.jsonl).
 
 Usage:
-    review-log --skill plan-eng-review --status clean [--field k=v ...] [--plan NAME]
-    review-log '{"skill":"plan-eng-review","status":"clean","issues":0}'
+    review-log --skill plan-eng-review --status clean --rereview none [--field k=v ...] [--plan NAME]
+    review-log --skill plan-design-review --status clean \\
+        --rereview plan-eng-review --rereview-note "item 15a now adds a backend contract"
+    review-log '{"skill":"plan-eng-review","status":"clean","rereview":[],"issues":0}'
     review-log --skill plan-ceo-review --status resolved \\
         --field resolved_by=plan-eng-review --field note="plan section 2, break-glass entry"
 
 `status` is one of clean, issues_open, resolved, done (`done` from `ship` only); the words
-are defined once in skills/_shared/obsidian-sync.md. `ts`, `branch`, `plan` (latest plan
-basename on the current branch), `commit`, and `harness` are filled in unless supplied;
-`--plan NAME` overrides the plan the entry is logged against. `--field` cannot set `status`
-or `skill`. Prints the stored entry as JSON. On any rejection prints a JSON error and writes
-nothing; exit 2 when the log has unreadable lines, or when no plan resolves for a `resolved` entry.
+are defined once in skills/_shared/obsidian-sync.md. `ts`, `branch`, `plan` (the branch's
+feature plan, else its epic), `commit`, and `harness` are filled in unless supplied;
+`--plan NAME` overrides the plan the entry is logged against. `--field` cannot set `status`,
+`skill`, `rereview` or `rereview_note`.
+
+The declaration. A plan review (CEO, eng, adversarial, design) logging `clean` or
+`issues_open` must say which earlier reviews must run again because it changed what they
+approved: `--rereview <skill>` once per review, with `--rereview-note "<what changed>"`, or
+`--rereview none`. Stored as `"rereview": [...]` (`[]` for none) and `"rereview_note"`; the
+positional JSON form carries the same keys. A named review must be a gating tier of the same
+stage, not the declarer, not `ship`, and must have a run on this plan dated no later than this
+entry (an earlier-dated demand would never count on read). Ship-stage reviews may declare;
+nothing else may, and a `rereview_note` with no declaration is refused. On read the named review reads `stale` until it runs again
+(`skills/_shared/dashboard.md`); `--status resolved` is refused for a stale review.
+
+`--field concern="..."` on any run entry records a concern the banner shows with the
+review's name until that review runs again without one. The keys the reader derives
+(`_lib.READER_ONLY_KEYS`) are refused in both forms.
+
+Prints the stored entry as JSON. On any rejection prints a JSON error and writes nothing;
+exit 2 when the log has unreadable lines, or when no plan resolves for a `resolved` entry or a
+non-empty demand.
 """
 
 from __future__ import annotations
@@ -27,7 +46,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _lib  # noqa: E402
 
-RESERVED_FIELDS = ("status", "skill")
+RESERVED_FIELDS = {
+    "status": "use --status",
+    "skill": "use --skill",
+    "rereview": "pass --rereview <skill> (repeatable) or --rereview none",
+    "rereview_note": "pass --rereview-note",
+}
 TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")  # what _lib.now_iso writes; string order == time order
 
 
@@ -36,8 +60,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("entry", nargs="?", help="JSON object for the whole entry")
     ap.add_argument("--skill")
     ap.add_argument("--status")
-    ap.add_argument("--plan", help="plan basename to log against (default: latest plan on this branch)")
+    ap.add_argument("--plan", help="plan basename to log against (default: this branch's feature plan, else its epic)")
     ap.add_argument("--field", action="append", default=[], metavar="k=v", help="extra field; value parsed as JSON when possible")
+    ap.add_argument("--rereview", action="append", default=[], metavar="SKILL|none", help="a review that must run again because this one changed what it approved; repeatable; or none")
+    ap.add_argument("--rereview-note", default=None, metavar="TEXT", help="what changed, for the demanded review to read")
     return ap.parse_args(argv)
 
 
@@ -63,10 +89,20 @@ def build_entry(args: argparse.Namespace) -> dict:
         key, raw = item.split("=", 1)
         key = key.strip()
         if key in RESERVED_FIELDS:
-            raise _lib.FrameworkError(f"--field cannot set {key!r}; use --{key}")
+            raise _lib.FrameworkError(f"--field cannot set {key!r}; {RESERVED_FIELDS[key]}")
         entry[key] = _lib.parse_scalar(raw)
     if args.plan:
         entry["plan"] = args.plan
+    if args.rereview:
+        names = [n.strip() for n in args.rereview]
+        if any(n.lower() == "none" for n in names):
+            if len(names) > 1:
+                raise _lib.FrameworkError("--rereview none excludes names: pass none alone, or one --rereview <skill> per review that must run again")
+            entry["rereview"] = []
+        else:
+            entry["rereview"] = list(dict.fromkeys(names))  # duplicates collapse; order kept
+    if args.rereview_note is not None:
+        entry["rereview_note"] = args.rereview_note
     for required in ("skill", "status"):
         value = entry.get(required)
         if not isinstance(value, str) or not value.strip():
@@ -87,6 +123,26 @@ def build_entry(args: argparse.Namespace) -> dict:
 #   disposition and resolves_ts absent             no ─▶ computed on read / filled from the failed entry
 #   status == done  ⇒ skill == ship                no ─▶ done is ship's word
 #   skill == ship   ⇒ status == done               no ─▶ ship never fails, so never resolved or re-run
+#   no key from _lib.READER_ONLY_KEYS              no ─▶ derived on read; refused in both forms
+#   concern, when present:
+#     status != resolved                           no ─▶ a resolution record carries no concern
+#     non-empty str                                no ─▶ quote it (parse_scalar makes 42 a number)
+#   plan review logging clean | issues_open        ⇒ `rereview` present (the declaration)
+#                                                  no ─▶ names --rereview none / --rereview <skill>
+#   rereview_note without rereview                 no ─▶ a note belongs to a declaration (any skill, any status)
+#   rereview, when present:                        (above the early return: these rules apply to runs)
+#     status not resolved | done                   no ─▶ only a run declares
+#     skill is a gating tier                       no ─▶ office-hours cannot demand
+#     list of str, no "none" member, deduplicated  no ─▶ the JSON spelling of none is []
+#     rereview_note is a str when present          no ─▶ must be a string
+#     non-empty list ⇒ non-empty rereview_note     no ─▶ note needed
+#     empty list ⇒ no rereview_note                no ─▶ none takes no note
+#     each name: not self, not ship, gating,
+#       _lib.can_demand (same stage)               no ─▶ cannot demand
+#     non-empty list ⇒ plan resolves               no ─▶ exit 2 (pass --plan)
+#     each name has a run on the plan
+#       (_lib.plan_review_history / last_run)      no ─▶ nothing to demand
+#     entry ts >= that run's ts                    no ─▶ the reader would never count it (`>=`: a tie is accepted)
 #   status == resolved:
 #     skill is a gating tier                       no ─▶ nothing gates on it
 #     resolved_by is a non-empty str, no leading / no ─▶ resolved_by needed
@@ -94,6 +150,7 @@ def build_entry(args: argparse.Namespace) -> dict:
 #     resolved_by == operator or a gating tier     no ─▶ not a resolver
 #     _lib.can_resolve(skill, resolved_by)         no ─▶ ship never resolves; ship-stage needs ship-stage
 #     note is a non-empty str                      no ─▶ note needed
+#     target's disposition is not stale            no ─▶ a demand clears only when that review runs again
 #     target's latest entry is failed              no ─▶ nothing to resolve
 #     resolver's latest is passed, ts >= failed.ts no ─▶ resolver never looked
 #     entry ts >= failed.ts                        no ─▶ would not become the latest entry
@@ -102,7 +159,83 @@ def _non_empty_str(value) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def validate_entry(root: Path, cfg: dict, entry: dict) -> dict:
+def validate_declaration(root: Path, cfg: dict, entry: dict, entries: list[dict] | None = None) -> None:
+    """The re-review declaration (`rereview`, `rereview_note`), on the merged entry. Required
+    from the four plan reviews on a run; accepted from any other gating tier; refused on a
+    resolution record and from a tier that never gates. Every name must pass `_lib.can_demand`
+    and have a run on this plan, through the same pass-1 the reader uses."""
+    status, skill = entry["status"], entry["skill"]
+    declared = "rereview" in entry
+    if skill in _lib.PLAN_STAGE_SKILLS and status in ("clean", "issues_open") and not declared:
+        raise _lib.FrameworkError(
+            f"{skill} must declare re-reviews: pass --rereview none, or --rereview <skill> for each earlier review "
+            "whose approved content you changed (skills/_shared/dashboard.md, \"When your review changes what an earlier review approved\")"
+        )
+    if not declared:
+        if "rereview_note" in entry:
+            raise _lib.FrameworkError("rereview_note belongs to a declaration: pass --rereview <skill> with it, or drop the note")
+        return
+    names = entry["rereview"]
+    if status in ("resolved", "done"):
+        raise _lib.FrameworkError(f"a {status} entry cannot declare re-reviews; only a run of a review declares")
+    tier = _lib.tier_for(skill)
+    if not tier or not tier["gates"]:
+        raise _lib.FrameworkError(f"{skill!r} never gates and cannot demand a re-review")
+    if not isinstance(names, list) or any(not isinstance(n, str) for n in names):
+        raise _lib.FrameworkError(f"rereview must be a list of skill names (the JSON spelling of none is []), got {names!r}")
+    if any(n.strip().lower() == "none" for n in names):
+        raise _lib.FrameworkError("rereview lists skill names; the JSON spelling of none is [] (or pass --rereview none)")
+    names = list(dict.fromkeys(n.strip() for n in names))
+    entry["rereview"] = names
+    note = entry.get("rereview_note")
+    if "rereview_note" in entry and not isinstance(note, str):
+        raise _lib.FrameworkError(f"rereview_note must be a string, got {note!r}")
+    if names and not _non_empty_str(note):
+        raise _lib.FrameworkError('a re-review demand needs --rereview-note "<what you changed that the named review approved>"')
+    if not names and "rereview_note" in entry:
+        raise _lib.FrameworkError("--rereview none takes no note; a note belongs to a demand")
+    for target in names:
+        if target == skill:
+            raise _lib.FrameworkError(f"{skill!r} cannot demand its own re-review; run it again instead")
+        if target == "ship":
+            raise _lib.FrameworkError("'ship' reviews nothing and is never re-run; it cannot be demanded")
+        target_tier = _lib.tier_for(target)
+        if not target_tier or not target_tier["gates"]:
+            raise _lib.FrameworkError(
+                f"cannot demand {target!r}: not a gating review tier (one of: {', '.join(t['skill'] for t in _lib.gating_tiers() if t['skill'] != 'ship')})"
+            )
+        if not _lib.can_demand(skill, target):
+            raise _lib.FrameworkError(
+                f"{skill!r} cannot demand {target!r}: a demand stays in its stage (plan reviews demand plan reviews; "
+                "ship-stage reviews demand ship-stage reviews)"
+            )
+    if not names:
+        return
+    plan = entry.get("plan")
+    if not plan:
+        found, _kind = _lib.current_plan(root, cfg, _lib.current_branch(root))
+        if not found:
+            raise _lib.FrameworkError("a re-review demand needs a plan to resolve against; none on this branch (pass --plan)", code=2)
+        plan = entry["plan"] = found.name
+    history = _lib.plan_review_history(root, cfg, plan, entries)
+    for target in names:
+        run = _lib.last_run(history, target)
+        if run is None:
+            raise _lib.FrameworkError(
+                f"{target!r} has no run on {plan}; a review that never ran will read the current plan when it does, so there is nothing to demand"
+            )
+        # the reader counts a demand only at or after the run it overtakes (`>=`, a tie fails closed), so
+        # an earlier one would be stored and never gate: a supplied `ts`, or a clock behind the one that ran
+        if entry["ts"] < _lib.review_ts(run):
+            raise _lib.FrameworkError(
+                f"ts {entry['ts']!r} is earlier than {target!r}'s last run on {plan} ({_lib.review_ts(run)}); a demand is dated at or after "
+                "the run it overtakes, or it never counts. Omit ts to stamp now; if now is earlier, this machine's clock is behind"
+            )
+
+
+def validate_entry(root: Path, cfg: dict, entry: dict, entries: list[dict] | None = None) -> dict:
+    """`entries` is the log as `main` already scanned it; the rules that read history use it
+    instead of reading the file again."""
     status = entry["status"]
     skill = entry["skill"]
     if status not in _lib.REVIEW_STATUSES:
@@ -127,6 +260,15 @@ def validate_entry(root: Path, cfg: dict, entry: dict) -> dict:
         raise _lib.FrameworkError("'done' is written by 'ship' only; a review logs clean or issues_open")
     if skill == "ship" and status != "done":
         raise _lib.FrameworkError("'ship' logs done only; it never fails, so it is never resolved or re-run")
+    for key in _lib.READER_ONLY_KEYS:
+        if key in entry:
+            raise _lib.FrameworkError(f"{key!r} is derived on read by review-read and workflow-state; do not write it")
+    if "concern" in entry:
+        if status == "resolved":
+            raise _lib.FrameworkError("concern belongs on a run entry; a resolved record carries none (the run it resolves keeps its own)")
+        if not _non_empty_str(entry["concern"]):
+            raise _lib.FrameworkError(f"concern must be a non-empty string, got {entry['concern']!r}; quote it: --field concern=\"...\"")
+    validate_declaration(root, cfg, entry, entries)
     if status != "resolved":
         return entry
 
@@ -156,15 +298,22 @@ def validate_entry(root: Path, cfg: dict, entry: dict) -> dict:
 
     plan = entry.get("plan")
     if not plan:
-        branch = _lib.current_branch(root)
-        latest = _lib.latest_plan(root, cfg, branch) if branch else None
+        latest, _kind = _lib.current_plan(root, cfg, _lib.current_branch(root))
         if not latest:
             raise _lib.FrameworkError("resolved needs a plan to resolve against; none on this branch (pass --plan)", code=2)
         plan = entry["plan"] = latest.name
 
-    reviews = _lib.reviews_for_plan(root, cfg, plan)
+    reviews = _lib.reviews_for_plan(root, cfg, plan, entries)
     target = reviews.get(skill)
     disposition = _lib.review_disposition(target)
+    if disposition == "stale":
+        # its own branch, not the `!= failed` fall-through: that message sends an agent looking
+        # for a failure to resolve, when the only thing that clears a demand is the named run
+        runs_again = "/review-implementation runs again" if skill == "adversarial-subagent" else f"{skill} runs again"
+        raise _lib.FrameworkError(
+            f"a re-review demand clears only when {runs_again}: {skill!r} on {plan} was demanded by "
+            f"{target.get('stale_by')} ({str(target.get('stale_ts', ''))[:10]}); no resolution, by operator or any tier, clears it"
+        )
     if disposition != "failed":
         raise _lib.FrameworkError(f"{skill!r} has no failed entry to resolve on {plan} (latest is {disposition})")
     # a superseded resolution is failed because of the later failure it did not name: resolve that one
@@ -198,10 +347,10 @@ def main() -> int:
     root = _lib.repo_root()
     cfg = _lib.load_config(root)
     entry = build_entry(args)
-    _entries, bad = _lib.review_log_scan(root, cfg)
+    entries, bad = _lib.review_log_scan(root, cfg)  # the one read: the validators take these entries
     if bad:
         raise _lib.FrameworkError(_lib.unreadable_message(bad), code=2, unreadable=len(bad), lines=bad)
-    stored = _lib.review_log_append(root, cfg, validate_entry(root, cfg, entry))
+    stored = _lib.review_log_append(root, cfg, validate_entry(root, cfg, entry, entries))
     return _lib.print_json(stored)
 
 

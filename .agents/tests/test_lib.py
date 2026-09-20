@@ -257,6 +257,23 @@ def test_context_bundle(tmp_path):
     assert ctx["PLAN_FILE"].startswith("/") and ctx["DOCS_DIR"].startswith("/")
 
 
+def test_ctx_timestamp_is_utc_whatever_tz_the_shell_has(tmp_path):
+    """UTC+14 shares its calendar date with UTC for 10 hours of every day, so a date-only
+    check passes against local-time code 42% of the time. Compare the whole timestamp with
+    the UTC clock: under local-time code the gap is 14 hours at every hour of the day. TZ is
+    set in the subprocess that runs the helper; os.environ in-process does nothing without
+    time.tzset(), which would leak into every later test."""
+    from datetime import datetime, timezone
+    repo = R.make_repo(tmp_path)
+    proc = R.run(repo, "ctx", "--json", env={"TZ": "Pacific/Kiritimati"})
+    assert proc.returncode == 0, proc.stderr
+    slug = json.loads(proc.stdout)["TIMESTAMP"]
+    stamped = datetime.strptime(slug, "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc)
+    assert abs((datetime.now(timezone.utc) - stamped).total_seconds()) < 60
+    own = datetime.strptime(_lib.timestamp_slug(), "%Y%m%d-%H%M%S").replace(tzinfo=timezone.utc)
+    assert abs((datetime.now(timezone.utc) - own).total_seconds()) < 60
+
+
 # ---------------------------------------------------------------- review vocabulary and dispositions
 
 
@@ -465,3 +482,323 @@ def test_reviews_for_plan_attaches_summary_named_entries_and_ignores_unreadable(
     path.write_text(path.read_text() + "{broken\n")
     assert _lib.reviews_for_plan(repo, cfg, "p-plan-1.md")["qa"]["status"] == "issues_found"
     assert _lib.review_log_read(repo, cfg)[1] == 1
+
+
+# ---------------------------------------------------------------- re-review demands: stale
+
+T = {n: f"2026-09-{n:02d}T00:00:00Z" for n in range(1, 28)}
+
+
+def _repo_and_cfg(tmp_path):
+    repo = R.make_repo(tmp_path)
+    return repo, _lib.load_config(repo)
+
+
+def _adder(repo, cfg, plan_name):
+    return lambda skill, status, ts, **kw: _lib.review_log_append(repo, cfg, {"skill": skill, "status": status, "plan": plan_name, "ts": ts, **kw})
+
+
+def disp(repo, cfg, plan_name, skill):
+    return _lib.review_disposition(_lib.reviews_for_plan(repo, cfg, plan_name)[skill])
+
+
+def test_can_demand_same_stage_gating_not_self_not_ship():
+    assert _lib.can_demand("plan-design-review", "plan-eng-review") and _lib.can_demand("plan-adversarial-review", "plan-ceo-review")
+    assert _lib.can_demand("review-implementation", "adversarial-subagent") and _lib.can_demand("final-review", "qa")
+    assert not _lib.can_demand("plan-eng-review", "plan-eng-review")
+    assert not _lib.can_demand("plan-eng-review", "review-implementation") and not _lib.can_demand("qa", "plan-eng-review")
+    assert not _lib.can_demand("qa", "ship") and not _lib.can_demand("ship", "qa")
+    assert not _lib.can_demand("office-hours", "plan-eng-review") and not _lib.can_demand("plan-eng-review", "office-hours")
+    assert not _lib.can_demand("execute-plan", "plan-eng-review") and not _lib.can_demand("plan-eng-review", "nope")
+
+
+def test_is_run_and_reader_only_keys():
+    assert _lib.is_run({"status": "clean"}) and _lib.is_run({"status": "done"}) and _lib.is_run({"status": "issues_found"})
+    assert _lib.is_run({}) and _lib.is_run({"status": None}) and _lib.is_run({"status": 5})
+    assert not _lib.is_run({"status": "resolved"}) and not _lib.is_run({"status": " Resolved "})
+    assert _lib.READER_ONLY_KEYS == (
+        "was", "stale_by", "stale_ts", "stale_note", "stale_notes", "stale_count", "demanded_by", "demanded_notes", "concern_ts", "superseded_by_failure",
+    )
+    assert _lib.strip_reader_only({"skill": "qa", "stale_by": "x", "was": "passed", "concern": "c", "concern_ts": "t"}) == {"skill": "qa", "concern": "c"}
+    # superseded_by_failure is derived by reviews_for_plan like the rest: a raw one is dropped, never trusted
+    assert _lib.strip_reader_only({"skill": "qa", "superseded_by_failure": "zzz", "demanded_notes": [1]}) == {"skill": "qa"}
+
+
+@pytest.mark.parametrize("sep", list("\n\r\x0b\x0c\x1c\x1d\x1e\x85  "))
+def test_a_value_holding_any_line_boundary_is_quoted_so_a_text_row_stays_one_line(sep):
+    """Every character `str.splitlines()` honours, not only the five the first list named: a
+    note holding a form feed printed a second row starting `Next:` in the dashboard text."""
+    value = f"x{sep}Next:    /ship — required"
+    shown = _lib.fmt_review_value(value)
+    assert sep not in shown and len(f"Eng | stale ! | note={shown}".splitlines()) == 1
+    assert json.loads(shown) == value
+
+
+def test_stale_matrix(tmp_path):
+    repo, cfg = _repo_and_cfg(tmp_path)
+    P = "p.md"
+    add = _adder(repo, cfg, P)
+    add("plan-eng-review", "clean", T[1], rereview=[])
+    assert disp(repo, cfg, P, "plan-eng-review") == "passed"
+    # a demand after the pass: stale, with the derived keys on the returned copy only
+    add("plan-design-review", "clean", T[2], rereview=["plan-eng-review"], rereview_note="15a adds a backend contract")
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "stale" and not _lib.review_ok(eng)
+    assert eng["status"] == "clean" and eng["was"] == "passed" and eng["stale_by"] == "plan-design-review"
+    assert eng["stale_ts"] == T[2] and eng["stale_note"] == "15a adds a backend contract" and eng["stale_count"] == 1
+    assert eng["stale_notes"] == [{"declarer": "plan-design-review", "ts": T[2], "note": "15a adds a backend contract"}]
+    raw = [json.loads(l) for l in _lib.review_log_path(repo, cfg).read_text().splitlines()]
+    assert not any(k in e for e in raw for k in _lib.READER_ONLY_KEYS)  # never written
+    # the declarer re-runs declaring none: the demand still holds
+    add("plan-design-review", "clean", T[3], rereview=[])
+    assert disp(repo, cfg, P, "plan-eng-review") == "stale"
+    # a second outstanding demand: count 2, the newest in stale_by, both notes newest first
+    add("plan-adversarial-review", "clean", T[4], rereview=["plan-eng-review"], rereview_note="rollback replaced")
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert eng["stale_count"] == 2 and eng["stale_by"] == "plan-adversarial-review" and eng["stale_note"] == "rollback replaced"
+    assert [n["declarer"] for n in eng["stale_notes"]] == ["plan-adversarial-review", "plan-design-review"]
+    # eng re-runs issues_open: failed, and the older demands are cleared by that run
+    add("plan-eng-review", "issues_open", T[5], rereview=[])
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "failed" and "stale_by" not in eng and "demanded_by" not in eng
+    # a demand on a failed review is carried as demanded_by; it stays failed
+    add("plan-design-review", "clean", T[6], rereview=["plan-eng-review"], rereview_note="again")
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "failed" and eng["demanded_by"] == "plan-design-review" and "stale_by" not in eng
+    # and the row carries what changed, as a stale row does: the declarer may re-run with `none` later
+    assert eng["demanded_notes"] == [{"declarer": "plan-design-review", "ts": T[6], "note": "again"}]
+    # a third review resolves the failure: stale, not resolved (the demand is still outstanding)
+    add("plan-eng-review", "resolved", T[7], resolved_by="plan-adversarial-review", note="n", resolves_ts=T[5])
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "stale" and eng["was"] == "resolved" and eng["status"] == "resolved"
+    # eng re-runs clean after every demand: passed
+    add("plan-eng-review", "clean", T[8], rereview=[])
+    assert disp(repo, cfg, P, "plan-eng-review") == "passed"
+
+
+def test_equal_ts_between_run_and_demand_is_stale_in_both_file_orders(tmp_path):
+    for order in ("run-first", "demand-first"):
+        (tmp_path / order).mkdir()
+        repo = R.make_repo(tmp_path / order)
+        cfg = _lib.load_config(repo)
+        run = {"skill": "plan-eng-review", "status": "clean", "plan": "p.md", "ts": T[2], "rereview": []}
+        demand = {"skill": "plan-design-review", "status": "clean", "plan": "p.md", "ts": T[2], "rereview": ["plan-eng-review"], "rereview_note": "tie"}
+        for entry in ((run, demand) if order == "run-first" else (demand, run)):
+            _lib.review_log_append(repo, cfg, entry)
+        assert disp(repo, cfg, "p.md", "plan-eng-review") == "stale", order
+        _lib.review_log_append(repo, cfg, dict(run, ts=T[3]))  # only a run strictly after the demand clears it
+        assert disp(repo, cfg, "p.md", "plan-eng-review") == "passed", order
+
+
+def test_union_merged_failure_between_pass_and_demand_reads_failed_then_stale(tmp_path):
+    repo, cfg = _repo_and_cfg(tmp_path)
+    P = "p.md"
+    add = _adder(repo, cfg, P)
+    add("plan-eng-review", "clean", T[1], rereview=[])
+    add("plan-design-review", "clean", T[4], rereview=["plan-eng-review"], rereview_note="x")
+    add("plan-eng-review", "issues_open", T[2], rereview=[])  # merged in later, dated between the pass and the demand
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "failed" and eng["demanded_by"] == "plan-design-review"
+    add("plan-eng-review", "resolved", T[5], resolved_by="plan-adversarial-review", note="n", resolves_ts=T[2])
+    assert disp(repo, cfg, P, "plan-eng-review") == "stale"
+
+
+def test_hand_appended_lines_never_clear_or_invent_a_demand(tmp_path):
+    repo, cfg = _repo_and_cfg(tmp_path)
+    P = "p.md"
+    add = _adder(repo, cfg, P)
+    add("plan-eng-review", "clean", T[1], rereview=[])
+    add("plan-design-review", "clean", T[2], rereview=["plan-eng-review"], rereview_note="x")
+    # a resolved entry by operator on a stale review, with or without a waives_ts key: failed (unmatched) and demanded
+    add("plan-eng-review", "resolved", T[3], resolved_by="operator", note="n")
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "failed" and eng["superseded_by_failure"] == "unmatched" and eng["demanded_by"] == "plan-design-review"
+    add("plan-eng-review", "resolved", T[4], resolved_by="operator", note="n", waives_ts=T[2])
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "failed" and eng["demanded_by"] == "plan-design-review"
+    # an issues_open entry carrying a waives_ts key is an ordinary run: failed
+    add("plan-eng-review", "issues_open", T[5], waives_ts=T[2], rereview=[])
+    assert disp(repo, cfg, P, "plan-eng-review") == "failed"
+    # only a hand-appended resolved entry and no run: demands naming it are dropped
+    add("plan-ceo-review", "resolved", T[1], resolved_by="operator", note="n")
+    add("plan-adversarial-review", "clean", T[6], rereview=["plan-ceo-review"], rereview_note="x")
+    ceo = _lib.reviews_for_plan(repo, cfg, P)["plan-ceo-review"]
+    assert _lib.review_disposition(ceo) == "failed" and "stale_by" not in ceo and "demanded_by" not in ceo
+    history = _lib.plan_review_history(repo, cfg, P)
+    assert _lib.last_run(history, "plan-ceo-review") is None and all(d[1] != "plan-ceo-review" for d in history["demands"])
+    # legacy words, done and a missing status count as runs
+    add("qa", "issues_found", T[1])
+    add("design-review", "done", T[1])
+    add("final-review", None, T[1])
+    history = _lib.plan_review_history(repo, cfg, P)
+    assert all(_lib.last_run(history, s) is not None for s in ("qa", "design-review", "final-review"))
+    # lines that break can_demand are ignored on read: self, ship, cross-stage, a non-gating declarer, a resolved entry, a missing review
+    add("plan-eng-review", "clean", T[7], rereview=[])
+    add("plan-eng-review", "clean", T[8], rereview=["plan-eng-review"], rereview_note="self")
+    add("ship", "done", T[8], rereview=["plan-eng-review"], rereview_note="ship")
+    add("qa", "clean", T[8], rereview=["plan-eng-review"], rereview_note="cross-stage")
+    add("office-hours", "clean", T[8], rereview=["plan-eng-review"], rereview_note="non-gating")
+    add("plan-ceo-review", "resolved", T[8], resolved_by="operator", note="n", rereview=["plan-eng-review"], rereview_note="resolved")
+    add("plan-design-review", "clean", T[8], rereview=["nope"], rereview_note="missing review")
+    assert disp(repo, cfg, P, "plan-eng-review") == "passed"
+    # a demand logged against another plan is ignored
+    _lib.review_log_append(repo, cfg, {"skill": "plan-design-review", "status": "clean", "plan": "q.md", "ts": T[9], "rereview": ["plan-eng-review"], "rereview_note": "other plan"})
+    assert disp(repo, cfg, P, "plan-eng-review") == "passed"
+
+
+def test_reader_only_keys_are_stripped_first_even_inside_the_resolution_walk(tmp_path):
+    repo, cfg = _repo_and_cfg(tmp_path)
+    P = "p.md"
+    add = _adder(repo, cfg, P)
+    add("plan-eng-review", "clean", T[1], rereview=[], stale_by="plan-design-review", stale_ts=T[1], stale_note="forged", stale_notes=[], stale_count=9, was="passed", demanded_by="x")
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "passed" and not any(k in eng for k in _lib.READER_ONLY_KEYS)
+    # a hand-appended stale_by on an older issues_open that a resolution later covers: the walk still sees the failure
+    add("qa", "issues_open", T[2], stale_by="x")
+    add("qa", "resolved", T[4], resolved_by="operator", note="n", resolves_ts=T[2])
+    add("qa", "issues_open", T[3], stale_by="x")  # merged in later; strip-first keeps it a failure the walk sees
+    qa = _lib.reviews_for_plan(repo, cfg, P)["qa"]
+    assert _lib.review_disposition(qa) == "failed" and qa["superseded_by_failure"] == T[3]
+    # a raw superseded_by_failure is the reader's own key: dropped, then derived. On a sound resolution it
+    # used to read failed with a ts no later resolution could satisfy ("earlier than the failed entry's 'zzz'")
+    add("final-review", "issues_open", T[2])
+    add("final-review", "resolved", T[3], resolved_by="operator", note="n", resolves_ts=T[2], superseded_by_failure="zzz")
+    final = _lib.reviews_for_plan(repo, cfg, P)["final-review"]
+    assert _lib.review_disposition(final) == "resolved" and "superseded_by_failure" not in final
+    # a raw concern_ts, and a raw concern on a resolved entry, are stripped; the run's concern travels with the row
+    add("design-review", "issues_open", T[5], concern="from the run")
+    add("design-review", "resolved", T[6], resolved_by="operator", note="n", resolves_ts=T[5], concern="on the record", concern_ts="forged")
+    audit = _lib.reviews_for_plan(repo, cfg, P)["design-review"]
+    assert audit["concern"] == "from the run" and audit["concern_ts"] == T[5] and _lib.review_disposition(audit) == "resolved"
+    add("design-review", "clean", T[7])
+    assert "concern" not in _lib.reviews_for_plan(repo, cfg, P)["design-review"]
+
+
+def test_malformed_rereview_fields_never_raise_and_never_demand(tmp_path):
+    repo, cfg = _repo_and_cfg(tmp_path)
+    P = "p.md"
+    add = _adder(repo, cfg, P)
+    add("plan-eng-review", "clean", T[1], rereview=[])
+    for bad in (5, "plan-eng-review", {"a": 1}, [["plan-eng-review"]], [5], None, True):
+        add("plan-design-review", "clean", T[2], rereview=bad, rereview_note=42)
+    assert disp(repo, cfg, P, "plan-eng-review") == "passed"
+    assert _lib.plan_review_history(repo, cfg, P)["demands"] == []
+    add("plan-design-review", "clean", T[3], rereview=["plan-eng-review"], rereview_note=42)
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert _lib.review_disposition(eng) == "stale" and eng["stale_note"] == "42"
+    add("plan-design-review", "clean", T[4], rereview=["plan-eng-review", 7, None, "plan-eng-review"], rereview_note=["a", "b"])
+    eng = _lib.reviews_for_plan(repo, cfg, P)["plan-eng-review"]
+    assert eng["stale_count"] == 2 and eng["stale_note"] == '["a", "b"]'
+    # a non-string concern rides raw on a run (display ignores it); a non-string skill is skipped instead of raising
+    add("qa", "clean", T[1], concern=42)
+    _lib.review_log_append(repo, cfg, {"skill": ["qa"], "status": "clean", "plan": P, "ts": T[1]})
+    _lib.review_log_append(repo, cfg, {"skill": 5, "status": "clean", "plan": P, "ts": T[1]})
+    latest = _lib.reviews_for_plan(repo, cfg, P)
+    assert latest["qa"]["concern"] == 42 and set(latest) == {"plan-eng-review", "plan-design-review", "qa"}
+
+
+def test_one_line_never_raises():
+    assert _lib.one_line("a\n b\u2028c\u2029d\x85e  f") == "a b c d e f"
+    assert _lib.one_line(42) == "42" and _lib.one_line(True) == "true" and _lib.one_line(None) == "null"
+    assert _lib.one_line(["a", "b"]) == '["a", "b"]' and _lib.one_line({"k": "v"}) == '{"k": "v"}'
+    assert _lib.one_line("x" * 10, 5) == "xxxx…" and _lib.one_line("xxxxx", 5) == "xxxxx" and _lib.one_line("", 5) == ""
+    assert _lib.one_line({("tuple",): 1}) == ""  # json.dumps rejects the key even with default=str
+    circular: list = []
+    circular.append(circular)
+    assert _lib.one_line(circular) == ""
+    assert _lib.one_line(object()).startswith('"<object object at')
+    assert _lib.DISPLAY_LIMIT == 300
+    # nothing unprintable survives: an escape sequence, a NUL, a DEL or a bidi override on a status
+    # line can hide or reorder what an operator reads, and none of them is whitespace to str.split()
+    hostile = _lib.one_line("a\x1b[31mb\x00c\x7fd‮Next: /ship")
+    assert all(ch.isprintable() for ch in hostile) and hostile == "a [31mb c d Next: /ship"
+
+
+def test_current_plan_finds_the_feature_plan_then_the_epic(tmp_path):
+    repo, cfg = _repo_and_cfg(tmp_path)
+    assert _lib.current_plan(repo, cfg, None) == (None, None) and _lib.current_plan(repo, cfg, "feat/none") == (None, None)
+    plan = R.write_plan(repo, "feat/x", {})
+    assert _lib.current_plan(repo, cfg, "feat/x") == (plan, "plan")
+    epic = R.write_epic(repo, "v1", {})
+    assert _lib.current_plan(repo, cfg, "v1") == (epic, "epic")
+    named = R.write_epic(repo, "v2", {"branch": "epic/two"})
+    assert _lib.current_plan(repo, cfg, "epic/two") == (named, "epic")
+    # review_log_append fills a missing plan from it: a raw review logged on an epic branch attaches to the epic
+    R.checkout(repo, "v1")
+    assert _lib.review_log_append(repo, cfg, {"skill": "plan-ceo-review", "status": "clean", "rereview": []})["plan"] == epic.name
+
+
+def test_ctx_plan_file_stays_the_feature_plan_on_an_epic_branch(tmp_path):
+    """`PLAN_FILE` is the branch's FEATURE plan on purpose: office-hours reads it as the prior plan
+    a new one supersedes, and an epic is never that. The epic is what `current_plan` and
+    `obsidian-workflow resolve-plan` are for."""
+    repo = R.make_repo(tmp_path)
+    epic = R.write_epic(repo, "v1", {})
+    R.checkout(repo, "v1")
+    ctx = R.run_json(repo, "ctx", "--json")
+    assert ctx["PLAN_FILE"] == "" and ctx["SUMMARY_FILE"] == ""
+    assert _lib.current_plan(repo, R.load_cfg(repo), "v1") == (epic, "epic")
+
+
+def test_a_non_string_holding_a_row_separator_is_quoted_so_the_extra_cell_splits_on_bare_commas():
+    """Extra is `k=v,k=v`. A string holding `,` or `|` was always JSON-quoted; a list was dumped
+    raw, so `rereview` with two names, `stale_notes` and `demanded_notes` put top-level commas
+    in the cell. A non-string whose JSON text holds a separator is now quoted as that text."""
+    for bare, shown in (([], "[]"), (3, "3"), (True, "true"), (None, "null"), (["plan-eng-review"], '["plan-eng-review"]'), ({}, "{}")):
+        assert _lib.fmt_review_value(bare) == shown
+    notes = [{"declarer": "plan-design-review", "ts": "2026-09-02T10:00:00Z", "note": "a, b | c"}]
+    for value in (notes, ["plan-eng-review", "plan-ceo-review"], {"a": 1, "b": 2}):
+        shown = _lib.fmt_review_value(value)
+        assert shown.startswith('"') and shown.endswith('"')
+        assert json.loads(json.loads(shown)) == value  # one JSON string holding the value's JSON text
+    # every comma left outside a JSON string literal separates two fields
+    cell = ",".join(f"{k}={_lib.fmt_review_value(v)}" for k, v in (("rereview", ["a", "b"]), ("stale_notes", notes), ("was", "passed")))
+    fields, depth, start = [], False, 0
+    for i, ch in enumerate(cell):
+        if ch == '"' and cell[i - 1 : i] != "\\":
+            depth = not depth
+        elif ch == "," and not depth:
+            fields.append(cell[start:i])
+            start = i + 1
+    fields.append(cell[start:])
+    assert [f.split("=", 1)[0] for f in fields] == ["rereview", "stale_notes", "was"]
+
+
+def test_an_undated_entry_is_the_oldest_entry_for_runs_and_demands_alike(tmp_path):
+    """The CLI stamps and validates every `ts`, so only a hand-appended line lacks one. The
+    reader has one rule for it (`review_ts` -> ""): it is the OLDEST entry. An undated run never
+    outranks a dated one; an undated demand is outstanding only against an undated run. Treating
+    an undated demand as always outstanding would leave `--next` naming a review that no re-run
+    can clear; the honest repair is to fix or delete the line."""
+    repo, cfg = _repo_and_cfg(tmp_path)
+    P = "p.md"
+    add = _adder(repo, cfg, P)
+    add("plan-eng-review", "clean", T[1], rereview=[])
+    _lib.review_log_append(repo, cfg, {"skill": "plan-design-review", "status": "clean", "plan": P, "ts": None, "rereview": ["plan-eng-review"], "rereview_note": "undated"})
+    assert disp(repo, cfg, P, "plan-eng-review") == "passed"  # the dated run is newer than an undated demand
+    # against an undated run the same demand is outstanding (a tie fails closed), and a dated re-run clears it
+    (tmp_path / "two").mkdir()
+    repo2, cfg2 = _repo_and_cfg(tmp_path / "two")
+    _lib.review_log_append(repo2, cfg2, {"skill": "plan-eng-review", "status": "clean", "plan": P, "ts": None, "rereview": []})
+    _lib.review_log_append(repo2, cfg2, {"skill": "plan-design-review", "status": "clean", "plan": P, "ts": None, "rereview": ["plan-eng-review"], "rereview_note": "undated"})
+    assert disp(repo2, cfg2, P, "plan-eng-review") == "stale"
+    _adder(repo2, cfg2, P)("plan-eng-review", "clean", T[2], rereview=[])
+    assert disp(repo2, cfg2, P, "plan-eng-review") == "passed"
+
+
+def test_readers_take_entries_already_read_and_do_not_touch_the_file_again(tmp_path):
+    """`review-log` and `workflow-state` scan the log once for the unreadable count and hand the
+    entries on; pass 1 and pass 2 used to read the file again, each."""
+    repo, cfg = _repo_and_cfg(tmp_path)
+    P = "p.md"
+    add = _adder(repo, cfg, P)
+    add("plan-eng-review", "clean", T[1], rereview=[])
+    add("plan-design-review", "clean", T[2], rereview=["plan-eng-review"], rereview_note="x")
+    entries, bad = _lib.review_log_scan(repo, cfg)
+    expected = _lib.reviews_for_plan(repo, cfg, P)
+    history = _lib.plan_review_history(repo, cfg, P)
+    _lib.review_log_path(repo, cfg).unlink()  # nothing left to read
+    assert bad == [] and _lib.reviews_for_plan(repo, cfg, P, entries=entries) == expected
+    assert _lib.plan_review_history(repo, cfg, P, entries=entries) == history
+    assert _lib.reviews_for_plan(repo, cfg, P) == {}  # control: without `entries` it reads the file, now gone
+    assert _lib.reviews_for_plan(repo, cfg, P, entries=[]) == {}  # an empty list is a read log, not "go read it"

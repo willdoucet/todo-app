@@ -696,7 +696,7 @@ Food item payloads swap `recipe_detail` for `food_item_detail: {category, shoppi
 | GET | `/meal-entries/{id}` | Get single meal entry with item + slot + participants eager-loaded |
 | POST | `/meal-entries` | Create meal entry (body: `{date, meal_slot_type_id, item_id \| custom_meal_name, participant_ids?, notes?}`) |
 | PATCH | `/meal-entries/{id}` | Update meal entry (cook-toggle, participants, notes, slot change) |
-| DELETE | `/meal-entries/{id}` | Soft-delete meal entry; hides the row and returns `{entry, undo_token, expires_at}` for a 5-second in-place undo window. Shopping-list groceries are dispatched for removal immediately; undo re-adds them. |
+| DELETE | `/meal-entries/{id}` | Soft-delete meal entry; hides the row and returns `{entry, undo_token, expires_at}` for a 5-second in-place undo window. Shopping-list removal is scheduled with a countdown just past the undo window (`UNDO_WINDOW_SECONDS + 1`), and the task no-ops if the delete was undone; undo also re-dispatches the add. |
 | POST | `/meal-entries/{id}/undo` | Restore a soft-hidden user-undo meal entry. Body: `{undo_token}`. Returns restored entry (200), 404 (never a user-undo row), or 410 (expired / token mismatch / parent item deleted / race loser). |
 
 Post-refactor, meal entries reference items via a single `item_id` field (the old `recipe_id` / `food_item_id` / `item_type` tuple is gone). The response embeds the full `Item` at `entry.item` with its detail eager-loaded.
@@ -894,7 +894,10 @@ client disconnect after `put` still reclaims the object).
 
 `app/services/asset_lifecycle.py` wires **adopt** (flip `referenced` on entity
 create/update, inside the entity transaction; 400 if the managed key has no
-`assets` row) and **release** (delete object + drop row, post-commit only, so a
+`assets` row; idempotent on an already-referenced key — the A1
+one-key-per-entity invariant is **accepted, not enforced**, so a second entity
+given the same `/uploads/{key}` shares the object and loses it when the first
+releases it) and **release** (delete object + drop row, post-commit only, so a
 rolled-back edit never erases live bytes; an unreferenced row is kept if the
 storage delete fails so the sweep can retry) into the responsibilities /
 family_members / items (+recipe image) write paths, plus the `stock_icons/*`

@@ -197,7 +197,7 @@ argument rather than `ctx`, the summary is that file's sibling: `${_PLAN_FILE%.m
 
 Boxes appear only under `## Steps`. The session banner counts every `[ ]`, `[✓]`, and `[✗]`
 in this file to show progress, so a box anywhere else miscounts. A finished step reads
-`- [✓] Step 1 — objective (2026-09-09 14:32)`; a failed one `- [✗] ... (timestamp) — reason`.
+`- [✓] Step 1 — objective (2026-09-09T14:32:00Z)`; a failed one `- [✗] ... (<utc-timestamp>) — reason`.
 
 **Reconcile** when the file exists. Read it and compare its boxes with reality before doing
 anything. Signals that the boxes are behind: the registry entry
@@ -213,7 +213,7 @@ git diff "$BASE_BRANCH"...HEAD --stat
 When any signal fires, list every step with the box you believe is right and the evidence
 (file present on base, commit message, diff hunk), and ask one question in the shared format:
 confirm this list, or tell me which steps are actually done. Tick the confirmed steps with a
-`(reconciled <date>)` note before continuing. This is what makes multi-PR plans resumable;
+`(reconciled <utc-date>)` note before continuing. This is what makes multi-PR plans resumable;
 guessing here makes the second pull request redo or skip work.
 
 ### 7. Surface assumptions
@@ -240,7 +240,7 @@ For each open step, in plan order:
    `development-commands.md`. Quote the evidence.
 6. **Pause and explain**: files created or modified with paths, key decisions and rationale,
    deviations from the plan and why.
-7. **Update the summary**: tick the box with a timestamp; under `## Step notes` add a
+7. **Update the summary**: tick the box with `<utc-timestamp>`; under `## Step notes` add a
    subsection with files, decisions, deviations, verification evidence, and any test-artifact
    gap. Under `## Doc impact`, note which doc sections this step affects per
    `_shared/docs-contract.md` (new endpoint, route, dependency, token, command). Do not edit the
@@ -263,7 +263,7 @@ When the last box is ticked:
    stale docs, so a skipped or hand-waved update surfaces immediately.
 2. **Run the full test suites** exactly as `development-commands.md` says. Paste the pass and
    fail counts into `## Completion`. A red suite is `BLOCKED`, not `DONE`.
-3. **Complete the summary**: completion timestamp, what was built in a few sentences, test
+3. **Complete the summary**: completion `<utc-timestamp>`, what was built in a few sentences, test
    results, test-artifact gaps, and every deviation from the plan.
 4. If the user corrected you at any point, add a Corrections Log row and the canonical rule to
    `LESSONS.md`. First-principles insights go under `## Decisions`.
@@ -273,8 +273,8 @@ When the last box is ticked:
 Report one status per the completion protocol, with the change description.
 
 - **DONE** and **DONE_WITH_CONCERNS**: run the sync block from `_shared/obsidian-sync.md` with
-  the `execute-plan, done` row (`STATUS_VALUE=ready-for-review`); add `--set reason="..."` for
-  concerns. Write the same status line into `## Completion` of the summary.
+  the `execute-plan, done` row (`STATUS_VALUE=ready-for-review`); add `--set reason="..."
+  --set reason_by=execute-plan` for concerns. Write the same status line into `## Completion` of the summary.
 - **BLOCKED** and **NEEDS_CONTEXT**: set `implementation_status` and `reason` only, per the
   protocol's table. The summary keeps its open boxes.
 - **ABANDONED**: `"$BIN/obsidian-workflow" abandon "$REGISTRY_KEY" --reason "..."`.

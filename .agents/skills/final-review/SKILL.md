@@ -133,7 +133,7 @@ does not apply.
 ### 5. Persist
 
 ```bash
-"$BIN/review-log" --skill final-review --status STATUS \
+"$BIN/review-log" --skill final-review --status STATUS --plan "$(basename "$_PLAN_FILE")" \
   --field issues_found=N --field critical=N --field informational=N \
   --field model=<your model, when known>
 ```
@@ -145,6 +145,15 @@ step 1. If this pass closed the first review's open items, log a resolution for 
 own entry, per `_shared/dashboard.md` → "When the next step names a review that ran with
 issues open". Update the `Final Review` row of `## REVIEW REPORT` in `$_PLAN_FILE` per
 `_shared/plan-footer.md`, in place, preserving the frontmatter.
+
+A review that overrules something the plan states (a premise, a step, a success criterion, a
+decision an earlier review recorded) edits that text in place with a breadcrumb naming itself,
+says so in its REVIEW REPORT row, and passes the same sentence as `--field concern=` on its own
+entry: a plan review cannot usefully re-run on an implementing plan, so the record is the
+control. Declaring `--rereview <skill>` is optional at the ship stage and stays in its stage
+(QA, the design audit, the other code review); never declare `rereview=adversarial-subagent`
+from the invocation that just logged that subagent's run: a demand dated at or after a run
+always reads as outstanding (`>=`), so the subagent would read stale the moment it finished.
 
 ## Completion
 

@@ -115,7 +115,7 @@ Phases only, never steps; a phase is feature-sized and maps to one plan or one e
 - `## 1. Current State`: new mode says "nothing built; Phase 1 creates the skeleton". Adopt
   mode lists completed features and known gaps with file paths.
 - One section per phase in intended order: `## Phase N: <name>`, a `**Goal:**` line, a
-  `**Status:** not-started | in-progress | shipped <date> | deferred | subsumed` line, a
+  `**Status:** not-started | in-progress | shipped <utc-date> | deferred | subsumed` line, a
   `**Plan:**` line (`—` until office-hours creates one), three to six scope bullets (in and
   out), and for an epic a milestone table (id, name, status, plan link).
 - Phase 1 is always "Project skeleton": repo layout per the structure docs, container setup,

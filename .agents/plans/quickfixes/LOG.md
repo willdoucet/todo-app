@@ -1,5 +1,17 @@
 # Quickfix log
 
+## 2026-09-19 — prd-mealboard-shipped-status
+
+- Source: free text (stale-doc finding split out of PR #55, which left it because it rewrites PRD narrative)
+- What: mark the mealboard and shopping-list auto-sync as Built in PRD §5, and correct the factual drift found while verifying — aggregation bucket and unique index, count units, removal rule, pre-item-refactor data constraints, and the 1200px → 1280px nav breakpoint
+- Why: IMPLEMENTATION_PLAN Phases 3.5–3.9 shipped April 2026 (commits `90cb121`…`e6d34ea`, PRs #18–#23) while PRD §5 still said "Rebuilding" and §5.5 called shipped code a "Planned Enhancement"; PRD §11 already marked the same items `[x]`, so the document contradicted itself
+- Also: BACKEND_STRUCTURE's `DELETE /meal-entries/{id}` row claimed groceries are removed immediately — removal is scheduled at `UNDO_WINDOW_SECONDS + 1` and no-ops on undo. Fixed the `delete_meal_entry` docstring that the row came from; APP_FLOW:337 already had it right
+- Files: .agents/docs/{PRD,APP_FLOW,BACKEND_STRUCTURE,LESSONS}.md, backend/app/crud_meal_entries.py
+- Tests: tests/integration/test_meal_entries_api.py — 30 passed (Docker); only code change is a docstring, validated by AST parse in the api container
+- Docs: updated 4 docs; doc-guard --staged --dry-run → would pass
+- Follow-up: `test_delete_dispatches_shopping_removal` asserts the remove task is called but not its countdown, so the documented timing is not pinned by a test
+- Branch: quickfix/prd-mealboard-shipped-status · PR: https://github.com/willdoucet/todo-app/pull/56
+
 ## 2026-09-11 — origin-verify-header
 - Source: free text (M7 R2-cutover smoke-check finding)
 - What: require a Cloudflare-set X-Origin-Verify header (matched against the ORIGIN_VERIFY_SECRET Fly secret) in the production host gate, so requests that skip Cloudflare and hit the Fly origin directly are rejected before reaching /auth/*
@@ -68,3 +80,21 @@
 - Tests: none (docs only); the listed names match the executable, non-underscore files in `.agents/bin/` exactly
 - Docs: development-commands.md (Critical Rule) updated; AGENTS.md pointer unchanged
 - Branch: quickfix/helper-list-design-sync · PR: https://github.com/willdoucet/todo-app/pull/52
+
+## 2026-09-17 — m7-a1-adopt-plan-reconcile
+- Source: free text (found while reading shipped plans for cross-review overrides; evidence case 2 for the workflow-rereview-utc plan)
+- What: strike the never-shipped adopt-time rejection rule in the M7 `prod-r2-storage` plan (Adopt bullet + adversarial summary bullet) with a dated reconciliation note; correct the `asset_lifecycle` invariant docstring to "one key per entity, accepted not enforced"; pin the recipe form's one-key-in-two-columns flow with a test
+- Why: the plan carried both Eng review A1 (accept shared keys) and the adversarial review's opposite rule (reject them); PR #44 shipped A1, so the plan claimed a control that never existed. Decided with the user: A1 stands. No behaviour change
+- Files: .agents/plans/features/prod-r2-storage/prod-r2-storage-plan-20260715-201232.md, backend/app/services/asset_lifecycle.py, backend/tests/integration/test_asset_lifecycle.py
+- Tests: test_asset_lifecycle.py::TestItemHooks::test_recipe_form_shares_one_key_across_icon_and_image; backend suite 915 passed, 3 skipped
+- Docs: BACKEND_STRUCTURE.md (Code Organization) states the real adopt behaviour; LESSONS.md Bug Log row
+- Branch: quickfix/m7-a1-adopt-plan-reconcile · PR: https://github.com/willdoucet/todo-app/pull/54
+
+## 2026-09-19 — reconcile-stale-doc-status
+- Source: free text (five doc contradictions noticed during the 2026-09-19 /final-review of an unrelated branch)
+- What: fix the stale side of each: R2 runbook executed (TECH_STACK); M7 shipped 2026-09-11 (IMPLEMENTATION_PLAN ×2, PRD ×2); auth built in M3–M5 with JWT + argon2 + single-tenant isolation (PRD feature and security tables); meal entries soft-deleted with a 5-second in-place undo (APP_FLOW); index.css recipe-grid @media rules (FRONTEND_GUIDELINES)
+- Why: each doc contradicted another doc in the set; code, the epic registry, and git log settled every case, and each stale line predated or coincided with the M7 merge
+- Files: .agents/docs/TECH_STACK.md, .agents/docs/IMPLEMENTATION_PLAN.md, .agents/docs/PRD.md, .agents/docs/APP_FLOW.md, .agents/docs/FRONTEND_GUIDELINES.md
+- Tests: none (docs only); re-grep for the stale phrases is clean; PRD.md:36 is byte-identical to prod-launch-release and `git merge-tree` against that branch is clean
+- Docs: updated 5 docs; flagged, not fixed: PRD "Rebuilding" rows + 5.5 "Planned Enhancement (v1.1)" for shipped shopping auto-sync, BACKEND_STRUCTURE meal-entry DELETE "removal immediately" wording
+- Branch: quickfix/reconcile-stale-doc-status · PR: https://github.com/willdoucet/todo-app/pull/55

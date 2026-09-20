@@ -5,7 +5,7 @@ Printed at the end of every run. Callers paste it verbatim into the summary file
 shape is fixed.
 
 ```
-DOC SYNC REPORT — <default | full> — <branch> vs <base branch> — <date>
+DOC SYNC REPORT — <default | full> — <branch> vs <base branch> — <utc-date>
 
 | Doc | Section | Action | Summary |
 |---|---|---|---|

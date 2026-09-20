@@ -102,10 +102,20 @@ Then list every earlier review with its disposition:
 "$BIN/review-read"
 ```
 
-For every earlier review whose disposition is `failed`, read its open items and decide as you
-go: if this review closes one, say where in the plan you closed it and note it for completion;
-if it stays open, carry it forward in your own summary so the next review sees it. Never leave
-a failed review unmentioned.
+For every earlier review whose disposition is `failed` or `stale`, read its open items and
+decide as you go: if this review closes a failed one, say where in the plan you closed it and
+note it for completion; a stale one (a later review declared it must run again) you cannot
+close for them, so run it again if it is yours and carry it forward if it is not; if a failed
+one stays open, carry it forward in your own summary so the next review sees it. Never leave a
+failed or stale review unmentioned.
+
+Then audit the declarations before yours: for each earlier gating review on this plan whose
+latest run declared `none` (its `review-read` row shows `rereview=[]`), read the breadcrumbs it
+left in the plan against the domains of the reviews that ran before it (the test in
+`_shared/dashboard.md` → "When your review changes what an earlier review approved"); an
+undeclared reversal you find is yours to declare: pass `--rereview <the review it overtook>
+--rereview-note "…"` at completion, naming the review that made the change, and add it to that
+review's REVIEW REPORT row.
 
 ### 3. Locate the test artifact by its exact path
 
@@ -235,10 +245,18 @@ On `DONE` or `DONE_WITH_CONCERNS`, run the obsidian-sync block with `STATUS_VALU
 `REVIEW_VALUE` both `adversarial-reviewed`. On `BLOCKED` or `NEEDS_CONTEXT`, set only
 `implementation_status` and `reason`.
 
-Persist the result, with counts:
+Then declare and persist the result, with counts.
+
+Before logging, from this session's `review-read` output, for each earlier gating review that
+has a run on this plan, answer whether this review changed what that review approved (the test
+in `_shared/dashboard.md` → "When your review changes what an earlier review approved"). Pass
+`--rereview <skill> --rereview-note "<what changed>"` for each yes, and `--rereview none` only
+when every answer is no; `review-log` refuses the entry without one or the other. A demand
+adds `· re-review demanded by …` to that review's REVIEW REPORT row.
 
 ```bash
-"$BIN/review-log" --skill plan-adversarial-review --status "$STATUS" \
+"$BIN/review-log" --skill plan-adversarial-review --status "$STATUS" --plan "$(basename "$_PLAN_FILE")" \
+  --rereview none \
   --field mode=RED_TEAM --field passes=7 \
   --field fixed=N --field remaining=N --field model=<your model>
 ```

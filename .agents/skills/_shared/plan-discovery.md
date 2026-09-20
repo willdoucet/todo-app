@@ -6,7 +6,7 @@ Run after the preamble in every skill that operates on a plan.
 eval "$("$(git rev-parse --show-toplevel)/.agents/bin/ctx")"
 BIN="$REPO_ROOT/.agents/bin"
 
-# Resolution order: explicit argument > registry > newest plan on this branch.
+# Resolution order: explicit argument > registry > newest plan on this branch > the epic whose branch this is.
 _PLAN_FILE=$("$BIN/obsidian-workflow" resolve-plan ${PLAN_ARG:+--plan-path "$PLAN_ARG"} ${NOTE_REF:+--note-ref "$NOTE_REF"} | python3 -c 'import json,sys; print(json.load(sys.stdin).get("plan_path",""))')
 echo "Plan file: ${_PLAN_FILE:-none}"
 ```

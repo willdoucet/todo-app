@@ -66,12 +66,12 @@ tree. Ownership is in `_shared/docs-contract.md`; the blueprint shapes come from
 ## IMPLEMENTATION_PLAN.md
 
 - Shape: `## Phase N: <title>`, a `**Goal:**` line, a `**Status:**` line drawn from
-  `not-started | in-progress | shipped <date> | deferred | subsumed`, a `**Plan:**` line with
+  `not-started | in-progress | shipped <utc-date> | deferred | subsumed`, a `**Plan:**` line with
   the repo-relative plan path, scope bullets. An epic phase adds an `epic:` link, a
   `status: <shipped>/<total> milestones shipped` line, and the milestone table
   `| # | Milestone | Size | Status | Branch | Plan | Shipped |`.
 - Change set: the phase this plan belongs to. Status is `in-progress` while the summary has
-  open boxes or the registry says `implementing` or `ready-for-review`; `shipped <date>` when
+  open boxes or the registry says `implementing` or `ready-for-review`; `shipped <utc-date>` when
   the registry says `shipped`, with the pull request URL appended to the Plan line. For an
   epic child, update its milestone row from `epic-get`: Status from the derived status, Branch,
   Plan link, and Shipped as the date plus the pull request; then refresh the `status:` count.

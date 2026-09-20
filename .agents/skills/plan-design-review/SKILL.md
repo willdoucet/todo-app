@@ -50,7 +50,8 @@ writes application code and never starts implementation.
 
 ## Do not use when
 
-- `ui_scope` is not `true`. Step 2 exits early and says how to change it.
+- `ui_scope` is not `true`. Step 2 exits early and says how to change it, unless `--next` or an
+  `Open:` line names this review as failed or stale; then run it, scoped to what changed.
 - The interface is built and you want a graded audit of live pages. That is `/design-review`.
 - You are being asked to implement. This skill edits the plan and produces design artifacts
   only.
@@ -109,7 +110,11 @@ pass 5 or pass 6 names the category. The passes themselves stay stack-neutral.
 
 ### 2. UI scope gate
 
-From the metadata output, read `ui_scope`. If it is not `true`, stop here and tell the user:
+From the metadata output, read `ui_scope`. If it is not `true`, stop here and tell the user,
+unless `--next` or an `Open:` line names this review as failed or stale; then run it, scoped to
+what changed, and log the result: when the plan truly has no UI left, that result is `clean`
+with a note saying so (a flag switched off after a demand must not leave `--next` naming a
+review that refuses to run).
 
 > This plan has no UI scope (`ui_scope` is `<value>`), so a design review does not apply. If
 > that is wrong, set it and rerun:
@@ -157,10 +162,20 @@ Map, and report before Step 0:
 - Prior design reviews of this plan in the review-read output. A prior `plan-design-review`
   entry makes this a rerun: passes that scored 8 or above get a quick pass, passes below 8 get
   the full treatment.
-- Earlier reviews whose disposition is `failed` in that output. For every earlier review whose disposition is `failed`, read its open items and decide as you
-  go: if this review closes one, say where in the plan you closed it and note it for completion;
-  if it stays open, carry it forward in your own summary so the next review sees it. Never leave
-  a failed review unmentioned.
+- Earlier reviews whose disposition is `failed` or `stale` in that output. For every earlier
+  review whose disposition is `failed` or `stale`, read its open items and decide as you go: if
+  this review closes a failed one, say where in the plan you closed it and note it for
+  completion; a stale one (a later review declared it must run again) you cannot close for
+  them, so run it again if it is yours and carry it forward if it is not; if a failed one stays
+  open, carry it forward in your own summary so the next review sees it. Never leave a failed
+  or stale review unmentioned.
+- The declarations before yours: for each earlier gating review on this plan whose latest run
+  declared `none` (its `review-read` row shows `rereview=[]`), read the breadcrumbs it left in
+  the plan against the domains of the reviews that ran before it (the test in
+  `_shared/dashboard.md` → "When your review changes what an earlier review approved"); an
+  undeclared reversal you find is yours to declare: pass `--rereview <the review it overtook>
+  --rereview-note "…"` at completion, naming the review that made the change, and add it to
+  that review's REVIEW REPORT row.
 - Retrospective: the git log for earlier design-review cycles. Areas flagged before are
   reviewed harder now.
 
@@ -366,10 +381,18 @@ to the plan as `DECISIONS_MADE` and open ones as `UNRESOLVED`.
 Report exactly one status from the completion protocol, with the change description. Sync
 state per the obsidian-sync block with `STATUS_VALUE=design-reviewed` and
 `REVIEW_VALUE=design-reviewed`; `BLOCKED` and `NEEDS_CONTEXT` set `implementation_status` and
-`reason` only.
+`reason` only. Then declare and log the review.
+
+Before logging, from this session's `review-read` output, for each earlier gating review that
+has a run on this plan, answer whether this review changed what that review approved (the test
+in `_shared/dashboard.md` → "When your review changes what an earlier review approved"). Pass
+`--rereview <skill> --rereview-note "<what changed>"` for each yes, and `--rereview none` only
+when every answer is no; `review-log` refuses the entry without one or the other. A demand
+adds `· re-review demanded by …` to that review's REVIEW REPORT row.
 
 ```bash
-"$BIN/review-log" --skill plan-design-review --status "$STATUS" \
+"$BIN/review-log" --skill plan-design-review --status "$STATUS" --plan "$(basename "$_PLAN_FILE")" \
+  --rereview none \
   --field initial_score="$INITIAL_SCORE" --field overall_score="$OVERALL_SCORE" \
   --field decisions_made="$DECISIONS_MADE" --field unresolved="$UNRESOLVED"
 ```
