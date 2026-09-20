@@ -43,8 +43,17 @@ class FrameworkError(Exception):
         self.payload = payload
 
 
+def encodable(text: str) -> str:
+    """`text` with whatever UTF-8 cannot encode backslash-escaped. A lone surrogate reaches a
+    helper through any JSON it reads (`"\\ud800"` is valid JSON: a log line, a registry entry,
+    a frontmatter value), and `print()` raises on it; inside the fail-silent banner that is a
+    blank banner. Every text a reader prints goes through here; inside JSON the escape is
+    itself the valid spelling of the same character."""
+    return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
 def print_json(obj: Any, code: int = 0) -> int:
-    print(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False))
+    print(encodable(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False)))
     return code
 
 
@@ -76,8 +85,42 @@ def today() -> str:
 
 
 def timestamp_slug() -> str:
-    """YYYYMMDD-HHMMSS in local time, used in plan filenames."""
-    return datetime.now().strftime("%Y%m%d-%H%M%S")
+    """YYYYMMDD-HHMMSS in UTC, used in plan filenames and exported by `ctx` as TIMESTAMP.
+
+    UTC like `now_iso` and `today`: every date the framework writes is UTC
+    (skills/_shared/preamble.md), so filenames sort with the log and the frontmatter."""
+    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+
+# Free text that reaches a status line: a plan's `reason`, a review's `concern`, a
+# `rereview_note`. One helper flattens it, so a value holding a line break cannot forge a
+# second `Next:` line, and never raises, because the banner swallows exceptions and a blank
+# banner is an open gate. The limit applies to the fragment, never to the line built around
+# it, so a suffix such as "— run this review again" survives a long note.
+DISPLAY_LIMIT = 300
+
+
+def one_line(value: Any, limit: int | None = None) -> str:
+    """`value` on one line: a non-string becomes its JSON text (`default=str`), every
+    unprintable character becomes a space, whitespace including U+2028, U+2029 and U+0085
+    collapses to single spaces, and with `limit` the text is cut to that many characters
+    ending in `…`. Returns "" when nothing serializes.
+
+    Unprintable covers what `str.split()` leaves alone: an escape sequence or a bidi override
+    can hide or reorder a status line, and a lone surrogate (`"\\ud800"` is valid JSON) makes
+    `print()` raise, which inside the fail-silent banner is a blank banner."""
+    if isinstance(value, str):
+        flat = value
+    else:
+        try:
+            flat = json.dumps(value, ensure_ascii=False, default=str)
+        except Exception:  # noqa: BLE001 - a circular structure; show nothing rather than raise
+            return ""
+    flat = "".join(ch if ch.isprintable() else " " for ch in flat)
+    flat = " ".join(flat.split())
+    if limit is not None and len(flat) > limit:
+        flat = flat[: max(limit - 1, 0)] + "…"
+    return flat
 
 
 def slugify(text: str, max_len: int = 80) -> str:
@@ -394,6 +437,25 @@ def all_epics(root: Path, cfg: dict) -> list[Path]:
     return out
 
 
+def current_plan(root: Path, cfg: dict, branch: str | None) -> tuple[Path | None, str | None]:
+    """The plan a branch's reviews log against: its feature plan, else the epic whose branch
+    this is. One lookup shared by `workflow-state`, `review-log`, `review-read` and
+    `review_log_append`; with `latest_plan` alone a review logged on an epic branch stored
+    `plan: null` and never counted."""
+    if not branch:
+        return None, None
+    plan = latest_plan(root, cfg, branch)
+    if plan:
+        return plan, "plan"
+    epic = latest_epic(root, cfg, safe_branch(branch))
+    if epic:
+        return epic, "epic"
+    for candidate in all_epics(root, cfg):
+        if read_frontmatter(candidate).get("branch") == branch:
+            return candidate, "epic"
+    return None, None
+
+
 def summary_path_for(plan: Path) -> Path:
     return plan.with_name(plan.stem + "-summary.md")
 
@@ -428,6 +490,8 @@ FRONTMATTER_ORDER = [
     "implementation_status",
     "completed",
     "reason",
+    "reason_by",
+    "reason_at",
     "updated_at",
 ]
 
@@ -502,6 +566,29 @@ def update_frontmatter(path: Path, updates: dict, appends: dict | None = None) -
     meta["updated_at"] = now_iso()
     write_frontmatter(path, meta)
     return meta
+
+
+def stamp_reason(updates: dict) -> dict:
+    """`updates` with a plan's `reason` stamped. `workflow-state` prints a reason on every
+    banner until someone replaces it, so it carries when it was written (`reason_at`: UTC, from
+    this helper, never from the caller) and by whom when the caller says (`--set
+    reason_by=<skill>`). New text given without an author clears the previous author rather than
+    lending it to words that skill never wrote; an empty reason clears all three. `obsidian-workflow`
+    calls this wherever it writes a reason: plan frontmatter, registry entry, abandon.
+
+    Each write is stamped when it happens. The sync block writes a reason twice (`plan-metadata-set`,
+    then `registry-upsert`), so the two `reason_at` values can differ by a second; the plan's
+    frontmatter is the one `workflow-state` prints. A caller's `reason_at` is never taken instead:
+    a time the caller supplies is a time the caller can forge."""
+    if "reason" not in updates:
+        return updates
+    stamped = dict(updates)
+    if stamped["reason"] in (None, ""):
+        stamped["reason_by"] = stamped["reason_at"] = ""
+    else:
+        stamped["reason_at"] = now_iso()
+        stamped.setdefault("reason_by", "")
+    return stamped
 
 
 def truthy(value: Any) -> bool:
@@ -677,20 +764,38 @@ def can_resolve(failed_skill: str, resolver: str) -> bool:
     return True
 
 
+def can_demand(declarer: str, target: str) -> bool:
+    """Whether a run of `declarer` may declare that `target` must run again: both gating
+    tiers, never the declarer itself, never `ship` on either side (it reviews nothing and is
+    never re-run), and the same stage (plan reviews demand plan reviews; ship-stage reviews
+    demand ship-stage reviews). `review-log` enforces it on write and `plan_review_history`
+    re-checks it on read, so a hand-appended line cannot invent a demand."""
+    if declarer == target or "ship" in (declarer, target):
+        return False
+    d, t = tier_for(declarer), tier_for(target)
+    if not d or not t or not d["gates"] or not t["gates"]:
+        return False
+    return (declarer in PLAN_STAGE_SKILLS) == (target in PLAN_STAGE_SKILLS)
+
+
 # One review's state per plan. Every transition is an appended line; nothing is rewritten.
 #
-#                  review runs, logs clean / done
-#    missing ────────────────────────────────────▶ passed ◀────────────┐
-#       │                                            ▲                 │ re-run passes
-#       │ review runs, logs issues_open              │ re-run passes   │
-#       ▼                                            │                 │
-#    failed ──── review-log --status resolved ──────▶ resolved ────────┤
-#       ▲          resolved_by = another gating tier      │            │
-#       │          whose latest entry is passed at        │ re-run logs issues_open
-#       │          ts >= failure, or operator; note; once │
-#       └────────────────────────────────────────────────┘
+#                     logs clean / done
+#    missing ───────────────────────────────▶ passed ─────────(D)────────┐
+#       │                                      ▲   ▲                     ▼
+#       │ logs issues_open       re-run passes │   └── X re-runs, ──── stale
+#       ▼                                      │       logs clean        ▲ │
+#    failed ── review-log --status resolved ─▶ resolved ──────(D)────────┘ │
+#       ▲        (1.1.0 rules, unchanged)                                  │
+#       └───────────────── X re-runs, logs issues_open ◀───────────────────┘
 #
-#    ok = passed | resolved · gates only when the tier gates
+#    (D)  a later RUN of another same-stage gating review declares rereview=[X]
+#         with D.ts >= last_run(X).ts   (>=, never >: a tie fails closed)
+#    ok = passed | resolved        blocking = failed | stale
+#    stale is derived on read (reviews_for_plan) and never written. It ends ONLY with a
+#    newer run of X; `review-log --status resolved` is refused for a stale review.
+#    failed + demanded reads failed (the row carries demanded_by); resolving it yields stale.
+#    A gates=False tier (office-hours) never enters any of this.
 #
 # Legacy words (written before 1.1.0) read through this map, keyed by (skill, status)
 # with a (None, status) fallback. `issues_found` meant "hardened, fixed in place" for
@@ -710,16 +815,21 @@ LEGACY_STATUS_MAP = {
 
 
 def review_disposition(entry: dict | None) -> str:
-    """"missing" | "passed" | "failed" | "resolved" for one review's latest entry.
+    """"missing" | "passed" | "failed" | "resolved" | "stale" for one review's latest entry.
 
     `resolved` counts only with a `resolved_by` the CLI would have accepted: `operator`, or a
     gating tier `can_resolve` allows for this skill (never the review itself, never `ship`,
     and a ship-stage failure only by a ship-stage resolver). The target skill must itself be
     a gating tier. A `superseded_by_failure` key, set by `reviews_for_plan` when a later
     failure of the same review is not the one the resolution names, also reads as failed.
-    A missing or non-string status reads as failed."""
+    A missing or non-string status reads as failed. `stale` comes only from a `stale_by`
+    that `reviews_for_plan` set on its returned copy (it strips the key from raw entries
+    first; `review-read --all` strips it too), and is not ok."""
     if entry is None:
         return "missing"
+    stale_by = entry.get("stale_by")
+    if isinstance(stale_by, str) and stale_by:
+        return "stale"
     status = entry.get("status")
     if not isinstance(status, str) or not status.strip():
         return "failed"
@@ -800,7 +910,7 @@ def review_log_append(root: Path, cfg: dict, entry: dict) -> dict:
     if branch:
         entry.setdefault("branch", branch)
         if "plan" not in entry:
-            plan = latest_plan(root, cfg, branch)
+            plan, _kind = current_plan(root, cfg, branch)  # the feature plan, else the epic
             if plan:
                 entry["plan"] = plan.name
     entry.setdefault("commit", head_sha(root))
@@ -878,46 +988,161 @@ def review_extra(entry: dict) -> dict:
     return {k: v for k, v in entry.items() if k not in REVIEW_STD_FIELDS}
 
 
-# Characters that would split a `|`-delimited review-read / dashboard row. Includes every
-# `str.splitlines()` separator plus the field delimiters; a note holding one is JSON-quoted.
-REVIEW_ROW_SEPARATORS = "|,\n\r\u2028\u2029\x85"
+# The field delimiters of a `|`-delimited review-read / dashboard row. A value holding one, or
+# any unprintable character, is JSON-quoted: unprintable covers every `str.splitlines()`
+# boundary (\n \r \v \f, U+001C-U+001E, U+0085, U+2028, U+2029: a list of five once missed
+# five others), terminal escapes, and a lone surrogate, which `print()` cannot encode.
+REVIEW_ROW_SEPARATORS = "|,"
 
 
 def fmt_review_value(v: Any) -> str:
-    """Bare string unless it carries a row separator; then, and for any non-string, JSON.
+    """Bare string when it is printable and holds no field delimiter; otherwise, and for any
+    non-string, JSON.
 
-    `ensure_ascii=True` so U+2028/U+2029/U+0085 become `\\uXXXX` and cannot split the row
-    the way `json.dumps(ensure_ascii=False)` would leave them raw inside the quotes."""
-    if isinstance(v, str) and not any(c in v for c in REVIEW_ROW_SEPARATORS):
+    `ensure_ascii=True` so a line boundary or a lone surrogate becomes `\\uXXXX` and cannot
+    split the row, or break the print, the way `ensure_ascii=False` would leave it raw.
+
+    A non-string whose JSON text holds a delimiter (`rereview` with two names, `stale_notes`,
+    `demanded_notes`) is quoted once more, as that text: every comma left outside a JSON string
+    then separates two fields. `[]`, `3`, `true` and a one-name list stay bare. The text row is
+    for reading; the `--json` outputs carry the value itself."""
+    if isinstance(v, str) and v.isprintable() and not any(c in v for c in REVIEW_ROW_SEPARATORS):
         return v
-    return json.dumps(v, ensure_ascii=True)
+    text = json.dumps(v, ensure_ascii=True)
+    if not isinstance(v, str) and any(c in text for c in REVIEW_ROW_SEPARATORS):
+        return json.dumps(text, ensure_ascii=True)
+    return text
 
 
-def reviews_for_plan(root: Path, cfg: dict, plan_name: str) -> dict[str, dict]:
-    """Latest entry per skill logged against this plan file (summary-named legacy entries
-    attach to their plan). Ordered by `ts`, never by line position; on an equal `ts` the
-    later line wins. Age is not a factor. Unreadable lines are ignored here; callers that
-    gate read the count from `review_log_read`.
+# Keys the reader derives and the writer refuses. `plan_review_history` strips them from
+# every raw entry before anything else looks at it, so a hand-appended `stale_by` cannot make
+# a review read stale with no demand behind it (nor hide an `issues_open` from the resolution
+# walk), and `review-log` refuses them in both input forms so the log never carries them.
+# `review-read --all` strips them too. `superseded_by_failure` is the oldest of them (1.1.0):
+# a raw one on a sound resolution read failed with a ts no later resolution could satisfy.
+READER_ONLY_KEYS = (
+    "was", "stale_by", "stale_ts", "stale_note", "stale_notes", "stale_count", "demanded_by", "demanded_notes", "concern_ts", "superseded_by_failure",
+)
+
+
+def strip_reader_only(entry: dict) -> dict:
+    return {k: v for k, v in entry.items() if k not in READER_ONLY_KEYS}
+
+
+def is_run(entry: dict) -> bool:
+    """The one definition of a run: any entry whose status is not `resolved`, including a
+    legacy word, `done`, and a missing or non-string status (which reads failed). A
+    resolution record is the only entry that is not a run."""
+    status = entry.get("status")
+    return not (isinstance(status, str) and status.strip().lower() == "resolved")
+
+
+# Reading one plan's reviews: two passes, and what is dropped rather than raised.
+#
+#   review_log_read ─▶ entries for this plan (summary-named legacy entries attach)
+#     │  strip READER_ONLY_KEYS from every raw entry FIRST
+#     ▼
+#   plan_review_history                                                     PASS 1
+#     ├ entries[X] = X's entries sorted by ts (equal ts: file order; the later line wins)
+#     ├ runs[X]    = the entries of X that are runs (is_run)
+#     └ demands    = (declarer, target, ts, note) for each name in a RUN's `rereview`,
+#                    kept only when `rereview` is a list, the name is a str,
+#                    can_demand(declarer, target) holds, and target has a run on this plan.
+#                    Anything else is dropped, never raised: the session banner runs inside
+#                    `except Exception: pass`, so a raise here is a blank banner and an open
+#                    gate. A non-string `rereview_note` is carried as its JSON text.
+#     ▼
+#   reviews_for_plan                                                        PASS 2
+#     ├ the 1.1.0 latest-entry disposition per skill (resolutions, superseded_by_failure)
+#     ├ passed | resolved with some demand.ts >= last_run(X).ts  (>=: a tie fails closed)
+#     │     ─▶ copy + was, stale_by/ts/note (newest demand), stale_notes (all), stale_count
+#     │        ─▶ review_disposition reads "stale"; only a newer run of X ends it
+#     ├ failed with an outstanding demand ─▶ copy + demanded_by, demanded_notes (stays failed)
+#     └ the copy is a resolution record ─▶ + concern, concern_ts from last_run(X)
+#
+#   `review-log` calls pass 1 too (`last_run` for the run rule and for "a demand is not dated
+#   before the run it overtakes", `can_demand`), so the writer and the reader cannot disagree
+#   about what a run or a demand is.
+#
+#   Accepted limit: order is `ts` alone. A run of X made on another branch against the same
+#   plan file, dated after a demand and union-merged in later, clears that demand without having
+#   seen the change. Nothing on a log line proves what a run read (reviews run on uncommitted
+#   trees, so `commit` ancestry does not), and a plan is reviewed on one branch. When two
+#   branches did review one plan file, run X again after the merge.
+#
+#   An undated entry is the OLDEST entry, for runs and demands alike (`review_ts` -> ""). Only a
+#   hand-appended line lacks a `ts`: the CLI stamps and validates every one. So an undated run
+#   never outranks a dated one, and an undated demand is outstanding only against an undated
+#   run. Counting it as always outstanding would leave `--next` naming a review no re-run can
+#   clear; the repair for such a line is to fix or delete it.
+def plan_review_history(root: Path, cfg: dict, plan_name: str, entries: list[dict] | None = None) -> dict:
+    """Pass 1. {"entries": {skill: [entries sorted by ts]}, "runs": {skill: [runs]},
+    "demands": [(declarer, target, ts, note)]}. Reader-only keys are stripped from every
+    entry first; a demand survives only when the reader can re-check it (diagram above).
+    `entries` is the log as the caller already read it (`review_log_scan`); left out, it is read
+    here. A caller that scanned for unreadable lines passes them on rather than reading twice."""
+    entries_by_skill: dict[str, list[dict]] = {}
+    all_entries = review_log_read(root, cfg)[0] if entries is None else entries
+    for raw in all_entries:
+        if review_plan_name(raw) != plan_name:
+            continue
+        skill = raw.get("skill")
+        if not isinstance(skill, str) or not skill:
+            continue
+        entries_by_skill.setdefault(skill, []).append(strip_reader_only(raw))
+    runs: dict[str, list[dict]] = {}
+    for skill, items in entries_by_skill.items():
+        items.sort(key=review_ts)  # stable: equal ts keeps file order, so the later line wins
+        runs[skill] = [e for e in items if is_run(e)]
+    demands: list[tuple[str, str, str, str]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for declarer, declarer_runs in runs.items():
+        for e in declarer_runs:
+            names = e.get("rereview")
+            if not isinstance(names, list):
+                continue
+            note = e.get("rereview_note")
+            note_text = note if isinstance(note, str) else ("" if note is None else one_line(note))
+            for target in names:
+                if not isinstance(target, str) or not can_demand(declarer, target) or not runs.get(target):
+                    continue
+                demand = (declarer, target, review_ts(e), note_text)
+                if demand not in seen:
+                    seen.add(demand)
+                    demands.append(demand)
+    return {"entries": entries_by_skill, "runs": runs, "demands": demands}
+
+
+def last_run(history: dict, skill: str) -> dict | None:
+    runs = history["runs"].get(skill)
+    return runs[-1] if runs else None
+
+
+def reviews_for_plan(root: Path, cfg: dict, plan_name: str, entries: list[dict] | None = None) -> dict[str, dict]:
+    """Pass 2: the latest entry per skill logged against this plan file, with the derived facts
+    a gate reads. Ordered by `ts`, never by line position; on an equal `ts` the later line
+    wins. Age is not a factor. Unreadable lines are ignored here; callers that gate read the
+    count from `review_log_scan` and pass the entries they already hold as `entries`.
 
     A `resolved` entry clears only the failure it names (`resolves_ts`). When another failed
     entry of the same review sits after that one and at or before the resolution (a re-run on
     another branch that union-merged in later, or a resolution that names nothing), or when
     `resolves_ts` matches no prior failure, or when two failures share that timestamp, the
-    returned copy carries `superseded_by_failure=<that ts>` and reads as failed."""
-    history: dict[str, list[dict]] = {}
-    entries, _unreadable = review_log_read(root, cfg)
-    for e in entries:
-        if review_plan_name(e) != plan_name:
-            continue
-        skill = e.get("skill")
-        if not skill:
-            continue
-        history.setdefault(skill, []).append(e)
+    returned copy carries `superseded_by_failure=<that ts>` and reads as failed.
+
+    A passed or resolved review that a later run of another same-stage review demanded again
+    (`rereview=[X]` at a `ts` >= the ts of X's last run) reads `stale`: the copy carries `was`,
+    `stale_by`, `stale_ts`, `stale_note` (the newest outstanding demand), `stale_notes` (every
+    outstanding demand, newest first) and `stale_count`. Only a newer run of X ends that. A
+    failed review with an outstanding demand stays failed and carries `demanded_by` and
+    `demanded_notes` (the same list, so its re-run can read what changed). When the
+    copy is a resolution record its own `concern` is dropped and `concern` / `concern_ts` come
+    from the latest run, so the row shows the concern of the run it resolves."""
+    history = plan_review_history(root, cfg, plan_name, entries)
     latest: dict[str, dict] = {}
-    for skill, items in history.items():
-        items.sort(key=review_ts)  # stable: equal ts keeps file order, so the later line wins
+    for skill, items in history["entries"].items():
         newest = items[-1]
-        if isinstance(newest.get("status"), str) and newest["status"].strip().lower() == "resolved":
+        if not is_run(newest):
             named = newest.get("resolves_ts")
             named = named if isinstance(named, str) else ""
             resolution_ts = review_ts(newest)
@@ -937,6 +1162,36 @@ def reviews_for_plan(root: Path, cfg: dict, plan_name: str) -> dict[str, dict]:
             elif covered != 1:
                 newest = dict(newest, superseded_by_failure=named or "unmatched")
         latest[skill] = newest
+    for skill, newest in list(latest.items()):
+        run = last_run(history, skill)
+        copy = newest
+        if run is not None:
+            run_ts = review_ts(run)
+            outstanding = sorted(
+                (d for d in history["demands"] if d[1] == skill and d[2] >= run_ts),
+                key=lambda d: d[2],
+                reverse=True,  # newest first; equal ts keeps pass-1 order (sort is stable)
+            )
+            if outstanding:
+                disposition = review_disposition(newest)
+                copy = dict(newest)
+                notes = [{"declarer": d[0], "ts": d[2], "note": d[3]} for d in outstanding]
+                if disposition in ("passed", "resolved"):
+                    copy["was"] = disposition
+                    copy["stale_by"], copy["stale_ts"], copy["stale_note"] = outstanding[0][0], outstanding[0][2], outstanding[0][3]
+                    copy["stale_notes"] = notes
+                    copy["stale_count"] = len(outstanding)
+                elif disposition == "failed":
+                    copy["demanded_by"] = outstanding[0][0]
+                    copy["demanded_notes"] = notes  # what changed: the declarer's own row loses it once it re-runs with `none`
+        if not is_run(newest):
+            copy = dict(copy)
+            copy.pop("concern", None)
+            concern = run.get("concern") if run is not None else None
+            if isinstance(concern, str) and concern.strip():
+                copy["concern"] = concern
+                copy["concern_ts"] = review_ts(run)
+        latest[skill] = copy
     return latest
 
 
@@ -1082,6 +1337,9 @@ def context(root: Path | None = None) -> dict:
     cfg = load_config(root)
     branch = current_branch(root)
     base = base_branch(root, cfg)
+    # The branch's FEATURE plan on purpose, not `current_plan`: office-hours reads PLAN_FILE as the
+    # prior plan a new one supersedes, and an epic is never that. `obsidian-workflow resolve-plan`
+    # is what finds the epic on an epic branch.
     plan = latest_plan(root, cfg, branch) if branch else None
     return {
         "REPO_ROOT": str(root),

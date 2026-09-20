@@ -1166,7 +1166,7 @@ def command_note_update(args: argparse.Namespace) -> int:
 
 def command_registry_upsert(args: argparse.Namespace) -> int:
     ctx = Ctx.load()
-    updates = scalar_fields(args.set_fields)
+    updates = _lib.stamp_reason(scalar_fields(args.set_fields))
     appends = scalar_appends(args.append_fields)
     if args.branch:
         updates["branch"] = args.branch
@@ -1236,7 +1236,7 @@ def command_plan_metadata_get(args: argparse.Namespace) -> int:
 def command_plan_metadata_set(args: argparse.Namespace) -> int:
     ctx = Ctx.load()
     plan = ctx.plan_file(args.plan_path)
-    updates = scalar_fields(args.set_fields)
+    updates = _lib.stamp_reason(scalar_fields(args.set_fields))
     if isinstance(updates.get("source_note_path"), str):
         updates["source_note_path"] = ctx.note_rel_lenient(updates["source_note_path"])
     if isinstance(updates.get("source_note_ref"), str):
@@ -1266,9 +1266,11 @@ def command_resolve_plan(args: argparse.Namespace) -> int:
             return _lib.print_json({"status": "ok", "source": "registry", "key": key, "plan_path": entry["plan_path"], "entry": entry})
 
     if branch:
-        latest = _lib.latest_plan(ctx.root, ctx.cfg, branch)
+        # the feature plan, else the epic whose branch this is: the lookup `workflow-state` and the
+        # review helpers use, so the review `--next` names on an epic branch can find its plan
+        latest, kind = _lib.current_plan(ctx.root, ctx.cfg, branch)
         if latest:
-            return _lib.print_json({"status": "ok", "source": "branch_fallback", "branch": branch, "plan_path": ctx.repo_rel(latest)})
+            return _lib.print_json({"status": "ok", "source": "branch_fallback", "branch": branch, "kind": kind, "plan_path": ctx.repo_rel(latest)})
 
     raise _lib.FrameworkError(
         "Could not resolve a plan path", code=2, note_ref=args.note_ref, note_path=args.note_path, branch=branch, tried_keys=keys
@@ -1287,6 +1289,7 @@ def apply_to_target(ctx: Ctx, target: str, updates: dict[str, Any]) -> dict[str,
     so the new state is visible to workflow-state.
     """
     key, entry, plan = resolve_target(ctx, target)
+    updates = _lib.stamp_reason(updates)  # abandon and friends: one stamp, shared by the frontmatter and the entry
     result: dict[str, Any] = {"status": "ok", "key": key}
     if plan is not None:
         result["plan_path"] = ctx.repo_rel(plan)

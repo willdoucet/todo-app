@@ -277,7 +277,7 @@ Otherwise:
 3. The test sets up that precondition, performs the action, and asserts the correct behavior,
    never merely "renders" or "does not throw". Cover the adjacent inputs too. Mock external
    dependencies. Head it with an attribution comment in the file's comment syntax:
-   `Regression: ISSUE-NNN — <what broke>. Found by /qa on <date>. Report:
+   `Regression: ISSUE-NNN — <what broke>. Found by /qa on <utc-date>. Report:
    $PLANS_DIR/testing/$SAFE_BRANCH-qa-report.md`.
 4. Choose the layer by the bug: console error, exception, or logic bug becomes a unit or
    integration test; broken form, failed request, or data-flow bug becomes an integration test
@@ -330,7 +330,7 @@ Read `$DOCS_DIR/TODOS.md`. For each deferred issue, ask one question whether to 
 then write it in the format that file's own header defines (What, Why, Context with the repro
 and screenshot path, Effort, Priority P0–P4, Depends on). Never batch, never skip silently. A
 fixed issue that was an open TODO moves to the file's Completed section with "Fixed by /qa on
-$BRANCH, <date>".
+$BRANCH, <utc-date>".
 
 Add a Bug Log row to `LESSONS.md` for each verified fix (symptom, root cause, rule). A
 repeatable class of bug becomes an entry in `REVIEW_CHECKLIST.md`. If the user corrected you,
@@ -339,7 +339,7 @@ add a Corrections Log row.
 ### 13. Persist the result and update the plan footer
 
 ```bash
-"$BIN/review-log" --skill qa --status STATUS \
+"$BIN/review-log" --skill qa --status STATUS --plan "$(basename "$_PLAN_FILE")" \
   --field mode=diff|full|quick --field tier=quick|standard|exhaustive \
   --field found=N --field fixed=N --field deferred=N \
   --field health_before=X --field health_after=Y --field model=<your model, when known>

@@ -13,7 +13,7 @@ to the report: `../$SAFE_BRANCH-qa-screenshots/` is a sibling folder, so write
 
 | Field | Value |
 |---|---|
-| **Date** | {DATE} |
+| **Date** | <utc-date> |
 | **URL** | {URL} |
 | **Branch** | {BRANCH} |
 | **Commit** | {SHORT SHA} |

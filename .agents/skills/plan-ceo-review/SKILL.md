@@ -46,7 +46,9 @@ Never writes code.
 - There is no plan yet. Run `/office-hours` first.
 - The question is architecture, tests, or performance on an accepted scope. That is
   `/plan-eng-review`, the shipping gate; this review is optional for feature plans.
-- The plan is already implementing or shipped. A scope change now is a new plan.
+- The plan is already implementing or shipped. A scope change now is a new plan. Exception:
+  `--next` or an `Open:` line names this review as stale; then run it, scoped to what changed
+  (`_shared/dashboard.md` → "When your review changes what an earlier review approved").
 
 ## Posture
 
@@ -107,10 +109,20 @@ Then read the earlier reviews of this plan:
 "$BIN/review-read"
 ```
 
-For every earlier review whose disposition is `failed`, read its open items and decide as you
-go: if this review closes one, say where in the plan you closed it and note it for completion;
-if it stays open, carry it forward in your own summary so the next review sees it. Never leave
-a failed review unmentioned.
+For every earlier review whose disposition is `failed` or `stale`, read its open items and
+decide as you go: if this review closes a failed one, say where in the plan you closed it and
+note it for completion; a stale one (a later review declared it must run again) you cannot
+close for them, so run it again if it is yours and carry it forward if it is not; if a failed
+one stays open, carry it forward in your own summary so the next review sees it. Never leave a
+failed or stale review unmentioned.
+
+Then audit the declarations before yours: for each earlier gating review on this plan whose
+latest run declared `none` (its `review-read` row shows `rereview=[]`), read the breadcrumbs it
+left in the plan against the domains of the reviews that ran before it (the test in
+`_shared/dashboard.md` → "When your review changes what an earlier review approved"); an
+undeclared reversal you find is yours to declare: pass `--rereview <the review it overtook>
+--rereview-note "…"` at completion, naming the review that made the change, and add it to that
+review's REVIEW REPORT row.
 
 Read `$DOCS_DIR/REVIEW_CHECKLIST.md`. It holds this project's concrete checks for the
 categories the sections below name (migration safety, query efficiency, background-job
@@ -372,10 +384,18 @@ and present it. Epics use the epic variant.
 ## Completion
 
 Sync state per `_shared/obsidian-sync.md` with `STATUS_VALUE=ceo-reviewed` and
-`REVIEW_VALUE=ceo-reviewed`, then log the review:
+`REVIEW_VALUE=ceo-reviewed`, then declare and log the review.
+
+Before logging, from this session's `review-read` output, for each earlier gating review that
+has a run on this plan, answer whether this review changed what that review approved (the test
+in `_shared/dashboard.md` → "When your review changes what an earlier review approved"). Pass
+`--rereview <skill> --rereview-note "<what changed>"` for each yes, and `--rereview none` only
+when every answer is no; `review-log` refuses the entry without one or the other. A demand
+adds `· re-review demanded by …` to that review's REVIEW REPORT row.
 
 ```bash
-"$BIN/review-log" --skill plan-ceo-review --status "$STATUS" \
+"$BIN/review-log" --skill plan-ceo-review --status "$STATUS" --plan "$(basename "$_PLAN_FILE")" \
+  --rereview none \
   --field mode="$MODE" --field unresolved="$UNRESOLVED" \
   --field critical_gaps_found="$CRITICAL_GAPS_FOUND" --field critical_gaps_open="$CRITICAL_GAPS_OPEN" \
   ${PLAN_KIND:+--field plan_kind="$PLAN_KIND"}

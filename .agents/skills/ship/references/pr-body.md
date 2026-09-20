@@ -51,7 +51,7 @@ Ask for the pull request URL once the user has opened it, then update the regist
 
 ## Review dashboard
 <the `workflow-state --dashboard` output from step 1, verbatim>
-Hotfix override: shipped without <skills>, approved by the user on <date>   <!-- only when used -->
+Hotfix override: shipped without <skills>, approved by the user on <utc-date>   <!-- only when used -->
 
 ## Test evidence
 | Suite | Command | Result |

@@ -860,6 +860,40 @@ class TestPlanMetadata:
 
         assert payload["metadata"]["review_status"] == ["ceo-reviewed", "eng-reviewed"]
 
+    def test_a_reason_is_stamped_with_when_and_keeps_only_the_author_it_was_given(self, repo):
+        """The banner prints a plan's reason until someone replaces it, so it says when it was
+        written and by whom. The helper owns the time; new text never inherits the old author."""
+        from datetime import datetime, timezone
+
+        rel = ".agents/plans/features/feat/feat-plan-20260901-120000.md"
+        plan = repo.plan(rel)
+
+        def utc_now_within(stamp: str, seconds: int = 60) -> bool:
+            written = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            return abs((datetime.now(timezone.utc) - written).total_seconds()) < seconds
+
+        _, payload = run("plan-metadata-set", rel, "--set", "reason=two operator gates remain", "--set", "reason_by=execute-plan", "--set", "reason_at=1999-01-01T00:00:00Z")
+        meta = payload["metadata"]
+        assert meta["reason_by"] == "execute-plan" and utc_now_within(meta["reason_at"])  # a supplied time is overwritten
+        text = plan.read_text()
+        assert text.index("reason:") < text.index("reason_by:") < text.index("reason_at:") < text.index("updated_at:")
+
+        _, payload = run("plan-metadata-set", rel, "--set", "reason=a later skill's words")
+        assert payload["metadata"]["reason_by"] == "" and utc_now_within(payload["metadata"]["reason_at"])
+
+        _, payload = run("plan-metadata-set", rel, "--set", "reason=", "--set", "reason_by=ship")
+        assert [payload["metadata"][k] for k in ("reason", "reason_by", "reason_at")] == ["", "", ""]
+
+        _, payload = run("plan-metadata-set", rel, "--set", "workflow_status=eng-reviewed")  # no reason: nothing stamped
+        assert payload["metadata"]["reason_at"] == ""
+
+        # the registry entry gets the same stamp, and so does abandon
+        _, payload = run("registry-upsert", "plan:feat", "--set", f"plan_path={rel}", "--set", "reason=blocked on a key", "--set", "reason_by=qa")
+        assert payload["entry"]["reason_by"] == "qa" and utc_now_within(payload["entry"]["reason_at"])
+        _, payload = run("abandon", "plan:feat", "--reason", "superseded")
+        assert payload["metadata"]["reason"] == "superseded" and payload["metadata"]["reason_by"] == "" and utc_now_within(payload["metadata"]["reason_at"])
+        assert payload["entry"]["reason_at"] == payload["metadata"]["reason_at"]
+
     def test_plan_metadata_get_on_summary_names_the_plan_file(self, repo):
         repo.plan(".agents/plans/features/feat/feat-plan-20260901-120000.md")
         repo.plan(".agents/plans/features/feat/feat-plan-20260901-120000-summary.md", "# Summary\n")
@@ -929,6 +963,23 @@ class TestResolvePlan:
         assert exit_code == 2
         assert payload["error"] == "Could not resolve a plan path"
         assert payload["tried_keys"] == ["plan:feat-x"]
+
+    def test_an_epic_branch_falls_back_to_its_epic_and_a_feature_plan_still_wins(self, repo):
+        """`workflow-state --next` names /plan-ceo-review on an epic branch and plan discovery runs
+        `resolve-plan`: with `latest_plan` alone it exited 2 there, while `workflow-state`,
+        `review-log` and `review-read` all resolved the epic through `_lib.current_plan`."""
+        epic = ".agents/plans/epics/big-epic/big-epic-epic-20260901-100000.md"
+        repo.plan(epic, '---\nplan_kind: "epic"\n---\n# Epic\n')
+
+        exit_code, payload = run("resolve-plan", "--branch", "big-epic")
+
+        assert exit_code == 0
+        assert (payload["source"], payload["kind"], payload["plan_path"]) == ("branch_fallback", "epic", epic)
+
+        feature = ".agents/plans/features/big-epic/big-epic-plan-20260902-100000.md"
+        repo.plan(feature)
+        _, payload = run("resolve-plan", "--branch", "big-epic")
+        assert (payload["kind"], payload["plan_path"]) == ("plan", feature)
 
 
 # ---------------------------------------------------------------------------

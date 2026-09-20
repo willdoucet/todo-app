@@ -6,12 +6,17 @@ Usage:
     review-read --plan NAME [--json]  same, for a named plan file
     review-read --all [--json]        every entry, newest first, with the plan column
 
-Text output, one line per row; `disposition` is passed, failed, or resolved
+Text output, one line per row; `disposition` is passed, failed, resolved, or stale
 (see `_lib.review_disposition`):
     plan mode:  skill|ts|status|disposition|k=v,k=v
     --all:      plan|skill|ts|status|disposition|k=v,k=v
 JSON output: {"plan": NAME, "reviews": {skill: entry}} or {"entries": [entry, ...]}; every
-entry carries "disposition". A log with unreadable lines is an error (exit 2; the envelope
+entry carries "disposition". In plan mode a stale review (a later review declared it must
+run again) shows `stale` with `was`, `stale_by`, `stale_ts`, `stale_note`, `stale_notes` and
+`stale_count`; a failed one with an outstanding demand carries `demanded_by`. `--all` lists
+entries and computes each one's disposition from that entry alone, with the reader-derived
+keys stripped first, so it never reads `stale`: staleness is a property of a review's
+current state, not of a line. A log with unreadable lines is an error (exit 2; the envelope
 names the lines and carries "unreadable": N); nothing is printed as if a partial parse were
 the whole log.
 """
@@ -44,6 +49,12 @@ def with_disposition(entry: dict) -> dict:
     return dict(entry, disposition=_lib.review_disposition(entry))
 
 
+def listed_disposition(entry: dict) -> str:
+    """--all: the entry's own disposition, reader-only keys stripped so a hand-appended
+    `stale_by` cannot print `stale` in the one listing that promises never to."""
+    return _lib.review_disposition(_lib.strip_reader_only(entry))
+
+
 def main() -> int:
     args = parse_args(sys.argv[1:])
     root = _lib.repo_root()
@@ -56,14 +67,16 @@ def main() -> int:
     if args.all:
         entries = sorted(entries, key=_lib.review_ts, reverse=True)
         if args.json:
-            return _lib.print_json({"entries": [with_disposition(e) for e in entries]})
+            return _lib.print_json({"entries": [dict(e, disposition=listed_disposition(e)) for e in entries]})
         if not entries:
             print("(no reviews logged)")
             return 0
         for e in entries:
             print(
-                f"{e.get('plan') or '-'}|{e.get('skill', '')}|{e.get('ts', '')}|{e.get('status', '')}"
-                f"|{_lib.review_disposition(e)}|{fmt_extra(e)}"
+                _lib.encodable(  # a raw plan, skill or status may hold what print() cannot encode
+                    f"{e.get('plan') or '-'}|{e.get('skill', '')}|{e.get('ts', '')}|{e.get('status', '')}"
+                    f"|{listed_disposition(e)}|{fmt_extra(e)}"
+                )
             )
         return 0
 
@@ -71,8 +84,7 @@ def main() -> int:
     if plan_name:
         plan_name = _lib.review_plan_name({"plan": plan_name}) or plan_name
     if not plan_name:
-        branch = _lib.current_branch(root)
-        plan = _lib.latest_plan(root, cfg, branch) if branch else None
+        plan, _kind = _lib.current_plan(root, cfg, _lib.current_branch(root))
         if not plan:
             if args.json:
                 return _lib.print_json({"plan": None, "reviews": {}})
@@ -80,14 +92,14 @@ def main() -> int:
             return 0
         plan_name = plan.name
 
-    reviews = _lib.reviews_for_plan(root, cfg, plan_name)
+    reviews = _lib.reviews_for_plan(root, cfg, plan_name, entries)  # the scan above, not a second read
     if args.json:
         return _lib.print_json({"plan": plan_name, "reviews": {k: with_disposition(v) for k, v in reviews.items()}})
     if not reviews:
         print(f"(no reviews for plan: {plan_name})")
         return 0
     for skill, e in sorted(reviews.items(), key=lambda kv: _lib.review_ts(kv[1])):
-        print(f"{skill}|{e.get('ts', '')}|{e.get('status', '')}|{_lib.review_disposition(e)}|{fmt_extra(e)}")
+        print(_lib.encodable(f"{skill}|{e.get('ts', '')}|{e.get('status', '')}|{_lib.review_disposition(e)}|{fmt_extra(e)}"))
     return 0
 
 

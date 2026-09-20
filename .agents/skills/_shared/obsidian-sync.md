@@ -17,7 +17,7 @@ registry files, or note files by hand. The block below is parameterized by `STAT
 | qa | unchanged | `qa-done` |
 | design-review | unchanged | `design-audited` |
 | final-review | unchanged | `final-reviewed` |
-| ship | `shipped` (+ `implementation_status=shipped`, `completed=<date>`) | none |
+| ship | `shipped` (+ `implementation_status=shipped`, `completed=<utc-date>`) | none |
 
 ```bash
 "$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" \
@@ -42,7 +42,17 @@ value verbatim; the helper accepts objects or plain ids.
 Rules:
 
 - Only `/ship` and `/quickfix` check task boxes (`note-update --check`). No review does.
-- On `DONE_WITH_CONCERNS`, run the same update and add `--set reason="..."`.
+- Whenever you write a `reason`, in both commands, say who is writing it: `--set reason="..."
+  --set reason_by=<your skill>` (`operator` when the user dictated it). The helper stamps the
+  UTC time itself (`reason_at`), and the banner prints `Reason:  /<skill> (<utc-date>): <text>` until
+  someone replaces it, so a reader can tell a standing note from a stale one. New text written
+  without `reason_by` clears the old author; `--set reason=` clears all three. Each command
+  stamps its own write, so the registry's `reason_at` can trail the plan's by a second; the
+  plan's frontmatter is the one the banner and the dashboard read.
+- On `DONE_WITH_CONCERNS`, run the same update and add `--set reason="..."`, and, if your skill
+  logs a review entry, pass the same text as `--field concern="..."` on your own entry (never
+  on another review's entry, such as the subagent's), so the banner shows it with your name
+  until your review runs again without one.
 - On `BLOCKED` or `NEEDS_CONTEXT`, set `implementation_status` and `reason` only. Do not mark
   progress as reviewed.
 - Batch plans sync every promoted task together. Completion is all or nothing.
@@ -51,11 +61,12 @@ Rules:
 
 ## Review log
 
-After the completion summary, persist the result. The helper fills in timestamp, branch, plan
-filename, commit, and harness:
+After the completion summary, persist the result. The helper fills in timestamp, branch,
+commit, and harness. Name the plan: left out, the entry goes to the branch's current plan,
+which is not the file you reviewed when the skill was given an explicit plan path:
 
 ```bash
-"$BIN/review-log" --skill SKILL_NAME --status STATUS --field key=value ...
+"$BIN/review-log" --skill SKILL_NAME --status STATUS --plan "$(basename "$_PLAN_FILE")" --field key=value ...
 ```
 
 `STATUS` is one of four words, each with one meaning in every skill. `review-log` rejects any
@@ -69,6 +80,10 @@ other word; a locally edited skill that still writes an old one gets an error na
 | `done` | The step completed; no findings semantics | passed | `ship` only |
 
 A review is **ok** when its disposition is `passed` or `resolved`. Never `fixed`, `skipped`,
-`pass`, `cleared`, or `issues_found`. Add `--field model=<name>` when you know which model you
+`pass`, `cleared`, or `issues_found`. A passed or resolved review reads `stale` when a later
+review of the same stage declared it must run again (`--rereview <skill> --rereview-note
+"…"` on the declarer's own entry; the four plan reviews must pass `--rereview`, `none` when
+nothing changed); only its own run clears that, per `_shared/dashboard.md` → "When your
+review changes what an earlier review approved". Add `--field model=<name>` when you know which model you
 are. Entries written before this vocabulary are read through a compatibility map and never
 rewritten; the REVIEW REPORT row carries the same word the entry does (`_shared/plan-footer.md`).

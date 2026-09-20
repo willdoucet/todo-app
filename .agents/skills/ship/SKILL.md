@@ -42,7 +42,7 @@ References in this directory, loaded when the procedure reaches them:
 ## Use when
 
 - `workflow-state --next` names `/ship`: `missing_to_ship` is empty (implementation and final
-  review ok — passed or resolved — and no gating review of any tier is failed).
+  review ok — passed or resolved — and no gating review of any tier is failed or stale).
 - A hotfix branch must land before the second review can happen. One question, recorded.
 - A previous ship was interrupted. Every step re-verifies; commits and a pull request that
   already exist are reused and updated, never duplicated.
@@ -94,9 +94,10 @@ echo "VERDICT: $VERDICT — missing: $MISSING"
 ```
 
 `CLEARED TO SHIP` means `missing_to_ship` is empty: implementation and final review are ok
-(passed or resolved) against this plan file, and no gating review of any tier is failed. A
+(passed or resolved) against this plan file, and no gating review of any tier is failed or stale. A
 review that ran with issues open appears there as `<skill> (issues open)` and clears only by a
-re-run or a `resolved` entry (`_shared/dashboard.md`). Anything else: print the missing skills
+re-run or a `resolved` entry; one a later review sent back appears as `<skill> (re-review
+demanded)` and clears only by running again (`_shared/dashboard.md`). Anything else: print the missing skills
 and stop with `NEEDS_CONTEXT`, unless the branch name starts with `hotfix/`. Only then ask one question:
 
 ```
@@ -187,7 +188,7 @@ Read `$DOCS_DIR/TODOS.md`; its header defines the format and the Completed secti
 open item, decide whether this branch completes it. Evidence that it does: the item's title
 matches the plan's intake or a milestone; the plan's REVIEW REPORT or the summary says
 "addresses TODO: <title>"; the diff changes what the item's What and Context describe. When
-the evidence is clear, move the item to the Completed section with the date, the branch, and
+the evidence is clear, move the item to the Completed section with `<utc-date>`, the branch, and
 a pull request placeholder you fill in at step 7, keeping its original text. When it is
 unclear, ask one question per item: complete it, or leave it open. Never silently skip an
 item, and never move one on a title match alone.
@@ -249,10 +250,10 @@ row lists plus the pull request and commit:
 ```bash
 "$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" \
   --set workflow_status=shipped --set implementation_status=shipped \
-  --set completed="$(date +%F)" --set pr="$PR_URL"
+  --set completed="$(date -u +%F)" --set pr="$PR_URL"
 "$BIN/obsidian-workflow" registry-upsert "$REGISTRY_KEY" \
   --set plan_path="$_PLAN_FILE" --set workflow_status=shipped --set implementation_status=shipped \
-  --set completed="$(date +%F)" --set pr="$PR_URL" --set commit="$(git rev-parse --short HEAD)"
+  --set completed="$(date -u +%F)" --set pr="$PR_URL" --set commit="$(git rev-parse --short HEAD)"
 ```
 
 Note-sourced plans check their boxes now, and only now. Compare the source tasks with the
@@ -276,7 +277,7 @@ happened:
 ```
 
 Then the roadmap. Invoke `/update-docs` a second time: the registry now says `shipped`, so it
-marks the phase row, or the milestone row of an epic child, `shipped` with the date, the plan
+marks the phase row, or the milestone row of an epic child, `shipped` with `<utc-date>`, the plan
 link, and `PR_URL`, and refreshes the epic's milestone count. This is the "Ship keeps it
 current" rule from the workflow; the first run could not do it because the status was not yet
 shipped.
@@ -294,7 +295,7 @@ If any command in this step fails, keep going through the rest, then report
 Log first so the entry rides in the commit:
 
 ```bash
-"$BIN/review-log" --skill ship --status done --field pr="$PR_URL" \
+"$BIN/review-log" --skill ship --status done --plan "$(basename "$_PLAN_FILE")" --field pr="$PR_URL" \
   ${HOTFIX_OVERRIDE:+--field hotfix_override=true --field skipped_reviews="$MISSING"}
 git add -A
 "$BIN/doc-guard" --staged --dry-run

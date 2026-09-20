@@ -89,7 +89,7 @@ baseline), then overwrite.
 ```json
 {
   "schemaVersion": 1,
-  "date": "YYYY-MM-DD",
+  "date": "<utc-date>",
   "branch": "<branch>",
   "commit": "<short sha>",
   "url": "<target>",
