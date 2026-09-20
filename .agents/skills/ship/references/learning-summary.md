@@ -16,7 +16,7 @@ request already.
 ```markdown
 # <plan title> — plain English summary
 
-Shipped <date> on `<branch>` · Pull request: <PR_URL> · Plan: `<repo-relative _PLAN_FILE>`
+Shipped <utc-date> on `<branch>` · Pull request: <PR_URL> · Plan: `<repo-relative _PLAN_FILE>`
 
 ## What we built
 <two or three sentences a non-programmer can follow>

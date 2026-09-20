@@ -3,11 +3,11 @@
 
 Usage:
     design-sync-mark                   mark as synced now
-    design-sync-mark --org-url URL     also record the design-system org URL (kept across later runs)
+    design-sync-mark --org-url URL     also record the design tool's URL (kept across later runs)
 
 Writes <state>/design-system-synced.json with synced_repo_sha, synced_design_sha (last commit
 touching any config `design_watched_files` entry), synced_at, watched_files,
-claude_design_org_url and schema_version.
+design_tool_url and schema_version.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def main() -> int:
     if org_url is None and marker.is_file():
         try:
             previous = _lib.read_json(marker)
-            org_url = previous.get("claude_design_org_url") if isinstance(previous, dict) else None
+            org_url = previous.get("design_tool_url") if isinstance(previous, dict) else None
         except (json.JSONDecodeError, OSError):
             org_url = None
 
@@ -51,7 +51,7 @@ def main() -> int:
         "synced_design_sha": ds.design_sha(root, files),
         "synced_at": now,
         "watched_files": files,
-        "claude_design_org_url": org_url,
+        "design_tool_url": org_url,
     }
     _lib.write_json(marker, record)
     print(f"design-sync-mark: marked synced at {now}")

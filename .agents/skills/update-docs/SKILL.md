@@ -163,8 +163,8 @@ recorded as `asked (declined)` in the report and the section is left as it was.
 - **One fact, one doc.** When a fact you are updating also appears in another doc, keep it in
   the owner from the ownership table and turn the other copy into a link to the owner. Do not
   update both.
-- Dates come from `date +%F`. Roadmap rows carry the branch, the plan path relative to the
-  repo, the pull request URL when one exists, and the date.
+- Dates come from `date -u +%F` (`<utc-date>`). Roadmap rows carry the branch, the plan path
+  relative to the repo, the pull request URL when one exists, and `<utc-date>`.
 - Placeholders such as `{{...}}` left by a template are drift; fill them from the tree or, if
   there is nothing to say, replace them with one line saying why.
 - Never touch plan files, the registry, the review log, or the vault. Never edit
@@ -204,8 +204,9 @@ the same edit and describe the area there.
 ### 7. LESSONS rows from the caller
 
 Only when `--correction`, `--bug`, or `--decision` was passed. Read the table header in
-`$DOCS_DIR/LESSONS.md` and format the row to its columns with today's date; append it to the
-end of that table. A `--decision` entry goes under `## Decisions` as a dated bullet with a link
+`$DOCS_DIR/LESSONS.md` and format the row to its columns with `<utc-date>`; append it to the
+end of that table. A `--decision` entry goes under `## Decisions` as a bullet headed
+`<utc-date>` with a link
 to `$PLAN_FILE` when one resolves. Do not merge, reword, or move existing rows. Narrative
 sections of `LESSONS.md` are never auto-edited; a canonical rule is the caller's to write.
 

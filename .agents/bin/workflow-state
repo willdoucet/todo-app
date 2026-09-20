@@ -15,6 +15,10 @@ and `resolved` records mean one thing), the count of unreadable log lines, the s
 file's step boxes, and epic progress derived by _lib.epic_progress. One pure function,
 `gate_state`, turns the dispositions into the Open list, `missing`, `missing_to_ship`, and
 the verdict; `--next`, `--dashboard`, and the banner all read from it and cannot disagree.
+A review reads `stale` when a later review declared it must run again (`rereview` on the
+declarer's entry); stale blocks like failed, its dashboard row reads `stale !`, and only its
+own re-run clears it. `Concern:` lines (a review's own `concern` field) and the `Reason:`
+line (the plan's frontmatter `reason`) are shown under the Open lines and gate nothing.
 Nothing here is project-specific; branches, paths and skill names come from config, git and
 the log.
 
@@ -47,6 +51,7 @@ TERMINAL_STATUSES = ("shipped", "abandoned")
 
 HARNESS_NOTE = "skill invocation syntax depends on the harness (/name or $name)"
 OK_DISPOSITIONS = ("passed", "resolved")
+BLOCKING = ("failed", "stale")  # a review that ran and is not ok: it ran and failed, or a later review sent it back
 
 
 # --------------------------------------------------------------------------
@@ -64,20 +69,6 @@ def summary_progress(plan: Path) -> tuple[int, int] | None:
     failed = len(re.findall(r"\[✗\]", text))
     total = done + pending + failed
     return (done, total) if total else None
-
-
-def find_current_plan(root: Path, cfg: dict, branch: str) -> tuple[Path | None, str | None]:
-    """The feature plan for this branch, else the epic whose branch this is."""
-    plan = _lib.latest_plan(root, cfg, branch)
-    if plan:
-        return plan, "plan"
-    epic = _lib.latest_epic(root, cfg, _lib.safe_branch(branch))
-    if epic:
-        return epic, "epic"
-    for candidate in _lib.all_epics(root, cfg):
-        if _lib.read_frontmatter(candidate).get("branch") == branch:
-            return candidate, "epic"
-    return None, None
 
 
 def infer_status(fm: dict, entry: dict | None) -> str:
@@ -128,14 +119,15 @@ def gather(root: Path, cfg: dict) -> dict:
         return st
     # The count is data, never an exception: the banner is fail-silent, and a raise here
     # would print nothing and leave the gate open.
-    st["unreadable"] = _lib.review_log_read(root, cfg)[1]
-    plan, found_as = find_current_plan(root, cfg, branch)
+    entries, bad = _lib.review_log_scan(root, cfg)  # one read: the count here, the entries to reviews_for_plan below
+    st["unreadable"] = len(bad)
+    plan, found_as = _lib.current_plan(root, cfg, branch)
     if not plan:
         return st
     fm = _lib.read_frontmatter(plan)
     plan_kind = fm.get("plan_kind") or ("epic" if found_as == "epic" else "feature")
     st.update(plan=plan, plan_kind=plan_kind, fm=fm)
-    st["reviews"] = _lib.reviews_for_plan(root, cfg, plan.name)
+    st["reviews"] = _lib.reviews_for_plan(root, cfg, plan.name, entries)
     if plan_kind == "epic":
         if plan.parent.parent == _lib.epics_dir(root, cfg):
             slug = _lib.epic_slug_from_path(plan)
@@ -163,31 +155,46 @@ def gather(root: Path, cfg: dict) -> dict:
 # --next, top to bottom (the order of the checks IS the gate):
 #
 #   unreadable log lines? ──yes──▶ Warn: N unreadable … · verdict NOT CLEARED — review log unreadable
-#                                  next.skill = null · Open and Optional empty
+#                                  next.skill = null · Open and Optional empty · no Concern: or Reason: line
 #   plan? ─no─▶ init / idle (unchanged)
-#   epic? ─yes─▶ CEO missing → /plan-ceo-review "epic needs a CEO review" · failed → failed reason · else milestones
+#   epic? ─yes─▶ CEO missing → /plan-ceo-review "epic needs a CEO review" · blocking → its blocking reason · else milestones
 #   status
-#    not-started ──▶ eng not ok?  → /plan-eng-review  (missing: shipping gate | failed: failed reason)
+#    not-started ──▶ eng not ok?  → /plan-eng-review  (missing: shipping gate | failed or stale: blocking reason)
 #                    ui_scope and design not ok? → /plan-design-review
-#                    first other failed gating review? → its invoke, failed reason
-#                    else → /execute-plan  (+ Optional: CEO, adversarial — only when MISSING)
-#    implementing · blocked · needs-context ──▶ next unchanged; every failed gating review → Open: line
+#                    first other blocking (failed or stale) gating review? → its invoke, blocking reason
+#                       (a stale design review lands here even if ui_scope was switched off since)
+#                    else → /execute-plan  (+ Optional: CEO, adversarial — only when MISSING; stale is not missing)
+#    implementing · blocked · needs-context ──▶ next unchanged; every blocking gating review → Open: line
+#                       (blocked / needs-context: Next: carries the plan's reason, through _lib.one_line)
 #    ready-for-review ──▶ impl not ok? → /review-implementation
-#                         first failed gating review, any tier? → its invoke   (adversarial-subagent → /review-implementation)
+#                         first blocking gating review, any tier? → its invoke   (adversarial-subagent → /review-implementation;
+#                                                                                a stale plan review re-runs here, scoped)
 #                         final not ok? → /final-review (+ Optional /qa, /design-review when missing and ui_scope)
 #                         else → /ship
-#    shipped · abandoned ──▶ unchanged; no Open: lines
+#    shipped · abandoned ──▶ unchanged; no Open:, Concern: or Reason: lines
 #
-#   ok = passed | resolved · a gates=False tier (office-hours) never enters any list
-#   missing         = eng (and design with ui_scope) not ok + every failed plan-stage review
-#   missing_to_ship = impl + final not ok + every failed review of any gating tier
+#   ok = passed | resolved · blocking = failed | stale · a gates=False tier (office-hours) never enters any list
+#   missing         = eng (and design with ui_scope) not ok + every blocking plan-stage review
+#   missing_to_ship = impl + final not ok + every blocking review of any gating tier
 #   CLEARED TO SHIP iff missing_to_ship empty; else CLEARED FOR IMPLEMENTATION iff missing empty; else NOT CLEARED
+#
+#   blocking_reason: failed → failed_reason  "ran with issues open: …" (+ "re-review also demanded by …" when demanded)
+#                    stale  → stale_reason   "re-review demanded by <invoke> (<date>): <note> — run this review again"
+#   Concern: one line per tier whose latest run carries `concern`, in tier order; then Reason:, the plan's
+#   frontmatter `reason`, unless it repeats a concern or the blocked branch already shows it. Display only.
+#   Every free-text fragment on a line goes through _lib.one_line(…, DISPLAY_LIMIT); the line around it is never cut.
+
+
+def invoke_of(skill: str) -> str:
+    tier = _lib.tier_for(skill)
+    return tier["invoke"] if tier else f"/{skill}"
 
 
 def failed_reason(skill: str, reviews: dict, dispositions: dict) -> str:
     """Why a failed review is the next step, and what to do about it. When another gating
     tier already passed at or after the failure's `ts`, say so: the agent should log
-    `resolved` by that review rather than re-run a long one it already closed."""
+    `resolved` by that review rather than re-run a long one it already closed. A failed review
+    that is also demanded is never offered `resolved`: that would only turn it stale."""
     failed_ts = _lib.review_ts(reviews.get(skill))
     later = None
     for tier in _lib.gating_tiers():
@@ -198,14 +205,46 @@ def failed_reason(skill: str, reviews: dict, dispositions: dict) -> str:
             later = tier
             break
     prefix = "adversarial subagent ran with issues open: " if skill == "adversarial-subagent" else "ran with issues open: "
+    demanded_by = (reviews.get(skill) or {}).get("demanded_by")
+    if isinstance(demanded_by, str) and demanded_by:
+        # resolving a failed-and-demanded review only turns it stale (_lib.reviews_for_plan), so the
+        # line offers the one thing that works and never "log resolved"; the row's demanded_notes say what changed
+        rerun = "re-run /review-implementation" if skill == "adversarial-subagent" else "re-run it"
+        return f"{prefix}{rerun}; re-review also demanded by {invoke_of(demanded_by)} — resolving will not clear it, run this review again"
     if later:
-        return (
+        reason = (
             f"{prefix}{later['invoke']} already passed after this failure; confirm each open item is "
             f"closed and log resolved by {later['skill']}, or re-run this review"
         )
-    if skill == "adversarial-subagent":
-        return f"{prefix}re-run /review-implementation, or confirm each finding is closed and log resolved"
-    return f"{prefix}re-run it, or confirm each open item is closed and log resolved"
+    elif skill == "adversarial-subagent":
+        reason = f"{prefix}re-run /review-implementation, or confirm each finding is closed and log resolved"
+    else:
+        reason = f"{prefix}re-run it, or confirm each open item is closed and log resolved"
+    return reason
+
+
+def stale_reason(skill: str, reviews: dict) -> str:
+    """Why a stale review is the next step: who demanded it, when, what changed, and the one
+    thing that clears it. The note is flattened and cut at DISPLAY_LIMIT; the words around
+    it are not, so "run this review again" survives any note."""
+    entry = reviews.get(skill) or {}
+    by, ts, count = entry.get("stale_by"), entry.get("stale_ts"), entry.get("stale_count")
+    note = _lib.one_line(entry.get("stale_note", ""), _lib.DISPLAY_LIMIT)
+    action = "re-run /review-implementation" if skill == "adversarial-subagent" else "run this review again"
+    who = invoke_of(by) if isinstance(by, str) and by else "?"
+    when = ts[:10] if isinstance(ts, str) else ""
+    reason = f"re-review demanded by {who} ({when}): {note} — {action}"
+    if isinstance(count, int) and count > 1:
+        reason += f" (+{count - 1} more)"
+    return reason
+
+
+def blocking_reason(skill: str, reviews: dict, dispositions: dict) -> str:
+    """One dispatcher for every blocking disposition, so a stale row can never print "ran with
+    issues open" and a failed row never prints "re-review demanded"."""
+    if dispositions.get(skill) == "stale":
+        return stale_reason(skill, reviews)
+    return failed_reason(skill, reviews, dispositions)
 
 
 def gate_state(reviews: dict, fm: dict, status: str, unreadable: int) -> dict:
@@ -231,13 +270,13 @@ def gate_state(reviews: dict, fm: dict, status: str, unreadable: int) -> dict:
     impl_gate = ["plan-eng-review"] + (["plan-design-review"] if _lib.truthy(fm.get("ui_scope")) else [])
     for tier in _lib.gating_tiers():
         skill = tier["skill"]
-        failed = dispositions[skill] == "failed"
-        if (skill in impl_gate and not ok(skill)) or (skill in _lib.PLAN_STAGE_SKILLS and failed):
+        blocking = dispositions[skill] in BLOCKING
+        if (skill in impl_gate and not ok(skill)) or (skill in _lib.PLAN_STAGE_SKILLS and blocking):
             out["missing"].append(skill)
-        if (skill in _lib.SHIP_GATE_SKILLS and not ok(skill)) or failed:
+        if (skill in _lib.SHIP_GATE_SKILLS and not ok(skill)) or blocking:
             out["missing_to_ship"].append(skill)
-        if failed and status not in TERMINAL_STATUSES:
-            out["open"].append({"skill": skill, "invoke": tier["invoke"], "reason": failed_reason(skill, reviews, dispositions)})
+        if blocking and status not in TERMINAL_STATUSES:
+            out["open"].append({"skill": skill, "invoke": tier["invoke"], "reason": blocking_reason(skill, reviews, dispositions)})
     if not out["missing_to_ship"]:
         out["verdict"] = "CLEARED TO SHIP"
     elif not out["missing"]:
@@ -283,24 +322,61 @@ def epic_summary(ep: dict, milestone: str | None = None) -> dict:
     }
 
 
+def line_text(value) -> str:
+    """Frontmatter and registry text on a status line: a milestone's id and title, an epic's
+    slug, a branch, a risk tag. Free text like a reason, so it takes the same one helper."""
+    return _lib.one_line(value if isinstance(value, str) else str(value), _lib.DISPLAY_LIMIT)
+
+
 def milestone_next(ep: dict, ms: dict) -> dict:
-    label = f"{ms['id']}" + (f" {ms['title']}" if ms.get("title") else "")
+    mid = line_text(ms["id"])
+    label = line_text(f"{mid} {ms.get('title') or ''}")
     if ms["status"] in _lib.MILESTONE_ACTIVE_STATUSES:
-        where = f" on branch {ms['branch']}" if ms.get("branch") else ""
+        where = f" on branch {line_text(ms['branch'])}" if ms.get("branch") else ""
         return nxt(None, None, True, f"{label} is {ms['status']}{where} — switch to it and continue")
     skill = "/quickfix" if ms.get("size") == "quickfix" else "/office-hours"
-    args = f"{ep['epic_file']}#{ms['id']}" if ep.get("epic_file") else ms["id"]
-    return nxt(skill, args, True, f"next milestone of {ep['slug']}: {label}")
+    args = f"{ep['epic_file']}#{mid}" if ep.get("epic_file") else mid
+    return nxt(skill, args, True, f"next milestone of {line_text(ep['slug'])}: {label}")
 
 
-def active_epics(root: Path, cfg: dict) -> list[dict]:
-    out = []
-    for slug in _lib.all_epic_slugs(root, cfg):
-        ep = _lib.epic_progress(root, cfg, slug)
-        if ep["status"] in ("shipped", "abandoned") or ep["done"]:
+def active_epics(st: dict) -> list[dict]:
+    """Every epic still in flight, derived once per invocation and kept on `st`: on the base
+    branch `_decide` and `banner_lines` both ask, and each derivation re-reads the registry."""
+    if "active_epics" not in st:
+        out = []
+        for slug in _lib.all_epic_slugs(st["root"], st["cfg"]):
+            ep = _lib.epic_progress(st["root"], st["cfg"], slug)
+            if ep["status"] in ("shipped", "abandoned") or ep["done"]:
+                continue
+            out.append(ep)
+        st["active_epics"] = out
+    return st["active_epics"]
+
+
+def attention(st: dict, unreadable: int) -> dict:
+    """Display only: each tier's latest-run `concern` (tier order, display-only tiers included;
+    `reviews_for_plan` carries it onto a resolution record from the run it resolves) and the
+    plan's frontmatter `reason`, both flattened and untruncated. Nothing reads either to decide
+    anything. A shipped or abandoned plan, or an unreadable log, yields nothing."""
+    if st["plan"] is None or unreadable > 0 or st["status"] in TERMINAL_STATUSES:
+        return {"concerns": [], "reason": None, "reason_by": None, "reason_at": None}
+    concerns = []
+    for tier in _lib.REVIEW_TIERS:
+        entry = st["reviews"].get(tier["skill"])
+        if not entry:
             continue
-        out.append(ep)
-    return out
+        concern = entry.get("concern")
+        if not isinstance(concern, str) or not concern.strip():
+            continue
+        ts = entry.get("concern_ts")
+        concerns.append({"skill": tier["skill"], "ts": ts if isinstance(ts, str) else _lib.review_ts(entry), "text": _lib.one_line(concern)})
+    reason = st["fm"].get("reason")
+    reason_text = _lib.one_line(reason) if reason not in (None, "") else ""
+    # who wrote the reason and when (`_lib.stamp_reason`); a reason written before 1.3.0 has neither
+    by, at = (st["fm"].get(k) for k in ("reason_by", "reason_at"))
+    by = _lib.one_line(by) if reason_text and isinstance(by, str) else ""
+    at = _lib.one_line(at) if reason_text and isinstance(at, str) else ""
+    return {"concerns": concerns, "reason": reason_text or None, "reason_by": by or None, "reason_at": at or None}
 
 
 def decide(st: dict) -> dict:
@@ -308,6 +384,8 @@ def decide(st: dict) -> dict:
     result = _decide(st, gs)
     named = result.pop("next_log_skill", None)
     result["unreadable"] = gs["unreadable"]
+    shown = attention(st, gs["unreadable"])
+    result.update(shown)  # concerns, reason, reason_by, reason_at
     if gs["unreadable"] > 0:
         result["next"] = nxt(None, None, True, unreadable_reason(gs["unreadable"]))
         result["optional"] = []
@@ -327,11 +405,11 @@ def _decide(st: dict, gs: dict) -> dict:
         return disp.get(skill) in OK_DISPOSITIONS
 
     def reason_for(skill: str, missing_reason: str) -> str:
-        return failed_reason(skill, reviews, disp) if disp.get(skill) == "failed" else missing_reason
+        return blocking_reason(skill, reviews, disp) if disp.get(skill) in BLOCKING else missing_reason
 
-    def first_failed(exclude: tuple[str, ...] = ()) -> str | None:
+    def first_blocking(exclude: tuple[str, ...] = ()) -> str | None:
         for tier in _lib.gating_tiers():
-            if tier["skill"] not in exclude and disp[tier["skill"]] == "failed":
+            if tier["skill"] not in exclude and disp[tier["skill"]] in BLOCKING:
                 return tier["skill"]
         return None
 
@@ -344,7 +422,7 @@ def _decide(st: dict, gs: dict) -> dict:
                 "optional": [],
             }
         if st["on_base"]:
-            for ep in active_epics(st["root"], st["cfg"]):
+            for ep in active_epics(st):
                 if ep["next"]:
                     return {
                         "stage": "IDLE",
@@ -396,7 +474,8 @@ def _decide(st: dict, gs: dict) -> dict:
     elif status in ("blocked", "needs-context"):
         result["stage"] = "BLOCKED" if status == "blocked" else "BLOCKED (needs-context)"
         reason = fm.get("reason")
-        why = "resolve the blocker first" + (f": {reason}" if reason else "")
+        text = _lib.one_line(reason, _lib.DISPLAY_LIMIT) if reason else ""  # never raw: a reason is free text
+        why = "resolve the blocker first" + (f": {text}" if text else "")
         result["next"] = nxt("/execute-plan", None, True, why)
     elif status == "implementing":
         progress = st["progress"]
@@ -404,11 +483,11 @@ def _decide(st: dict, gs: dict) -> dict:
         result["next"] = nxt("/execute-plan", None, True, "continue implementation")
     elif status == "ready-for-review":
         result["stage"] = "READY FOR REVIEW"
-        failed = first_failed(exclude=("review-implementation",))
+        blocking = first_blocking(exclude=("review-implementation",))
         if not ok("review-implementation"):
             require("review-implementation", "pre-landing review")
-        elif failed:
-            require(failed, "")
+        elif blocking:
+            require(blocking, "")
         elif not ok("final-review"):
             require("final-review", "shipping gate")
             if _lib.truthy(fm.get("ui_scope")):
@@ -430,12 +509,12 @@ def _decide(st: dict, gs: dict) -> dict:
             # Eng review is ok. Adversarial review is suggested from here on, before any
             # further gate, whenever the plan carries risk tags and it has never run.
             if risk_tags and disp["plan-adversarial-review"] == "missing":
-                result["optional"].append(opt("/plan-adversarial-review", f"risk tags: {','.join(map(str, risk_tags))}"))
-            failed = first_failed(exclude=("plan-eng-review",))
+                result["optional"].append(opt("/plan-adversarial-review", f"risk tags: {line_text(','.join(map(str, risk_tags)))}"))
+            blocking = first_blocking(exclude=("plan-eng-review",))
             if _lib.truthy(fm.get("ui_scope")) and not ok("plan-design-review"):
                 require("plan-design-review", "ui_scope is set")
-            elif failed:
-                require(failed, "")
+            elif blocking:
+                require(blocking, "")
             else:
                 result["next"] = nxt("/execute-plan", None, True, "plan is cleared for implementation")
                 if disp["plan-ceo-review"] == "missing":
@@ -463,9 +542,38 @@ def fmt_next(decision: dict) -> list[str]:
     return lines
 
 
+def reason_author(shown: dict) -> str:
+    """`/execute-plan (2026-09-18): ` in front of a reason, from whatever is known: the author,
+    the date, both, or nothing for a reason written before it was stamped. `operator` is a person,
+    not a skill, so it takes no slash."""
+    by, at = shown.get("reason_by"), shown.get("reason_at")
+    who = "" if not by else "operator" if by == "operator" else invoke_of(line_text(by))
+    label = " ".join(part for part in (who, f"({line_text(at)[:10]})" if at else "") if part)
+    return f"{label}: " if label else ""
+
+
+def fmt_attention(decision: dict) -> list[str]:
+    """`Concern:` lines then one `Reason:` line, directly under the Open: lines. The Reason:
+    line is suppressed when its full flattened text repeats a displayed concern (skills that
+    finish DONE_WITH_CONCERNS write the same text to both places) and when the Next: line
+    already carries it: the BLOCKED stages of a feature plan. A blocked epic's Next: line never
+    does, so its Reason: line prints. Each fragment is cut at DISPLAY_LIMIT; the comparison uses
+    the full text."""
+    lines = []
+    seen: set[str] = set()
+    for c in decision.get("concerns", []):
+        seen.add(c["text"])
+        lines.append(f"Concern: {invoke_of(c['skill'])} ({c['ts'][:10]}): {_lib.one_line(c['text'], _lib.DISPLAY_LIMIT)}")
+    reason = decision.get("reason")
+    if reason and not str(decision.get("stage", "")).startswith("BLOCKED") and reason not in seen:
+        lines.append(f"Reason:  {reason_author(decision)}{_lib.one_line(reason, _lib.DISPLAY_LIMIT)}")
+    return lines
+
+
 def fmt_reviews(dispositions: dict) -> str:
-    """One mark per tier. gates=True: — missing, ✓ ok, ! failed. gates=False (display
-    only): — missing, · present; never ✓ or !, because neither means anything for it."""
+    """One mark per tier. gates=True: — missing, ✓ ok, ! blocking (failed or stale).
+    gates=False (display only): — missing, · present; never ✓ or !, because neither means
+    anything for it."""
     parts = []
     for tier in _lib.REVIEW_TIERS:
         d = dispositions.get(tier["skill"], "missing")
@@ -488,7 +596,7 @@ def fmt_warn(unreadable: int) -> str:
 def fmt_epic_line(ep_summary: dict) -> str:
     parts = []
     if ep_summary.get("milestone"):
-        pos = f"{ep_summary['milestone']}"
+        pos = line_text(ep_summary["milestone"])
         if ep_summary.get("index"):
             pos += f" of {ep_summary['total']}"
         parts.append(pos)
@@ -497,7 +605,7 @@ def fmt_epic_line(ep_summary: dict) -> str:
     detail = f"{ep_summary['shipped']} shipped"
     if ep_summary["subsumed"]:
         detail += f", {ep_summary['subsumed']} subsumed"
-    return f"{ep_summary['slug']} — {' '.join(parts)} ({detail})"
+    return f"{line_text(ep_summary['slug'])} — {' '.join(parts)} ({detail})"
 
 
 def fmt_epic_row(ep: dict) -> str:
@@ -507,11 +615,11 @@ def fmt_epic_row(ep: dict) -> str:
     if ep["in_progress"]:
         counts.append(f"{ep['in_progress']} in progress")
     done = ep["shipped"] + ep["subsumed"]
-    line = f"{ep['slug']}  {done}/{ep['total']} done ({', '.join(counts)})"
+    line = f"{line_text(ep['slug'])}  {done}/{ep['total']} done ({', '.join(counts)})"
     nm = ep.get("next")
     if nm:
-        where = f" — {nm['status']}" + (f" on {nm['branch']}" if nm.get("branch") else "") if nm["status"] != "not-started" else ""
-        line += f"  next: {nm['id']} ({nm['size']}) {nm['title']}{where}".rstrip()
+        where = f" — {line_text(nm['status'])}" + (f" on {line_text(nm['branch'])}" if nm.get("branch") else "") if nm["status"] != "not-started" else ""
+        line += f"  next: {line_text(nm['id'])} ({line_text(nm['size'])}) {line_text(nm['title'])}{where}".rstrip()
     elif ep["done"]:
         line += "  complete"
     else:
@@ -536,12 +644,13 @@ def banner_lines(st: dict, decision: dict) -> list[str]:
         gs = gate_state(st["reviews"], st["fm"], st["status"], st.get("unreadable", 0))
         lines.append(f"Reviews: {fmt_reviews(gs['dispositions'])}")
     if st["on_base"]:
-        for ep in active_epics(st["root"], st["cfg"]):
+        for ep in active_epics(st):
             lines.append(f"Epic:    {fmt_epic_row(ep)}")
         if st["stuck"]:
             items = ", ".join(f"{e['branch']} ({e['status']})" for e in st["stuck"])
             lines.append(f"Warn:    {len(st['stuck'])} plan(s) stuck on other branches: {items}")
     lines.extend(fmt_next(decision))
+    lines.extend(fmt_attention(decision))
     lines.append(f"Note:    {HARNESS_NOTE}")
     return lines
 
@@ -549,7 +658,7 @@ def banner_lines(st: dict, decision: dict) -> list[str]:
 def dashboard(st: dict) -> dict:
     plan = st["plan"]
     if not plan:
-        return {"plan": None, "rows": [], "verdict": "NO PLAN", "missing": [], "missing_to_ship": [], "unreadable": st.get("unreadable", 0)}
+        return {"plan": None, "rows": [], "verdict": "NO PLAN", "missing": [], "missing_to_ship": [], "unreadable": st.get("unreadable", 0), "concerns": [], "reason": None, "reason_by": None, "reason_at": None}
     reviews = st["reviews"]
     gs = gate_state(reviews, st["fm"], st["status"], st.get("unreadable", 0))
     rows = []
@@ -568,6 +677,7 @@ def dashboard(st: dict) -> dict:
                 "extra": _lib.review_extra(entry) if entry else {},
             }
         )
+    shown = attention(st, gs["unreadable"])
     return {
         "plan": plan.name,
         "ui_scope": _lib.truthy(st["fm"].get("ui_scope")),
@@ -576,6 +686,7 @@ def dashboard(st: dict) -> dict:
         "missing": gs["missing"],
         "missing_to_ship": gs["missing_to_ship"],
         "unreadable": gs["unreadable"],
+        **shown,  # concerns, reason, reason_by, reason_at
     }
 
 
@@ -585,8 +696,9 @@ def fmt_extra(extra: dict) -> str:
 
 
 def fmt_missing(names: list[str], rows: list[dict]) -> str:
-    failed = {r["skill"] for r in rows if r["disposition"] == "failed"}
-    return ", ".join(f"{n} (issues open)" if n in failed else n for n in names)
+    disposition = {r["skill"]: r["disposition"] for r in rows}
+    suffix = {"failed": " (issues open)", "stale": " (re-review demanded)"}
+    return ", ".join(f"{n}{suffix.get(disposition.get(n), '')}" for n in names)
 
 
 def dashboard_lines(d: dict) -> list[str]:
@@ -595,12 +707,14 @@ def dashboard_lines(d: dict) -> list[str]:
     lines = []
     if d.get("unreadable"):
         lines.append(f"Warn: {d['unreadable']} unreadable review-log line(s)")
-    lines += [f"Plan: {d['plan']}", f"{'Review':<13}| {'Status':<14}| {'When':<11}| Extra"]
+    lines += [f"Plan: {d['plan']}", f"{'Review':<13}| {'Status':<14}| {'When (UTC)':<11}| Extra"]
     for r in d["rows"]:
         if r["status"] is None:
             status = "—"
         elif not r["gates"]:
             status = str(r["status"])
+        elif r["disposition"] == "stale":
+            status = "stale !"  # the one row whose text cell shows the disposition: the logged word is clean
         else:
             status = f"{r['status']} {'✓' if r['ok'] else '!'}"
         lines.append(f"{r['label']:<13}| {status:<14}| {r['when'] or '':<11}| {fmt_extra(r['extra'])}")
@@ -610,6 +724,9 @@ def dashboard_lines(d: dict) -> list[str]:
     lines.append(verdict)
     if d["verdict"] == "CLEARED FOR IMPLEMENTATION":
         lines.append(f"To ship: {fmt_missing(d['missing_to_ship'], d['rows'])}")
+    reason = d.get("reason")
+    if reason and reason not in {c["text"] for c in d.get("concerns", [])}:
+        lines.append(f"Reason: {reason_author(d)}{reason}")  # in full: the dashboard is the untruncated view
     return lines
 
 
@@ -678,7 +795,7 @@ def main() -> int:
             st = gather(root, cfg)
             if not st["branch"]:
                 return 0
-            text = "\n".join(banner_lines(st, decide(st)))
+            text = _lib.encodable("\n".join(banner_lines(st, decide(st))))  # a print that raises here is a blank banner
             if args.json:
                 sys.stdout.write(
                     json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}})
@@ -711,7 +828,7 @@ def main() -> int:
         d = dashboard(st)
         if args.json:
             return _lib.print_json(d)
-        print("\n".join(dashboard_lines(d)))
+        print(_lib.encodable("\n".join(dashboard_lines(d))))
         return 0
 
     decision = decide(st)
@@ -720,8 +837,8 @@ def main() -> int:
     lines = []
     if decision.get("unreadable"):
         lines.append(fmt_warn(decision["unreadable"]))
-    lines += [f"Stage:   {decision['stage']}"] + fmt_next(decision) + [f"Note:    {HARNESS_NOTE}"]
-    print("\n".join(lines))
+    lines += [f"Stage:   {decision['stage']}"] + fmt_next(decision) + fmt_attention(decision) + [f"Note:    {HARNESS_NOTE}"]
+    print(_lib.encodable("\n".join(lines)))
     return 0
 
 

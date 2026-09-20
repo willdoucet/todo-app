@@ -175,7 +175,7 @@ prior plans and epics:
 grep -rli "<kw1>\|<kw2>\|<kw3>" "$PLANS_DIR/features" "$PLANS_DIR/epics" 2>/dev/null
 ```
 
-Read every match. Surface each as "Related design found: {title}, {date}. Overlap: {one line}."
+Read every match. Surface each as "Related design found: {title}, {plan date}. Overlap: {one line}."
 Cross-check `TODOS.md` and the LESSONS Decisions from step 1 the same way. When there is a
 match, ask one question: build on the prior design, or start fresh. No match: proceed silently.
 
@@ -476,7 +476,7 @@ points at the plan (the helper keeps `notes::` lines):
 
 - **DONE**: the document is APPROVED, frontmatter and registry are set, the note is synced.
 - **DONE_WITH_CONCERNS**: approved with open questions or reviewer concerns listed, or a sync
-  failed (the document exists; say what did not sync). Add `--set reason="..."`.
+  failed (say what did not sync). Add `--set reason="..." --set reason_by=office-hours`.
 - **NEEDS_CONTEXT**: the user left questions unanswered and the design is incomplete.
 - **ABANDONED**: the user stopped. If anything was registered, run `abandon "$REGISTRY_KEY"
   --reason "..."`.

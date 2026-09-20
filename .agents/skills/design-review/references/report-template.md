@@ -12,7 +12,7 @@ and again after the fix loop. Screenshot paths are relative to the report; the f
 
 | Field | Value |
 |---|---|
-| **Date** | {DATE} |
+| **Date** | <utc-date> |
 | **URL** | {URL} |
 | **Branch** | {BRANCH} |
 | **Commit** | {SHORT SHA} |

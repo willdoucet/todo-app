@@ -22,6 +22,10 @@ each review updates its own row with a one-line findings summary.
 never reads cleaner than its log entry. A `resolved` record does not rewrite the original
 status: it adds to that row the resolver and where each item was closed, for example
 `issues_open (2026-09-12) · resolved by /plan-eng-review, 2026-09-16: item 2, break-glass entry`.
+A re-review demand **adds** to the demanded review's row, never rewriting its status, for
+example `clean (2026-09-12) · re-review demanded by /plan-design-review, 2026-09-15: item 15a
+adds a backend contract`; when that review runs again, its new entry on the row says
+`scoped re-review of <what>` or names the full run.
 
 ```markdown
 ## REVIEW REPORT

@@ -206,7 +206,7 @@ lessons completed, struggled with, and bug hunts solved, concepts that needed ex
 explanation, one or two reflection excerpts pulled from the learner's `reflection.md` files,
 post-quiz score if taken, and the **review scheduler**. The scheduler rule: after a tier is
 complete, before starting the next tier, replay the first lesson's self-check for five
-minutes; write that as a dated line. Offer the optional deeper `quiz-post.md` when the capstone
+minutes; write that as a line headed `<utc-date>`. Offer the optional deeper `quiz-post.md` when the capstone
 is done.
 
 Resuming a topic: read `learning-plan.md` and `summary.md`, summarize prior progress and

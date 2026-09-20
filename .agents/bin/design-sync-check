@@ -76,7 +76,7 @@ def main() -> int:
         return 0
 
     drift = _lib.git(root, "rev-list", "--count", f"{synced_sha}..HEAD", "--", *files, check=False) or "?"
-    org_url = data.get("claude_design_org_url") or "the design system"
+    org_url = data.get("design_tool_url") or "the design tool"
     print(f"design-sync-check: DRIFT — {drift} commit(s) have touched the design system since last sync ({synced_at}).")
     print(f"  synced_design_sha:  {synced_sha}")
     print(f"  current_design_sha: {current_sha}")

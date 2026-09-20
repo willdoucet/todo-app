@@ -342,7 +342,7 @@ edit the doc here), C) leave it and record why. Never batch; never decide silent
 Read `$DOCS_DIR/TODOS.md`. For each deferred finding, ask one question whether to record it,
 then write it in the format that file's own header defines (What, Why, Context with page,
 viewport, and screenshot path, Effort, Priority P0–P4, Depends on). A fixed finding that was
-an open TODO moves to Completed with "Fixed by /design-review on $BRANCH, <date>".
+an open TODO moves to Completed with "Fixed by /design-review on $BRANCH, <utc-date>".
 
 Add a Decisions entry to `LESSONS.md` for any first-principles insight about this product's
 look; a Corrections Log row if the user corrected you. When `modules.design_sync` is true in
@@ -352,7 +352,7 @@ look; a Corrections Log row if the user corrected you. When `modules.design_sync
 ### 19. Persist the result and update the plan footer
 
 ```bash
-"$BIN/review-log" --skill design-review --status STATUS \
+"$BIN/review-log" --skill design-review --status STATUS --plan "$(basename "$_PLAN_FILE")" \
   --field depth=quick|standard|deep --field pages=N \
   --field design_grade=A-F --field slop_grade=A-F --field goodwill=N \
   --field found=N --field fixed=N --field deferred=N --field model=<your model, when known>

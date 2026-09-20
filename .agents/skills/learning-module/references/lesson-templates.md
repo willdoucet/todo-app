@@ -189,7 +189,7 @@ critique, design, open response
 # Summary: <topic>
 
 ## Sessions
-### <date>
+### <utc-date>
 - Pre-quiz: <score> (<per-question results>)
 - Misconception profile: strong on ...; weak on ...
 - Completed: ... · Struggled with: ... · Bug hunts solved: ...
@@ -198,7 +198,7 @@ critique, design, open response
 - Post-quiz: <score or not taken>
 
 ## Review scheduler
-- <date>: before starting Tier 2, replay the self-check of lesson 01 (5 minutes)
+- <utc-date>: before starting Tier 2, replay the self-check of lesson 01 (5 minutes)
 ```
 
 ## quiz-pre.md and quiz-post.md

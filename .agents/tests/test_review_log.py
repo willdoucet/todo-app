@@ -30,8 +30,8 @@ def test_json_form_autofills_context(tmp_path):
     repo = R.make_repo(tmp_path)
     R.checkout(repo, "feat/x")
     plan = R.write_plan(repo, "feat/x", {})
-    out = R.run_json(repo, "review-log", '{"skill":"plan-eng-review","status":"clean","issues":2}')
-    assert out["skill"] == "plan-eng-review" and out["status"] == "clean" and out["issues"] == 2
+    out = R.run_json(repo, "review-log", '{"skill":"plan-eng-review","status":"clean","rereview":[],"issues":2}')
+    assert out["skill"] == "plan-eng-review" and out["status"] == "clean" and out["issues"] == 2 and out["rereview"] == []
     assert out["branch"] == "feat/x" and out["plan"] == plan.name
     assert out["commit"] == R.git(repo, "rev-parse", "--short", "HEAD")
     assert out["ts"].endswith("Z") and out["harness"] == "unknown"
@@ -109,10 +109,10 @@ def test_field_cannot_smuggle_status_or_skill(tmp_path):
 @pytest.mark.parametrize(
     "argv",
     [
-        [json.dumps({"skill": "plan-eng-review", "status": "clean", "ts": None})],
-        [json.dumps({"skill": "plan-eng-review", "status": "clean", "ts": 123})],
-        ["--skill", "plan-eng-review", "--status", "clean", "--field", "ts=123"],
-        ["--skill", "plan-eng-review", "--status", "clean", "--field", "ts="],
+        [json.dumps({"skill": "plan-eng-review", "status": "clean", "rereview": [], "ts": None})],
+        [json.dumps({"skill": "plan-eng-review", "status": "clean", "rereview": [], "ts": 123})],
+        ["--skill", "plan-eng-review", "--status", "clean", "--rereview", "none", "--field", "ts=123"],
+        ["--skill", "plan-eng-review", "--status", "clean", "--rereview", "none", "--field", "ts="],
     ],
 )
 def test_ts_must_be_a_non_empty_string_when_supplied(tmp_path, argv):
@@ -121,7 +121,7 @@ def test_ts_must_be_a_non_empty_string_when_supplied(tmp_path, argv):
     err = error(R.run(repo, "review-log", *argv))
     assert "ts must be UTC" in err["error"]
     assert log_bytes(repo) == b""
-    assert R.run_json(repo, "review-log", "--skill", "plan-eng-review", "--status", "clean", "--field", "ts=2026-09-01T00:00:00Z")["ts"] == "2026-09-01T00:00:00Z"
+    assert R.run_json(repo, "review-log", "--skill", "plan-eng-review", "--status", "clean", "--rereview", "none", "--field", "ts=2026-09-01T00:00:00Z")["ts"] == "2026-09-01T00:00:00Z"
 
 
 def test_ts_is_stamped_before_the_rules_run_and_never_in_the_future(tmp_path):
@@ -465,3 +465,260 @@ def test_review_read_attaches_summary_named_legacy_entries(tmp_path):
     assert data["reviews"]["review-implementation"]["ts"] == "2026-04-18T00:00:00Z"  # newest wins across both names
     lines = R.run(repo, "review-read").stdout.splitlines()
     assert lines[0].startswith("adversarial-subagent|2026-04-17T05:53:53Z|issues_found|failed|")
+
+
+# ---------------------------------------------------------------- the declaration
+
+
+def declared(tmp_path):
+    """A feature-branch plan whose eng and adversarial reviews have run."""
+    repo = R.make_repo(tmp_path)
+    R.checkout(repo, "feat/x")
+    plan = R.write_plan(repo, "feat/x", {})
+    R.log_review(repo, plan, "plan-eng-review", "clean", ts="2026-09-02T00:00:00Z", rereview=[])
+    R.log_review(repo, plan, "plan-adversarial-review", "clean", ts="2026-09-03T00:00:00Z", rereview=[])
+    return repo, plan
+
+
+def test_plan_reviews_must_declare_in_both_forms(tmp_path):
+    repo, plan = declared(tmp_path)
+    before = log_bytes(repo)
+    for skill in ("plan-ceo-review", "plan-eng-review", "plan-adversarial-review", "plan-design-review"):
+        for status in ("clean", "issues_open"):
+            for argv in (["--skill", skill, "--status", status], [json.dumps({"skill": skill, "status": status})]):
+                err = error(R.run(repo, "review-log", *argv))
+                assert f"{skill} must declare re-reviews" in err["error"] and "--rereview none" in err["error"] and "--rereview <skill>" in err["error"]
+    assert log_bytes(repo) == before
+    out = R.run_json(repo, "review-log", "--skill", "plan-ceo-review", "--status", "clean", "--rereview", "none")
+    assert out["rereview"] == [] and "rereview_note" not in out
+    assert R.run_json(repo, "review-log", '{"skill":"plan-ceo-review","status":"issues_open","rereview":[]}')["rereview"] == []
+    # ship-stage reviews may declare and need not; office-hours and ship never must
+    assert "rereview" not in R.run_json(repo, "review-log", "--skill", "qa", "--status", "clean")
+    assert "rereview" not in R.run_json(repo, "review-log", "--skill", "office-hours", "--status", "issues_open", "--field", "concerns=3")
+    assert R.run_json(repo, "review-log", "--skill", "ship", "--status", "done")["status"] == "done"
+
+
+def test_a_demand_is_accepted_and_stored(tmp_path):
+    repo, plan = declared(tmp_path)
+    out = R.run_json(repo, "review-log", "--skill", "plan-design-review", "--status", "clean", "--rereview", "plan-eng-review", "--rereview", "plan-eng-review", "--rereview-note", "15a adds a backend contract")
+    assert out["rereview"] == ["plan-eng-review"] and out["rereview_note"] == "15a adds a backend contract" and out["plan"] == plan.name
+    assert entries(repo)[-1]["rereview"] == ["plan-eng-review"]
+    # positional JSON, two targets deduplicated, a failed target accepted, design accepted whatever ui_scope says
+    R.log_review(repo, plan, "plan-ceo-review", "issues_open", ts="2026-09-04T00:00:00Z", rereview=[])
+    out = R.run_json(repo, "review-log", json.dumps({"skill": "plan-adversarial-review", "status": "clean", "rereview": ["plan-ceo-review", "plan-design-review", "plan-ceo-review"], "rereview_note": "both"}))
+    assert out["rereview"] == ["plan-ceo-review", "plan-design-review"]
+    data = R.run_json(repo, "review-read", "--json")["reviews"]
+    assert data["plan-eng-review"]["disposition"] == "stale" and data["plan-design-review"]["disposition"] == "stale"
+    assert data["plan-ceo-review"]["disposition"] == "failed" and data["plan-ceo-review"]["demanded_by"] == "plan-adversarial-review"
+    # ship stage: accepted, same stage only
+    R.log_review(repo, plan, "qa", "clean", ts="2026-09-05T00:00:00Z")
+    assert R.run_json(repo, "review-log", "--skill", "final-review", "--status", "clean", "--rereview", "qa", "--rereview-note", "the fix changed the flow QA passed")["rereview"] == ["qa"]
+
+
+REREVIEW_REJECTIONS = [
+    (["--rereview", "none", "--rereview", "plan-eng-review"], None, "none excludes names"),
+    (["--rereview", "plan-eng-review"], {"rereview": ["plan-eng-review"]}, "needs --rereview-note"),
+    (["--rereview", "plan-eng-review", "--rereview-note", ""], {"rereview": ["plan-eng-review"], "rereview_note": ""}, "needs --rereview-note"),
+    (["--rereview", "none", "--rereview-note", "x"], {"rereview": [], "rereview_note": "x"}, "takes no note"),
+    (["--rereview", "plan-design-review", "--rereview-note", "x"], {"rereview": ["plan-design-review"], "rereview_note": "x"}, "cannot demand its own"),
+    (["--rereview", "ship", "--rereview-note", "x"], {"rereview": ["ship"], "rereview_note": "x"}, "never re-run"),
+    (["--rereview", "qa", "--rereview-note", "x"], {"rereview": ["qa"], "rereview_note": "x"}, "stays in its stage"),
+    (["--rereview", "office-hours", "--rereview-note", "x"], {"rereview": ["office-hours"], "rereview_note": "x"}, "not a gating review tier"),
+    (["--rereview", "execute-plan", "--rereview-note", "x"], {"rereview": ["execute-plan"], "rereview_note": "x"}, "not a gating review tier"),
+    (["--rereview", "plan-ceo-review", "--rereview-note", "x"], {"rereview": ["plan-ceo-review"], "rereview_note": "x"}, "has no run on"),
+    (None, {"rereview": "plan-eng-review", "rereview_note": "x"}, "list of skill names"),
+    (None, {"rereview": ["none"]}, "JSON spelling of none is []"),
+    (None, {"rereview": ["plan-eng-review", 5], "rereview_note": "x"}, "list of skill names"),
+    (None, {"rereview": ["plan-eng-review"], "rereview_note": 42}, "must be a string"),
+    (None, {"rereview": {"plan-eng-review": True}, "rereview_note": "x"}, "list of skill names"),
+    (["--field", "rereview=[]"], None, "--field cannot set 'rereview'"),
+    (["--field", "rereview_note=x", "--rereview", "none"], None, "--field cannot set 'rereview_note'"),
+    # dated before eng's run (2026-09-02): the reader would never count it, so the writer refuses it
+    (
+        ["--rereview", "plan-eng-review", "--rereview-note", "x", "--field", "ts=2026-09-01T00:00:00Z"],
+        {"rereview": ["plan-eng-review"], "rereview_note": "x", "ts": "2026-09-01T00:00:00Z"},
+        "a demand is dated at or after the run it overtakes",
+    ),
+]
+
+
+@pytest.mark.parametrize("flags,fields,needle", REREVIEW_REJECTIONS)
+def test_declaration_rules_reject_in_both_forms_and_leave_the_log_byte_identical(tmp_path, flags, fields, needle):
+    repo, plan = declared(tmp_path)
+    before = log_bytes(repo)
+    if flags is not None:
+        err = error(R.run(repo, "review-log", "--skill", "plan-design-review", "--status", "clean", *flags))
+        assert needle in err["error"], err["error"]
+    if fields is not None:
+        err = error(R.run(repo, "review-log", json.dumps({"skill": "plan-design-review", "status": "clean", **fields})))
+        assert needle in err["error"], err["error"]
+    assert log_bytes(repo) == before
+
+
+def test_declaration_refused_on_resolved_done_and_from_office_hours(tmp_path):
+    repo, plan = declared(tmp_path)
+    R.log_review(repo, plan, "plan-ceo-review", "issues_open", ts="2026-09-01T00:00:00Z", rereview=[])
+    before = log_bytes(repo)
+    cases = [
+        (["--skill", "plan-ceo-review", "--status", "resolved", "--field", "resolved_by=plan-eng-review", "--field", "note=x", "--rereview", "plan-adversarial-review", "--rereview-note", "x"],
+         {"skill": "plan-ceo-review", "status": "resolved", "resolved_by": "plan-eng-review", "note": "x", "rereview": ["plan-adversarial-review"], "rereview_note": "x"},
+         "a resolved entry cannot declare"),
+        (["--skill", "ship", "--status", "done", "--rereview", "qa", "--rereview-note", "x"],
+         {"skill": "ship", "status": "done", "rereview": ["qa"], "rereview_note": "x"},
+         "a done entry cannot declare"),
+        (["--skill", "office-hours", "--status", "clean", "--rereview", "plan-eng-review", "--rereview-note", "x"],
+         {"skill": "office-hours", "status": "clean", "rereview": ["plan-eng-review"], "rereview_note": "x"},
+         "never gates and cannot demand"),
+    ]
+    for flags, fields, needle in cases:
+        assert needle in error(R.run(repo, "review-log", *flags))["error"]
+        assert needle in error(R.run(repo, "review-log", json.dumps(fields)))["error"]
+    assert log_bytes(repo) == before
+
+
+def test_a_rereview_note_without_a_declaration_is_refused_in_both_forms(tmp_path):
+    """The note rules sit under "rereview, when present", so a note with no declaration used to
+    slip past them in any type, on any skill, even on a resolution record."""
+    repo, plan = declared(tmp_path)
+    R.log_review(repo, plan, "plan-ceo-review", "issues_open", ts="2026-09-01T00:00:00Z", rereview=[])
+    before = log_bytes(repo)
+    cases = [
+        (["--skill", "qa", "--status", "clean", "--rereview-note", "orphan"], {"skill": "qa", "status": "clean", "rereview_note": "orphan"}),
+        (None, {"skill": "qa", "status": "clean", "rereview_note": ["a", 1]}),
+        (None, {"skill": "office-hours", "status": "issues_open", "rereview_note": 42}),
+        (["--skill", "plan-ceo-review", "--status", "resolved", "--field", "resolved_by=plan-eng-review", "--field", "note=x", "--rereview-note", "orphan"],
+         {"skill": "plan-ceo-review", "status": "resolved", "resolved_by": "plan-eng-review", "note": "x", "rereview_note": "orphan"}),
+    ]
+    for flags, fields in cases:
+        if flags is not None:
+            assert "rereview_note belongs to a declaration" in error(R.run(repo, "review-log", *flags))["error"]
+        assert "rereview_note belongs to a declaration" in error(R.run(repo, "review-log", json.dumps(fields)))["error"]
+    assert log_bytes(repo) == before
+
+
+def test_a_demand_dated_in_the_same_second_as_the_run_is_accepted_and_reads_stale(tmp_path):
+    """The refusal is `<`, never `<=`: one step can write a run and a demand in one second, and the
+    reader's `>=` reads that tie as demanded (it fails closed)."""
+    repo, plan = declared(tmp_path)
+    out = R.run_json(repo, "review-log", "--skill", "plan-design-review", "--status", "clean", "--rereview", "plan-eng-review", "--rereview-note", "tie", "--field", "ts=2026-09-02T00:00:00Z")
+    assert out["ts"] == "2026-09-02T00:00:00Z"
+    assert R.run_json(repo, "review-read", "--json")["reviews"]["plan-eng-review"]["disposition"] == "stale"
+
+
+def test_reader_only_keys_and_concern_are_validated_in_both_forms(tmp_path):
+    repo, plan = declared(tmp_path)
+    before = log_bytes(repo)
+    for key in R._lib.READER_ONLY_KEYS:
+        err = error(R.run(repo, "review-log", "--skill", "qa", "--status", "clean", "--field", f"{key}=x"))
+        assert f"'{key}' is derived on read" in err["error"]
+        err = error(R.run(repo, "review-log", json.dumps({"skill": "qa", "status": "clean", key: "x"})))
+        assert f"'{key}' is derived on read" in err["error"]
+    for argv in (["--skill", "qa", "--status", "clean", "--field", "concern=42"], ['{"skill":"qa","status":"clean","concern":true}'], ["--skill", "qa", "--status", "clean", "--field", "concern="]):
+        err = error(R.run(repo, "review-log", *argv))
+        assert "concern must be a non-empty string" in err["error"] and "quote it" in err["error"]
+    assert log_bytes(repo) == before
+    R.log_review(repo, plan, "plan-ceo-review", "issues_open", ts="2026-09-01T00:00:00Z", rereview=[])
+    before = log_bytes(repo)
+    err = error(R.run(repo, "review-log", "--skill", "plan-ceo-review", "--status", "resolved", "--field", "resolved_by=plan-eng-review", "--field", "note=x", "--field", "concern=c"))
+    assert "concern belongs on a run entry" in err["error"]
+    assert log_bytes(repo) == before
+    assert R.run_json(repo, "review-log", "--skill", "qa", "--status", "clean", "--field", "concern=flaky on retry")["concern"] == "flaky on retry"
+    assert R.run_json(repo, "review-log", "--skill", "ship", "--status", "done", "--field", "concern=merge after the outage")["concern"] == "merge after the outage"
+
+
+def test_resolved_is_refused_for_a_stale_review_by_every_resolver(tmp_path):
+    repo, plan = declared(tmp_path)
+    R.log_review(repo, plan, "plan-design-review", "clean", ts="2026-09-04T00:00:00Z", rereview=["plan-eng-review"], rereview_note="15a")
+    before = log_bytes(repo)
+    for by in ("operator", "plan-adversarial-review", "plan-design-review"):
+        for argv in (["--skill", "plan-eng-review", "--status", "resolved", "--field", f"resolved_by={by}", "--field", "note=x"], [json.dumps({"skill": "plan-eng-review", "status": "resolved", "resolved_by": by, "note": "x"})]):
+            err = error(R.run(repo, "review-log", *argv))
+            assert err["error"].startswith("a re-review demand clears only when plan-eng-review runs again"), err["error"]
+            assert "has no failed entry to resolve" not in err["error"]
+    assert log_bytes(repo) == before
+    # the subagent wording, and a stale review refused as a resolver
+    R.log_review(repo, plan, "adversarial-subagent", "clean", ts="2026-09-05T00:00:00Z")
+    R.log_review(repo, plan, "review-implementation", "clean", ts="2026-09-06T00:00:00Z", rereview=["adversarial-subagent"], rereview_note="the fix changed the diff")
+    err = error(R.run(repo, "review-log", "--skill", "adversarial-subagent", "--status", "resolved", "--field", "resolved_by=final-review", "--field", "note=x"))
+    assert "clears only when /review-implementation runs again" in err["error"]
+    R.log_review(repo, plan, "plan-ceo-review", "issues_open", ts="2026-09-01T00:00:00Z", rereview=[])
+    err = error(R.run(repo, "review-log", "--skill", "plan-ceo-review", "--status", "resolved", "--field", "resolved_by=plan-eng-review", "--field", "note=x"))
+    assert "is stale; the resolver must have run after the failure and passed" in err["error"]
+
+
+def test_resolving_a_failed_and_demanded_review_writes_resolves_ts_and_leaves_it_stale(tmp_path):
+    repo, plan = declared(tmp_path)
+    R.log_review(repo, plan, "plan-ceo-review", "issues_open", ts="2026-09-01T00:00:00Z", rereview=[])
+    R.log_review(repo, plan, "plan-design-review", "clean", ts="2026-09-04T00:00:00Z", rereview=["plan-ceo-review"], rereview_note="scope")
+    out = R.run_json(repo, "review-log", "--skill", "plan-ceo-review", "--status", "resolved", "--field", "resolved_by=plan-eng-review", "--field", "note=x")
+    assert out["resolves_ts"] == "2026-09-01T00:00:00Z" and "waives_ts" not in out
+    assert R.run_json(repo, "review-read", "--json")["reviews"]["plan-ceo-review"]["disposition"] == "stale"
+
+
+def test_a_demand_needs_a_plan_but_none_does_not(tmp_path):
+    repo = R.make_repo(tmp_path)  # on main, no plan
+    for argv in (
+        ["--skill", "plan-design-review", "--status", "clean", "--rereview", "plan-eng-review", "--rereview-note", "x"],
+        [json.dumps({"skill": "plan-design-review", "status": "clean", "rereview": ["plan-eng-review"], "rereview_note": "x"})],
+    ):
+        proc = R.run(repo, "review-log", *argv)
+        assert proc.returncode == 2 and "needs a plan to resolve against" in json.loads(proc.stdout)["error"]
+    assert log_bytes(repo) == b""
+    assert R.run_json(repo, "review-log", "--skill", "plan-design-review", "--status", "clean", "--rereview", "none")["rereview"] == []
+    assert R.run_json(repo, "review-log", '{"skill":"plan-design-review","status":"clean","rereview":[]}')["rereview"] == []
+
+
+def test_epic_branch_reviews_attach_to_the_epic_and_can_be_demanded(tmp_path):
+    repo = R.make_repo(tmp_path)
+    epic = R.write_epic(repo, "v1", {"milestones": [{"id": "M1", "title": "one"}]})
+    R.checkout(repo, "v1")
+    assert R.run_json(repo, "review-log", "--skill", "plan-ceo-review", "--status", "clean", "--rereview", "none")["plan"] == epic.name
+    assert R.run(repo, "review-read").stdout.startswith("plan-ceo-review|")
+    out = R.run_json(repo, "review-log", "--skill", "plan-eng-review", "--status", "clean", "--rereview", "plan-ceo-review", "--rereview-note", "sequencing changed")
+    assert out["plan"] == epic.name and out["rereview"] == ["plan-ceo-review"]
+    assert R.run_json(repo, "review-read", "--json")["reviews"]["plan-ceo-review"]["disposition"] == "stale"
+
+
+# ---------------------------------------------------------------- review-read: stale
+
+
+def test_review_read_shows_stale_in_plan_mode_and_never_in_all(tmp_path):
+    repo, plan = declared(tmp_path)
+    R.log_review(repo, plan, "plan-design-review", "clean", ts="2026-09-04T00:00:00Z", rereview=["plan-eng-review"], rereview_note="15a")
+    eng = next(l for l in R.run(repo, "review-read").stdout.splitlines() if l.startswith("plan-eng-review|"))
+    assert eng.startswith("plan-eng-review|2026-09-02T00:00:00Z|clean|stale|")
+    assert "stale_by=plan-design-review" in eng and "was=passed" in eng and 'stale_notes="[{\\"declarer\\": \\"plan-design-review\\"' in eng
+    data = R.run_json(repo, "review-read", "--json")["reviews"]
+    assert data["plan-eng-review"]["disposition"] == "stale" and data["plan-eng-review"]["status"] == "clean" and data["plan-eng-review"]["stale_count"] == 1
+    assert data["plan-eng-review"]["stale_notes"][0]["note"] == "15a" and "stale_by" not in data["plan-adversarial-review"]
+    # --all: each entry's own disposition; a hand-appended stale_by is listed as written but never prints stale
+    R.log_review(repo, plan, "qa", "clean", ts="2026-09-05T00:00:00Z", stale_by="forged", was="passed")
+    lines = R.run(repo, "review-read", "--all").stdout.splitlines()
+    assert lines and all("|stale|" not in l for l in lines)
+    assert "stale" not in {e["disposition"] for e in R.run_json(repo, "review-read", "--all", "--json")["entries"]}
+    qa = next(l for l in lines if "|qa|" in l)
+    assert "|passed|" in qa and "stale_by=forged" in qa
+
+
+def test_one_call_scans_the_log_once(tmp_path, monkeypatch, capsys):
+    """`main` scans for unreadable lines and hands those entries to the validators. A resolution
+    (pass 2) and a demand (pass 1) each used to read the whole file a second time."""
+    repo = R.make_repo(tmp_path)
+    R.checkout(repo, "feat/x")
+    plan = R.write_plan(repo, "feat/x", {})
+    R.log_review(repo, plan, "plan-eng-review", "issues_open", ts="2026-09-02T10:00:00Z", rereview=[])
+    R.log_review(repo, plan, "plan-adversarial-review", "clean", ts="2026-09-03T10:00:00Z", rereview=[])
+    review_log = R.load_helper("review-log")
+    scans, real = [], R._lib.review_log_scan
+    monkeypatch.setattr(R._lib, "review_log_scan", lambda root, cfg: scans.append(1) or real(root, cfg))
+    monkeypatch.chdir(repo)
+    for argv in (
+        ["--skill", "plan-eng-review", "--status", "resolved", "--field", "resolved_by=plan-adversarial-review", "--field", "note=closed in section 2"],
+        ["--skill", "plan-design-review", "--status", "clean", "--rereview", "plan-adversarial-review", "--rereview-note", "x"],
+    ):
+        scans.clear()
+        monkeypatch.setattr("sys.argv", ["review-log", *argv])
+        assert review_log.main() == 0
+        assert len(scans) == 1, argv
+    capsys.readouterr()
+    assert [e["status"] for e in entries(repo)][-2:] == ["resolved", "clean"] and entries(repo)[-1]["rereview"] == ["plan-adversarial-review"]

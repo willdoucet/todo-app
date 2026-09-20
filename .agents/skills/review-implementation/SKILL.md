@@ -116,6 +116,13 @@ Did they build what was asked, nothing more, nothing less?
    requirements without tests, partial implementations.
 4. Print the `PLAN COMPLETION AUDIT` block and the `Scope Check` block from the reference
    before the main review begins.
+5. Audit the plan reviews' declarations: for each earlier gating review on this plan whose
+   latest run declared `none` (its `review-read` row shows `rereview=[]`), read the breadcrumbs
+   it left in the plan against the domains of the reviews that ran before it (the test in
+   `_shared/dashboard.md` → "When your review changes what an earlier review approved"); an
+   undeclared reversal you find is yours to declare, and this review cannot demand a plan
+   review (a demand stays in its stage), so record it as your own `--field concern=` in step
+   13 and edit the overruled plan text in place with a breadcrumb naming yourself.
 
 Informational: this step never blocks by itself. NOT DONE items become findings in step 9.
 
@@ -256,6 +263,11 @@ DIFF_TOTAL=$((DIFF_INS + DIFF_DEL)); echo "DIFF_SIZE: $DIFF_TOTAL"
   entry.
 - 50–199: medium tier. 200 and up: large tier. An explicit request for a thorough or
   paranoid review forces the large tier.
+- When `adversarial-subagent` reads `failed` or `stale` on this plan (`review-read`), run the
+  subagent whatever the diff size, at the medium tier or above, and log its entry: only a new
+  subagent entry clears a stale one (`resolved` is refused for it), so skipping here would
+  leave `--next` naming this review with no way out. If the subagent is unavailable then,
+  stop with `BLOCKED` instead of continuing without it.
 
 Dispatch a subagent with the tier's prompt from `references/adversarial-prompts.md`. It has
 fresh context and no bias from the structured review; that independence is the point. Without
@@ -269,7 +281,7 @@ are fixed first. If the subagent fails or times out: "Adversarial subagent unava
 Continuing without adversarial review."
 
 ```bash
-"$BIN/review-log" --skill adversarial-subagent --status STATUS \
+"$BIN/review-log" --skill adversarial-subagent --status STATUS --plan "$(basename "$_PLAN_FILE")" \
   --field tier=medium|large --field issues_found=N
 ```
 
@@ -281,7 +293,7 @@ resolve it in step 13, after this review's own entry (the command is there; run 
 ### 13. Persist the result and update the plan footer
 
 ```bash
-"$BIN/review-log" --skill review-implementation --status STATUS \
+"$BIN/review-log" --skill review-implementation --status STATUS --plan "$(basename "$_PLAN_FILE")" \
   --field issues_found=N --field critical=N --field informational=N \
   --field model=<your model, when known>
 ```
@@ -297,13 +309,22 @@ If this review logged `issues_open`, leave the subagent failed: a failed resolve
 vouch. After your own entry, never before:
 
 ```bash
-"$BIN/review-log" --skill adversarial-subagent --status resolved \
+"$BIN/review-log" --skill adversarial-subagent --status resolved --plan "$(basename "$_PLAN_FILE")" \
   --field resolved_by=review-implementation --field note="<commit or file per finding>"
 ```
 
 Update the `Implementation Review` row of `## REVIEW REPORT` in `$_PLAN_FILE` per
 `_shared/plan-footer.md`: status and a one-line findings summary. Edit in place; preserve the
 frontmatter.
+
+A review that overrules something the plan states (a premise, a step, a success criterion, a
+decision an earlier review recorded) edits that text in place with a breadcrumb naming itself,
+says so in its REVIEW REPORT row, and passes the same sentence as `--field concern=` on its own
+entry: a plan review cannot usefully re-run on an implementing plan, so the record is the
+control. Declaring `--rereview <skill>` is optional at the ship stage and stays in its stage
+(QA, the design audit, the other code review); never declare `rereview=adversarial-subagent`
+from the invocation that just logged that subagent's run: a demand dated at or after a run
+always reads as outstanding (`>=`), so the subagent would read stale the moment it finished.
 
 If the user corrected you, add a Corrections Log row to `LESSONS.md`. A repeatable class of
 bug found here becomes a new entry in `REVIEW_CHECKLIST.md`.

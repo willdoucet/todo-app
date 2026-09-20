@@ -15,6 +15,12 @@ BIN="$REPO_ROOT/.agents/bin"
 `TEST_ARTIFACT`, `HARNESS`, `TIMESTAMP`. Use these everywhere. Never re-derive them with inline
 shell, and never use a branch or path remembered from conversation history.
 
+Every date or time you write is UTC and comes from a command, never from what you believe
+the date is: `date -u +%F` for a date, `date -u +%FT%TZ` for a date-time, or `ctx`'s
+`TIMESTAMP` for a filename slug. Skills and references name two slots for these:
+`<utc-date>` is the output of `date -u +%F`; `<utc-timestamp>` is the output of
+`date -u +%FT%TZ`. Dates already written in records and filenames are never rewritten.
+
 Then read, in this order:
 
 1. `AGENTS.md` at the repo root.
