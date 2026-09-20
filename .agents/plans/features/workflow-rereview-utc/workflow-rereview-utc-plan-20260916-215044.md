@@ -4,13 +4,15 @@ plan_mode: "feature"
 registry_key: "plan:workflow-rereview-utc"
 ui_scope: false
 risk_tags: ["infra", "security"]
-workflow_status: "ready-for-review"
+workflow_status: "shipped"
 review_status: ["eng-reviewed", "adversarial-reviewed", "impl-reviewed", "final-reviewed"]
-implementation_status: "ready-for-review"
+implementation_status: "shipped"
+completed: "2026-09-20"
 reason: "The /ship sync named in the /final-review concern above is DONE (2026-09-20 UTC, at the operator's request): the branch and local master are fast-forwarded to origin/master 2c4e5cf (PR 56) by the patch dance, no stash, no merge commit, so /ship step 2 finds nothing to take. The reviewed diff is unchanged (the same 56 paths, identical blobs and numstat; payload 139/139, host suite 477, doc gate, CLEARED TO SHIP). The pin drift for M8 (c0f7f30 to 628891f) is docs-only: no token file changed since the pin (plan section 11). D4 is handed to the session writing framework 1.3.2; PR-T ships 1.3.1 and does not wait. Next: /ship with the trailer recorded in the summary."
 reason_by: "final-review"
 reason_at: "2026-09-20T03:46:38Z"
-updated_at: "2026-09-20T03:46:38Z"
+updated_at: "2026-09-20T04:05:58Z"
+pr: "https://github.com/willdoucet/todo-app/pull/57"
 ---
 # Design: A review can send an earlier review back — declared re-review, visible concerns, UTC everywhere
 
