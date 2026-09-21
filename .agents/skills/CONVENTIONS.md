@@ -45,5 +45,12 @@ so must stay model-invocable.
   from `$DOCS_DIR/REVIEW_CHECKLIST.md`, `$DOCS_DIR/development-commands.md`, and `AGENTS.md`.
 - Never edit plan frontmatter, registry files, or notes by hand. Use `$BIN/obsidian-workflow`.
 - Never compute the next step in prose. Run `$BIN/workflow-state --next`.
+- No bare positional (`$` then a digit) anywhere in a skill, a reference, a `_shared` block or
+  `WORKFLOW.md`. A harness that passes invocation arguments into the skill body (Claude Code
+  does) replaces each one with a word the user typed before the agent reads the snippet, and
+  the rewritten `awk` still runs. Write `$(1)` in `awk`; the test fails on the bare form.
+- Every `review-log` and `review-read` call names the plan it is about, with
+  `--plan "$(basename "$_PLAN_FILE")"` (`review-read --all` takes none). Left out, both follow
+  the branch's current plan, which is not the file a skill was handed by path.
 - Mutating skills refuse to run on the base branch.
 - Every question is one decision, in the shared format.

@@ -89,7 +89,7 @@ including untracked files:
 ```bash
 cd "$REPO_ROOT"
 git fetch origin "$BASE_BRANCH" --quiet 2>/dev/null || true
-{ git diff "$BASE_BRANCH" --name-status; git ls-files --others --exclude-standard | awk '{print "A\t" $0}'; } | sort -u
+{ git diff "$BASE_BRANCH" --name-status; git ls-files --others --exclude-standard | awk '{print "A\t" $(0)}'; } | sort -u
 git diff "$BASE_BRANCH" --stat
 ```
 

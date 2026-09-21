@@ -106,7 +106,7 @@ If on the base branch, stop and ask (one question) which branch holds the plan; 
 Then read the earlier reviews of this plan:
 
 ```bash
-"$BIN/review-read"
+"$BIN/review-read" --plan "$(basename "$_PLAN_FILE")"
 ```
 
 For every earlier review whose disposition is `failed` or `stale`, read its open items and
@@ -115,6 +115,11 @@ note it for completion; a stale one (a later review declared it must run again) 
 close for them, so run it again if it is yours and carry it forward if it is not; if a failed
 one stays open, carry it forward in your own summary so the next review sees it. Never leave a
 failed or stale review unmentioned.
+
+A review that reads `stale`, or `failed` with `demanded_by`, was sent back. Read every
+outstanding demand from `"$BIN/review-read" --plan "$(basename "$_PLAN_FILE")" --json`
+(`stale_notes`, or `demanded_notes` on a failed one), not from the text row: it shows the
+newest note alone (`stale_note`) and prints the lists escaped twice.
 
 Then audit the declarations before yours: for each earlier gating review on this plan whose
 latest run declared `none` (its `review-read` row shows `rereview=[]`), read the breadcrumbs it

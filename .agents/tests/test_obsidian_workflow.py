@@ -894,6 +894,43 @@ class TestPlanMetadata:
         assert payload["metadata"]["reason"] == "superseded" and payload["metadata"]["reason_by"] == "" and utc_now_within(payload["metadata"]["reason_at"])
         assert payload["entry"]["reason_at"] == payload["metadata"]["reason_at"]
 
+    REASON_REFUSALS = [
+        ("--set", "reason_by=plan-eng-review"),  # re-attributes words already on the banner
+        ("--set", "reason_at=2031-01-01T00:00:00Z"),  # re-dates them: 1.3.1 said this was never taken
+        ("--set", "reason_by="),
+        ("--append", "reason=a second text"),  # stored a list under the old author and the old time
+        ("--append", "reason_by=qa"),
+        ("--append", "reason_at=2031-01-01T00:00:00Z"),
+    ]
+
+    @pytest.mark.parametrize("command", ["plan-metadata-set", "registry-upsert"])
+    @pytest.mark.parametrize("flag,pair", REASON_REFUSALS)
+    def test_a_reason_author_or_time_without_its_text_is_refused_and_nothing_is_written(self, repo, command, flag, pair):
+        """`reason_by` and `reason_at` describe the text they came with. Without a `reason` in the
+        same call both were stored as given, and `--append` on any of the three keys bypassed the
+        stamp. Both commands refuse, in the `--set` form and the `--append` form, before any write."""
+        rel = ".agents/plans/features/feat/feat-plan-20260901-120000.md"
+        repo.plan(rel)
+        target = rel if command == "plan-metadata-set" else "plan:feat"
+        run("plan-metadata-set", rel, "--set", "reason=two operator gates remain", "--set", "reason_by=execute-plan")
+        run("registry-upsert", "plan:feat", "--set", f"plan_path={rel}", "--set", "reason=two operator gates remain", "--set", "reason_by=execute-plan")
+
+        def store() -> dict[str, bytes]:
+            return {p.relative_to(repo.root).as_posix(): p.read_bytes() for p in sorted((repo.root / ".agents").rglob("*")) if p.is_file()}
+
+        before = store()
+        for extra in ([], ["--set", "workflow_status=eng-reviewed"], ["--append", "review_status=eng-reviewed"]):
+            exit_code, payload = run(command, target, flag, pair, *extra)
+            assert exit_code == 1 and payload["status"] == "error" and pair.split("=")[0] in payload["error"], payload
+            assert store() == before  # byte-identical: the rest of the call is not written either
+        if flag == "--append":  # refused beside a --set reason too: an append is never a stamp
+            exit_code, payload = run(command, target, "--set", "reason=new text", flag, pair)
+            assert exit_code == 1 and store() == before
+        # control: the same keys WITH their text are written, and the supplied time is overwritten
+        exit_code, payload = run(command, target, "--set", "reason=new text", "--set", "reason_by=qa", "--set", "reason_at=2031-01-01T00:00:00Z")
+        written = payload["metadata"] if command == "plan-metadata-set" else payload["entry"]
+        assert exit_code == 0 and written["reason_by"] == "qa" and written["reason_at"] != "2031-01-01T00:00:00Z" and store() != before
+
     def test_plan_metadata_get_on_summary_names_the_plan_file(self, repo):
         repo.plan(".agents/plans/features/feat/feat-plan-20260901-120000.md")
         repo.plan(".agents/plans/features/feat/feat-plan-20260901-120000-summary.md", "# Summary\n")
@@ -979,7 +1016,33 @@ class TestResolvePlan:
         feature = ".agents/plans/features/big-epic/big-epic-plan-20260902-100000.md"
         repo.plan(feature)
         _, payload = run("resolve-plan", "--branch", "big-epic")
-        assert (payload["kind"], payload["plan_path"]) == ("plan", feature)
+        assert (payload["kind"], payload["plan_path"]) == ("feature", feature)
+
+    def test_kind_says_what_the_plan_is_on_every_source_and_agrees_with_workflow_state(self, repo):
+        """1.3.1's `kind` was the lookup that found the file (`plan` or `epic`), so a `plan_kind:
+        epic` file under `features/` read `plan`, and the explicit-path and registry answers had
+        no `kind` at all. It is now the frontmatter `plan_kind`, else where the file lives: the
+        one expression `workflow-state` `gather` uses (`_lib.plan_kind_of`)."""
+        gather = R.load_helper("workflow-state").gather
+        epic_in_features = repo.plan(".agents/plans/features/odd/odd-plan-20260901-120000.md", '---\nplan_kind: "epic"\n---\n# Epic\n')
+        bare_epic = repo.plan(".agents/plans/epics/old/old-epic-20260901-100000.md", "# An epic with no plan_kind in its frontmatter\n")
+        feature = repo.plan(self.PLAN)
+        expected = {epic_in_features: "epic", bare_epic: "epic", feature: "feature"}
+        for plan, kind in expected.items():
+            rel = plan.relative_to(repo.root).as_posix()
+            exit_code, payload = run("resolve-plan", "--plan-path", rel)
+            assert exit_code == 0 and (payload["source"], payload["kind"]) == ("explicit_path", kind), rel
+            run("registry-upsert", "--branch", "via-registry", "--set", f"plan_path={rel}")
+            _, payload = run("resolve-plan", "--branch", "via-registry")
+            assert (payload["source"], payload["kind"]) == ("registry", kind), rel
+        for branch, plan in (("odd", epic_in_features), ("old", bare_epic), ("feat-x", feature)):
+            _, payload = run("resolve-plan", "--branch", branch)
+            assert (payload["source"], payload["kind"]) == ("branch_fallback", expected[plan]), branch
+            R.checkout(repo.root, branch)
+            assert gather(repo.root, R.load_cfg(repo.root))["plan_kind"] == payload["kind"], branch
+        # a registry path that names no file has no frontmatter to ask: where it would live decides
+        run("registry-upsert", "--branch", "gone", "--set", "plan_path=.agents/plans/features/gone/gone-plan-20260901-120000.md")
+        assert run("resolve-plan", "--branch", "gone")[1]["kind"] == "feature"
 
 
 # ---------------------------------------------------------------------------

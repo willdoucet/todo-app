@@ -1166,8 +1166,8 @@ def command_note_update(args: argparse.Namespace) -> int:
 
 def command_registry_upsert(args: argparse.Namespace) -> int:
     ctx = Ctx.load()
-    updates = _lib.stamp_reason(scalar_fields(args.set_fields))
     appends = scalar_appends(args.append_fields)
+    updates = _lib.stamp_reason(scalar_fields(args.set_fields), appends)
     if args.branch:
         updates["branch"] = args.branch
     if args.plan_kind:
@@ -1236,20 +1236,36 @@ def command_plan_metadata_get(args: argparse.Namespace) -> int:
 def command_plan_metadata_set(args: argparse.Namespace) -> int:
     ctx = Ctx.load()
     plan = ctx.plan_file(args.plan_path)
-    updates = _lib.stamp_reason(scalar_fields(args.set_fields))
+    appends = scalar_appends(args.append_fields)
+    updates = _lib.stamp_reason(scalar_fields(args.set_fields), appends)
     if isinstance(updates.get("source_note_path"), str):
         updates["source_note_path"] = ctx.note_rel_lenient(updates["source_note_path"])
     if isinstance(updates.get("source_note_ref"), str):
         updates["source_note_ref"] = normalize_key(ctx, updates["source_note_ref"])
-    metadata = _lib.update_frontmatter(plan, updates, scalar_appends(args.append_fields))
+    metadata = _lib.update_frontmatter(plan, updates, appends)
     return _lib.print_json({"status": "ok", "plan_path": ctx.repo_rel(plan), "metadata": metadata})
+
+
+def plan_kind_at(ctx: Ctx, plan_path: str | Path) -> Any:
+    """What the plan IS (`feature` or `epic`), by the rule `workflow-state` reads it with
+    (`_lib.plan_kind_of`): its frontmatter `plan_kind`, else where the file lives. `source` says
+    which lookup found it; 1.3.1's `kind` said that too, so a `plan_kind: epic` file under
+    `features/` read `plan`. A registry `plan_path` that names no readable file has no
+    frontmatter to ask."""
+    plan = ctx.repo_path(plan_path)
+    try:
+        fm = _lib.read_frontmatter(plan)
+    except (OSError, ValueError):
+        fm = {}
+    in_epics = plan.parent.parent == _lib.epics_dir(ctx.root, ctx.cfg).resolve()
+    return _lib.plan_kind_of(fm, "epic" if in_epics else "plan")
 
 
 def command_resolve_plan(args: argparse.Namespace) -> int:
     ctx = Ctx.load()
     if args.plan_path:
         plan = ctx.plan_file(args.plan_path)
-        return _lib.print_json({"status": "ok", "source": "explicit_path", "plan_path": ctx.repo_rel(plan)})
+        return _lib.print_json({"status": "ok", "source": "explicit_path", "kind": plan_kind_at(ctx, plan), "plan_path": ctx.repo_rel(plan)})
 
     branch = args.branch or _lib.current_branch(ctx.root)
     keys: list[str] = []
@@ -1263,14 +1279,14 @@ def command_resolve_plan(args: argparse.Namespace) -> int:
         entry = ctx.entry(key)
         if entry and entry.get("plan_path"):
             ctx.reject_summary(ctx.repo_path(entry["plan_path"]))
-            return _lib.print_json({"status": "ok", "source": "registry", "key": key, "plan_path": entry["plan_path"], "entry": entry})
+            return _lib.print_json({"status": "ok", "source": "registry", "key": key, "kind": plan_kind_at(ctx, entry["plan_path"]), "plan_path": entry["plan_path"], "entry": entry})
 
     if branch:
         # the feature plan, else the epic whose branch this is: the lookup `workflow-state` and the
         # review helpers use, so the review `--next` names on an epic branch can find its plan
-        latest, kind = _lib.current_plan(ctx.root, ctx.cfg, branch)
+        latest, _found_as = _lib.current_plan(ctx.root, ctx.cfg, branch)
         if latest:
-            return _lib.print_json({"status": "ok", "source": "branch_fallback", "branch": branch, "kind": kind, "plan_path": ctx.repo_rel(latest)})
+            return _lib.print_json({"status": "ok", "source": "branch_fallback", "branch": branch, "kind": plan_kind_at(ctx, latest), "plan_path": ctx.repo_rel(latest)})
 
     raise _lib.FrameworkError(
         "Could not resolve a plan path", code=2, note_ref=args.note_ref, note_path=args.note_path, branch=branch, tried_keys=keys
