@@ -9,7 +9,9 @@
   "parent_epic": "v1-productionization",
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
-  "reason": "Design review (2026-09-14) is clean, 3 -> 9, 0 unresolved, but item 15a adds a backend contract (jobs.read_at, serve-time stale, every beat task listed with null) not yet re-reviewed by eng/adversarial; design-sync has drifted (2 docs commits); execute-plan's pin-SHA snippet returns empty under zsh (task chip raised). Carried from adversarial review: GitHub 60-day scheduled-workflow disable documented not solved; OQ 1/2/4 open; Mode B accepted risk.",
+  "reason": "Design review (2026-09-14) is clean, 3 -> 9, 0 unresolved, but item 15a adds a backend contract (jobs.read_at, serve-time stale, every beat task listed with null) not yet re-reviewed by eng/adversarial. Carried from adversarial review: GitHub 60-day scheduled-workflow disable documented not solved; OQ 1/2/4 open; Mode B accepted risk. Refreshed 2026-09-20 UTC after merging master (todo-app PR 57, framework 1.3.1): the design-sync drift and the zsh pin-SHA items are gone (module off; pin-sha prints under zsh). The recorded design pin c0f7f30 now reads 628891f, docs-only: PR 55 edited FRONTEND_GUIDELINES.md and no token file changed (workflow-rereview-utc plan, section 11).",
+  "reason_at": "2026-09-20T04:43:06Z",
+  "reason_by": "operator",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
@@ -19,6 +21,6 @@
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-15T03:54:14Z",
+  "updated_at": "2026-09-20T04:43:06Z",
   "workflow_status": "design-reviewed"
 }
