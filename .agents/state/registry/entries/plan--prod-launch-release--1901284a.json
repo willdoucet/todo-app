@@ -9,9 +9,9 @@
   "parent_epic": "v1-productionization",
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
-  "reason": "Design re-review (scoped to item 15a's user-visible outcomes after the adversarial pass and Eng review 5) clean, 7 to 9. The tables held on all four demanded points: state 5 headline split, restore without a web restart reads overdue, state 2's two lines per Eng 1A, Can't check vs Stopped. The mockup did not and was brought to the table: 14 fixtures rendered and read back, layout unchanged, pin refreshed. Pinned: a row's words follow its own values, so a fresh flagged row reads 'ran N ago'. Stated, not changed: state 2's second line overstates under two faults at once, toward alarm; both strings stand. No re-review demanded. Still open: adversarial re-review of the state 2 predicate (demanded by Eng review 5). Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm.",
-  "reason_at": "2026-09-21T22:12:59Z",
-  "reason_by": "plan-design-review",
+  "reason": "Scoped re-review of Eng review 5 (1A), the state 2 predicate, clean. The expression stands. Nothing-has-run only when every row is stale and at least one row has no write_error; all-stale and all-write_error stays They may still be running. Both pins hold. Folded two leftovers that would have undone it: a failure-mode parenthetical, and a diagram that dropped NULL success and called all-flags worker fine. Named limit: all-flags is also a worker that died inside 3x the shortest flag; not a new string. No re-review demanded. Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm.",
+  "reason_at": "2026-09-21T22:27:46Z",
+  "reason_by": "plan-adversarial-review",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
@@ -21,6 +21,6 @@
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-21T22:12:59Z",
-  "workflow_status": "design-reviewed"
+  "updated_at": "2026-09-21T22:27:46Z",
+  "workflow_status": "adversarial-reviewed"
 }
