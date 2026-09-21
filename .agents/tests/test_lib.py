@@ -751,25 +751,69 @@ def test_a_non_string_holding_a_row_separator_is_quoted_so_the_extra_cell_splits
         shown = _lib.fmt_review_value(value)
         assert shown.startswith('"') and shown.endswith('"')
         assert json.loads(json.loads(shown)) == value  # one JSON string holding the value's JSON text
-    # every comma left outside a JSON string literal separates two fields
     cell = ",".join(f"{k}={_lib.fmt_review_value(v)}" for k, v in (("rereview", ["a", "b"]), ("stale_notes", notes), ("was", "passed")))
-    fields, depth, start = [], False, 0
-    for i, ch in enumerate(cell):
-        if ch == '"' and cell[i - 1 : i] != "\\":
-            depth = not depth
-        elif ch == "," and not depth:
+    assert [f.split("=", 1)[0] for f in _split_extra_cell(cell)] == ["rereview", "stale_notes", "was"]
+
+
+def _split_extra_cell(cell: str) -> list[str]:
+    """An Extra cell's fields, read the way `fmt_review_value` states them: a `"` opens a JSON
+    string literal, which the real scanner consumes (`raw_decode` raises on text that is not
+    one), and a comma outside a literal separates two fields. The 1.3.1 splitter looked one
+    character back for a backslash, so a quoted value ENDING in one (`"C:\\\\"`) never closed."""
+    scan, fields, start, i = json.JSONDecoder().raw_decode, [], 0, 0
+    while i < len(cell):
+        if cell[i] == '"':
+            literal, i = scan(cell, i)
+            assert isinstance(literal, str)
+            continue
+        if cell[i] == ",":
             fields.append(cell[start:i])
             start = i + 1
+        i += 1
     fields.append(cell[start:])
-    assert [f.split("=", 1)[0] for f in fields] == ["rereview", "stale_notes", "was"]
+    return fields
+
+
+ROW_VALUES = [
+    'see the 6" rule', '"', '""', 'a"b"c', '="', "C:\\temp\\", "\\", 'ends \\"', "\\u0041", "a, b | c", "k=v,k2=v2",
+    "", "plain", "[]", "3", '["a", "b"]', "a\u2028b", "\ud800",
+    ["plan-eng-review", "plan-ceo-review"], ["plan-eng-review"], [], 3, True, None, {"a": 1, "b": 2}, {"a": 'x"y'}, ['6" rule'], ["back\\slash"],
+    [{"declarer": "plan-design-review", "ts": "2026-09-02T10:00:00Z", "note": 'a, b | c "quoted" \\'}],
+]
+
+
+def test_an_extra_cell_reads_back_field_by_field_with_a_real_json_string_scanner():
+    """1.3.1 said every comma left outside a JSON string separates two fields, and it was false:
+    a bare string holding `"` was not quoted, so `note=see the 6" rule` beside a two-name
+    `rereview` opened a literal at the inch mark and swallowed the comma between the fields. A
+    string holding `"` or a backslash is now quoted; every ordered pair of values reads back."""
+    fmt = _lib.fmt_review_value
+    assert fmt('see the 6" rule') == '"see the 6\\" rule"' and fmt("C:\\temp\\") == '"C:\\\\temp\\\\"' and fmt("\\") == '"\\\\"'
+    inch, two_names = fmt('see the 6" rule'), fmt(["plan-eng-review", "plan-ceo-review"])
+    assert [f.split("=", 1)[0] for f in _split_extra_cell(f"note={inch},rereview={two_names},was=passed")] == ["note", "rereview", "was"]
+    for a in ROW_VALUES:
+        for b in ROW_VALUES:
+            fields = [f"left={fmt(a)}", f"right={fmt(b)}", "was=passed"]
+            assert _split_extra_cell(",".join(fields)) == fields, (a, b)
+    for value in ROW_VALUES:
+        shown = fmt(value)
+        if "|" in shown or "," in shown:
+            assert isinstance(json.loads(shown), str)  # a delimiter only inside the one literal the value is
+        if isinstance(value, str):
+            assert shown == value or json.loads(shown) == value
+        else:
+            assert json.loads(shown) == value or json.loads(json.loads(shown)) == value
+    # what the text row does not do, stated in the docstring: it does not carry the type
+    assert fmt(["a", "b"]) == fmt('["a", "b"]') and fmt([]) == fmt("[]") and fmt(3) == fmt("3")
 
 
 def test_an_undated_entry_is_the_oldest_entry_for_runs_and_demands_alike(tmp_path):
-    """The CLI stamps and validates every `ts`, so only a hand-appended line lacks one. The
-    reader has one rule for it (`review_ts` -> ""): it is the OLDEST entry. An undated run never
-    outranks a dated one; an undated demand is outstanding only against an undated run. Treating
-    an undated demand as always outstanding would leave `--next` naming a review that no re-run
-    can clear; the honest repair is to fix or delete the line."""
+    """`review-log` stamps and validates its own `ts`; a hand-appended line can lack one, and so
+    can history carried over by `framework migrate` (`"ts": ""`, pinned in tests/test_cli.py).
+    The reader has one rule for it (`review_ts` -> ""): it is the OLDEST entry. An undated run
+    never outranks a dated one; an undated demand is outstanding only against an undated run.
+    Treating an undated demand as always outstanding would leave `--next` naming a review that no
+    re-run can clear. A hand-appended line is fixed or deleted; migrated history is left alone."""
     repo, cfg = _repo_and_cfg(tmp_path)
     P = "p.md"
     add = _adder(repo, cfg, P)

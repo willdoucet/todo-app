@@ -8,7 +8,7 @@ subagent when the harness has one; otherwise do it inline in a clearly separated
 
 ```bash
 cd "$REPO_ROOT"
-git ls-files | awk -F/ 'NF>1{print $1"/"$2}' | sort | uniq -c | sort -rn | head -40   # shape
+git ls-files | awk -F/ 'NF>1{print $(1)"/"$(2)}' | sort | uniq -c | sort -rn | head -40   # shape
 find . -maxdepth 3 -type d -not -path '*/node_modules*' -not -path './.git*' -not -path '*/.venv*' | sort
 ```
 

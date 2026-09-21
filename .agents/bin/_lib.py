@@ -456,6 +456,14 @@ def current_plan(root: Path, cfg: dict, branch: str | None) -> tuple[Path | None
     return None, None
 
 
+def plan_kind_of(fm: dict, found_as: str | None) -> Any:
+    """What a plan IS: its frontmatter `plan_kind`, else where it was found (`epic` from the epic
+    lookup or the epics folder, else `feature`). One expression shared by `workflow-state`
+    (`gather`) and `obsidian-workflow resolve-plan`, so the banner and plan discovery cannot
+    disagree about whether a file is an epic."""
+    return fm.get("plan_kind") or ("epic" if found_as == "epic" else "feature")
+
+
 def summary_path_for(plan: Path) -> Path:
     return plan.with_name(plan.stem + "-summary.md")
 
@@ -568,19 +576,33 @@ def update_frontmatter(path: Path, updates: dict, appends: dict | None = None) -
     return meta
 
 
-def stamp_reason(updates: dict) -> dict:
+REASON_KEYS = ("reason", "reason_by", "reason_at")
+
+
+def stamp_reason(updates: dict, appends: dict | None = None) -> dict:
     """`updates` with a plan's `reason` stamped. `workflow-state` prints a reason on every
     banner until someone replaces it, so it carries when it was written (`reason_at`: UTC, from
-    this helper, never from the caller) and by whom when the caller says (`--set
-    reason_by=<skill>`). New text given without an author clears the previous author rather than
-    lending it to words that skill never wrote; an empty reason clears all three. `obsidian-workflow`
-    calls this wherever it writes a reason: plan frontmatter, registry entry, abandon.
+    this helper) and by whom when the caller says (`--set reason_by=<skill>`). New text given
+    without an author clears the previous author rather than lending it to words that skill
+    never wrote; an empty reason clears all three. `obsidian-workflow` calls this wherever it
+    writes a reason: plan frontmatter, registry entry, abandon.
 
     Each write is stamped when it happens. The sync block writes a reason twice (`plan-metadata-set`,
     then `registry-upsert`), so the two `reason_at` values can differ by a second; the plan's
-    frontmatter is the one `workflow-state` prints. A caller's `reason_at` is never taken instead:
-    a time the caller supplies is a time the caller can forge."""
+    frontmatter is the one `workflow-state` prints.
+
+    The author and the time describe the text they came with, so they are written only with it.
+    With a `reason`, a supplied `reason_at` is overwritten. Without one, `reason_by` or
+    `reason_at` is refused: until 1.3.2 both were stored as given, which re-attributed or
+    re-dated words already on the banner. `--append` is refused on all three keys: it stored a
+    list under the old author and the old time. Raised before anything is written."""
+    appended = [k for k in REASON_KEYS if k in (appends or {})]
+    if appended:
+        raise FrameworkError(f"--append cannot write {', '.join(appended)}: a reason is one text with one author and one time; use --set reason=\"...\" --set reason_by=<skill>")
     if "reason" not in updates:
+        orphans = [k for k in REASON_KEYS[1:] if k in updates]
+        if orphans:
+            raise FrameworkError(f"{', '.join(orphans)} without reason: the author and the time are written only with the text they describe; pass --set reason=\"...\" too (reason_at is always this helper's clock)")
         return updates
     stamped = dict(updates)
     if stamped["reason"] in (None, ""):
@@ -993,20 +1015,29 @@ def review_extra(entry: dict) -> dict:
 # boundary (\n \r \v \f, U+001C-U+001E, U+0085, U+2028, U+2029: a list of five once missed
 # five others), terminal escapes, and a lone surrogate, which `print()` cannot encode.
 REVIEW_ROW_SEPARATORS = "|,"
+# What a bare string may not hold: a delimiter, or the two characters a JSON string literal is
+# written with. A bare `"` would open a literal that is not one (`note=see the 6" rule` beside
+# a quoted `rereview` swallowed the comma between them), and a bare backslash would escape.
+REVIEW_ROW_QUOTED = REVIEW_ROW_SEPARATORS + '"\\'
 
 
 def fmt_review_value(v: Any) -> str:
-    """Bare string when it is printable and holds no field delimiter; otherwise, and for any
-    non-string, JSON.
+    """Bare string when it is printable and holds no field delimiter, `"` or backslash;
+    otherwise, and for any non-string, JSON.
 
     `ensure_ascii=True` so a line boundary or a lone surrogate becomes `\\uXXXX` and cannot
     split the row, or break the print, the way `ensure_ascii=False` would leave it raw.
 
     A non-string whose JSON text holds a delimiter (`rereview` with two names, `stale_notes`,
-    `demanded_notes`) is quoted once more, as that text: every comma left outside a JSON string
-    then separates two fields. `[]`, `3`, `true` and a one-name list stay bare. The text row is
-    for reading; the `--json` outputs carry the value itself."""
-    if isinstance(v, str) and v.isprintable() and not any(c in v for c in REVIEW_ROW_SEPARATORS):
+    `demanded_notes`) is quoted once more, as that text. `[]`, `3`, `true` and a one-name list
+    stay bare. So in a `k=v,k=v` cell whose keys hold none of those characters, a `"` opens a
+    JSON string literal and a comma outside one separates two fields (test_lib reads the cell
+    back with `json.JSONDecoder.raw_decode`). Keys print raw.
+
+    The text row is for reading: it does not say what type a value had. A two-name list and
+    the string that spells its JSON text print identically, and the notes are escaped twice.
+    The `--json` outputs carry the value itself."""
+    if isinstance(v, str) and v.isprintable() and not any(c in v for c in REVIEW_ROW_QUOTED):
         return v
     text = json.dumps(v, ensure_ascii=True)
     if not isinstance(v, str) and any(c in text for c in REVIEW_ROW_SEPARATORS):
@@ -1070,11 +1101,13 @@ def is_run(entry: dict) -> bool:
 #   trees, so `commit` ancestry does not), and a plan is reviewed on one branch. When two
 #   branches did review one plan file, run X again after the merge.
 #
-#   An undated entry is the OLDEST entry, for runs and demands alike (`review_ts` -> ""). Only a
-#   hand-appended line lacks a `ts`: the CLI stamps and validates every one. So an undated run
-#   never outranks a dated one, and an undated demand is outstanding only against an undated
-#   run. Counting it as always outstanding would leave `--next` naming a review no re-run can
-#   clear; the repair for such a line is to fix or delete it.
+#   An undated entry is the OLDEST entry, for runs and demands alike (`review_ts` -> "").
+#   `review-log` stamps and validates its own `ts`, but a line can be undated without a hand
+#   edit: `framework migrate` writes `"ts": ""` for a pre-1.0 entry that had no timestamp. So
+#   an undated run never outranks a dated one, and an undated demand is outstanding only
+#   against an undated run. Counting it as always outstanding would leave `--next` naming a
+#   review no re-run can clear. A hand-appended line is repaired by fixing or deleting it;
+#   migrated history is left as it is, where as the oldest run it yields to any dated one.
 def plan_review_history(root: Path, cfg: dict, plan_name: str, entries: list[dict] | None = None) -> dict:
     """Pass 1. {"entries": {skill: [entries sorted by ts]}, "runs": {skill: [runs]},
     "demands": [(declarer, target, ts, note)]}. Reader-only keys are stripped from every

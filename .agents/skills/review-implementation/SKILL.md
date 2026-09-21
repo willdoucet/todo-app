@@ -72,8 +72,8 @@ here. Execute-plan never commits, so most of the diff is usually uncommitted:
 ### 2. Resolve the plan, its frontmatter, and the summary
 
 Follow `_shared/plan-discovery.md` including its metadata step. Read `$_PLAN_FILE` in full,
-then the summary file (`$SUMMARY_FILE`, or `${_PLAN_FILE%.md}-summary.md` when the plan was
-passed explicitly). The summary's step notes and `## Update-docs conclusion` are evidence for
+then the summary file (`$SUMMARY_FILE`, or `${_PLAN_FILE%.md}-summary.md` when `_PLAN_FILE` is
+outside `$PLAN_DIR`). The summary's step notes and `## Update-docs conclusion` are evidence for
 steps 5 and 11. An explicit plan path from the user is authoritative over anything remembered
 from conversation.
 
@@ -255,7 +255,7 @@ docs are the one finding this review does not fix itself; `/update-docs` owns th
 ### 12. Adversarial subagent (auto-scaled)
 
 ```bash
-read DIFF_INS DIFF_DEL < <(git diff "$BASE_BRANCH" --numstat | awk '{i+=$1; d+=$2} END {print i+0, d+0}')
+read DIFF_INS DIFF_DEL < <(git diff "$BASE_BRANCH" --numstat | awk '{i+=$(1); d+=$(2)} END {print i+0, d+0}')
 DIFF_TOTAL=$((DIFF_INS + DIFF_DEL)); echo "DIFF_SIZE: $DIFF_TOTAL"
 ```
 
