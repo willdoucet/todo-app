@@ -55,10 +55,11 @@ shipping gate; this skill is the second of them.
 
 Follow the preamble. Refuse when `ON_BASE=1`, exactly as `/review-implementation` does.
 
-Then read who did the first review:
+Then resolve the plan (`_shared/plan-discovery.md`; baseline step 2 reads it in full) and read
+who did the first review of that file, not of whatever plan the branch holds:
 
 ```bash
-"$BIN/review-read" --json | python3 -c 'import json,sys; e=(json.load(sys.stdin).get("reviews") or {}).get("review-implementation") or {}; d=e.get("disposition",""); h,m=(e.get("harness","not logged"),e.get("model","unknown")) if d!="resolved" else ("unknown","unknown"); print("first review:", h, m, e.get("status",""), d)'
+"$BIN/review-read" --plan "$(basename "$_PLAN_FILE")" --json | python3 -c 'import json,sys; e=(json.load(sys.stdin).get("reviews") or {}).get("review-implementation") or {}; d=e.get("disposition",""); h,m=(e.get("harness","not logged"),e.get("model","unknown")) if d!="resolved" else ("unknown","unknown"); print("first review:", h, m, e.get("status",""), d)'
 echo "this review: $HARNESS"
 ```
 

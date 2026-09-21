@@ -125,7 +125,7 @@ def gather(root: Path, cfg: dict) -> dict:
     if not plan:
         return st
     fm = _lib.read_frontmatter(plan)
-    plan_kind = fm.get("plan_kind") or ("epic" if found_as == "epic" else "feature")
+    plan_kind = _lib.plan_kind_of(fm, found_as)
     st.update(plan=plan, plan_kind=plan_kind, fm=fm)
     st["reviews"] = _lib.reviews_for_plan(root, cfg, plan.name, entries)
     if plan_kind == "epic":

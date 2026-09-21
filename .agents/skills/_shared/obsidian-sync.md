@@ -48,7 +48,9 @@ Rules:
   someone replaces it, so a reader can tell a standing note from a stale one. New text written
   without `reason_by` clears the old author; `--set reason=` clears all three. Each command
   stamps its own write, so the registry's `reason_at` can trail the plan's by a second; the
-  plan's frontmatter is the one the banner and the dashboard read.
+  plan's frontmatter is the one the banner and the dashboard read. The author and the time are
+  written only with their text: both commands refuse `reason_by` or `reason_at` in a call with
+  no `--set reason=`, and `--append` on any of the three, and write nothing.
 - On `DONE_WITH_CONCERNS`, run the same update and add `--set reason="..."`, and, if your skill
   logs a review entry, pass the same text as `--field concern="..."` on your own entry (never
   on another review's entry, such as the subagent's), so the banner shows it with your name
@@ -68,6 +70,9 @@ which is not the file you reviewed when the skill was given an explicit plan pat
 ```bash
 "$BIN/review-log" --skill SKILL_NAME --status STATUS --plan "$(basename "$_PLAN_FILE")" --field key=value ...
 ```
+
+Reads follow the writes: `"$BIN/review-read" --plan "$(basename "$_PLAN_FILE")"`. A bare read is the
+branch's current plan, and a declaration answered from the wrong plan's empty history is wrong.
 
 `STATUS` is one of four words, each with one meaning in every skill. `review-log` rejects any
 other word; a locally edited skill that still writes an old one gets an error naming these four.

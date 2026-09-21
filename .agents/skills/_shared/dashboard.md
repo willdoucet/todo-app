@@ -42,6 +42,7 @@ review that never ran. There are two ways to clear it, and only two.
 
    ```bash
    "$BIN/review-log" --skill <that review> --status resolved \
+     --plan "$(basename "$_PLAN_FILE")" \
      --field resolved_by=<the later review that verified the closure> \
      --field note="<where each item is closed>"
    ```
@@ -87,7 +88,7 @@ say "that is not what I approved"?
 **How to declare.** On your own completion entry, once per review that must run again:
 
 ```bash
-"$BIN/review-log" --skill <your review> --status "$STATUS" \
+"$BIN/review-log" --skill <your review> --status "$STATUS" --plan "$(basename "$_PLAN_FILE")" \
   --rereview <the review you overtook> --rereview-note "<what you changed that it approved>"
 ```
 
@@ -101,10 +102,18 @@ demanded review's REVIEW REPORT row (`_shared/plan-footer.md`).
 demanded it and why), blocks its stage, and is what `--next` names. Only that review running
 again clears it: another review cannot vouch for it, `review-log --status resolved` is refused
 for it, and re-running the declarer while saying `none` does not withdraw the demand. The
-re-run may be scoped: a review that starts while it is `stale` reads the demand's note
-(`stale_note`, and every demand in `stale_notes` when `stale_count` is more than one; a review
-that is failed and also demanded carries the same list as `demanded_notes`), reviews
-the named change and what it touches, and writes `scoped re-review of <what>` in its REVIEW
+re-run may be scoped: a review that starts while it is `stale` reads every outstanding demand
+from the JSON output:
+
+```bash
+"$BIN/review-read" --plan "$(basename "$_PLAN_FILE")" --json
+```
+
+`reviews.<that review>.stale_notes` holds one `{declarer, ts, note}` per outstanding demand,
+newest first; a review that is failed and also demanded carries the same list as
+`demanded_notes`. The text row is for a glance: it shows `stale_note`, the newest demand
+alone, and prints the two lists as JSON text quoted a second time. The review then reviews
+each named change and what it touches, and writes `scoped re-review of <what>` in its REVIEW
 REPORT row. It runs the full review instead when the change touches the data model, an API or
 CLI contract, or rollout and rollback, or when it cannot bound what the change touches. The
 gate does not distinguish the two: any new run clears the demand, and the scoped run still

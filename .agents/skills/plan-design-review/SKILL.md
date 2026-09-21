@@ -145,7 +145,7 @@ Not the review; the context you need to review intelligently.
 ```bash
 git log --oneline -15
 git diff "$BASE_BRANCH" --stat
-"$BIN/review-read"
+"$BIN/review-read" --plan "$(basename "$_PLAN_FILE")"
 ```
 
 Read `AGENTS.md`, then `$DOCS_DIR/FRONTEND_GUIDELINES.md` (tokens, type, spacing, breakpoints,
@@ -169,6 +169,10 @@ Map, and report before Step 0:
   them, so run it again if it is yours and carry it forward if it is not; if a failed one stays
   open, carry it forward in your own summary so the next review sees it. Never leave a failed
   or stale review unmentioned.
+- What was demanded: a review that reads `stale`, or `failed` with `demanded_by`, was sent
+  back. Read every outstanding demand (`stale_notes`, or `demanded_notes` on a failed one) from
+  `"$BIN/review-read" --plan "$(basename "$_PLAN_FILE")" --json`, not from the text row: it
+  shows the newest note alone (`stale_note`) and prints the lists escaped twice.
 - The declarations before yours: for each earlier gating review on this plan whose latest run
   declared `none` (its `review-read` row shows `rereview=[]`), read the breadcrumbs it left in
   the plan against the domains of the reviews that ran before it (the test in
@@ -250,8 +254,8 @@ On top of the shared question format:
 
 Mandatory when non-trivial frontend work is present; never skip it silently. It runs after the
 seven passes and before the required outputs, so artifact references land in the plan.
-`$PLAN_DIR` is the plan folder from `ctx`; when `_PLAN_FILE` is an explicit path outside it,
-use `$(dirname "$_PLAN_FILE")` instead.
+`$PLAN_DIR` is the plan folder from `ctx`; when `_PLAN_FILE` is outside `$PLAN_DIR` (an explicit
+path, or an epic resolved on its own branch), use `$(dirname "$_PLAN_FILE")` instead.
 
 **8A. Classify.** Scan the reviewed plan. Non-trivial: a new component, page, or view; a
 restructured layout; a new interaction, modal, sheet, or navigation pattern; a change to
