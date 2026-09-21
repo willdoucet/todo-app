@@ -9,9 +9,9 @@
   "parent_epic": "v1-productionization",
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
-  "reason": "Eng review 5 (scoped to the adversarial pass's changes to item 15a) clean. Verified: state 5 headline split, restore without a web restart reads overdue, cron reads stale; jobs.now, label and the last_error_at 3x window hold. Changed (1A, user-decided): state 2 says Nothing has run only when every row is stale and some row has no write_error, since write_error proves a run. Stopped vs Can't check turns on whether the web can read now. Two leftover sentences removed (item 2, test artifact). Adversarial re-review demanded for the state 2 predicate; design re-review still open. Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm.",
-  "reason_at": "2026-09-21T21:34:12Z",
-  "reason_by": "plan-eng-review",
+  "reason": "Design re-review (scoped to item 15a's user-visible outcomes after the adversarial pass and Eng review 5) clean, 7 to 9. The tables held on all four demanded points: state 5 headline split, restore without a web restart reads overdue, state 2's two lines per Eng 1A, Can't check vs Stopped. The mockup did not and was brought to the table: 14 fixtures rendered and read back, layout unchanged, pin refreshed. Pinned: a row's words follow its own values, so a fresh flagged row reads 'ran N ago'. Stated, not changed: state 2's second line overstates under two faults at once, toward alarm; both strings stand. No re-review demanded. Still open: adversarial re-review of the state 2 predicate (demanded by Eng review 5). Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm.",
+  "reason_at": "2026-09-21T22:12:59Z",
+  "reason_by": "plan-design-review",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
@@ -21,6 +21,6 @@
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-21T21:34:12Z",
-  "workflow_status": "eng-reviewed"
+  "updated_at": "2026-09-21T22:12:59Z",
+  "workflow_status": "design-reviewed"
 }

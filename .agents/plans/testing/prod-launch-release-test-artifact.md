@@ -149,6 +149,14 @@ ones in `.agents/docs/development-commands.md`; the host-side `infra/tests` suit
   ago · overdue" in red and the others "can't record runs"; no stale row ever renders as fresh.
   <!-- plan-adversarial-review · harness: grok · model: Grok 4.7 · 20260921-205706 -->
   <!-- plan-eng-review · Eng review 5 (1A) · harness: claude-code · model: Fable 5.1 · 2026-09-21 — was "every row stale → Nothing has run"; write_error proves a run -->
+- Row text follows the row's own values, never the card's state (plan item 15a, "What a row
+  says"). Fixture (a) above with both syncs stale and flagged and both sweeps fresh **and**
+  flagged (`stale: false`, `write_error: true`) → the syncs read "can't record runs" in red,
+  the sweeps read "ran N ago" in normal text, never "can't record runs". The same fresh,
+  flagged row in state 6 is not red either. A never-run row past its grace reads "hasn't run
+  yet · overdue" in red in states 3 and 4 alike, and "can't record runs" when it is also
+  flagged.
+  <!-- plan-design-review · scoped re-review of item 15a · harness: claude-code · model: Fable 5.1 · 2026-09-21 — "affected rows" pinned to stale and flagged; the mockup had keyed red on write_error alone -->
 - Top alert under the Settings `h1`: rendered for states 2–4 only, never for 1, 5, 6 or loading;
   one stale job → "Unused photo cleanup is behind schedule · See background jobs"; several → "2
   background jobs are behind schedule · See background jobs"; no dismiss control; not

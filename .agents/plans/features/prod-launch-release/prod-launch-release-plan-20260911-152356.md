@@ -6,13 +6,13 @@ parent_epic: "v1-productionization"
 milestone: "M8"
 ui_scope: true
 risk_tags: ["infra", "security", "auth", "data", "migration"]
-workflow_status: "eng-reviewed"
+workflow_status: "design-reviewed"
 review_status: ["ceo-reviewed", "eng-reviewed", "adversarial-reviewed", "design-reviewed"]
 implementation_status: "not-started"
-reason: "Eng review 5 (scoped to the adversarial pass's changes to item 15a) clean. Verified: state 5 headline split, restore without a web restart reads overdue, cron reads stale; jobs.now, label and the last_error_at 3x window hold. Changed (1A, user-decided): state 2 says Nothing has run only when every row is stale and some row has no write_error, since write_error proves a run. Stopped vs Can't check turns on whether the web can read now. Two leftover sentences removed (item 2, test artifact). Adversarial re-review demanded for the state 2 predicate; design re-review still open. Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm."
-reason_by: "plan-eng-review"
-reason_at: "2026-09-21T21:34:11Z"
-updated_at: "2026-09-21T21:34:11Z"
+reason: "Design re-review (scoped to item 15a's user-visible outcomes after the adversarial pass and Eng review 5) clean, 7 to 9. The tables held on all four demanded points: state 5 headline split, restore without a web restart reads overdue, state 2's two lines per Eng 1A, Can't check vs Stopped. The mockup did not and was brought to the table: 14 fixtures rendered and read back, layout unchanged, pin refreshed. Pinned: a row's words follow its own values, so a fresh flagged row reads 'ran N ago'. Stated, not changed: state 2's second line overstates under two faults at once, toward alarm; both strings stand. No re-review demanded. Still open: adversarial re-review of the state 2 predicate (demanded by Eng review 5). Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm."
+reason_by: "plan-design-review"
+reason_at: "2026-09-21T22:12:58Z"
+updated_at: "2026-09-21T22:12:58Z"
 ---
 # Design: M8 — `prod-launch-release`
 
@@ -187,14 +187,25 @@ fail loudly on their own rather than relying on the operator to remember to look
 - **Approach:** HTML mockups
 - **Mockups:**
   - BackgroundJobsSection + BackgroundJobsAlert (item 15a) → ./mockups/background-jobs-card-option-a.html
-- **Design system pin SHA:** c0f7f30bcdfc1c6d2a2fdfeba8d39c6fa4c294cd
-- **Captured at:** 20260914-204517
+- **Design system pin SHA:** 628891f08a93549a472a78ce8b7dfcf81baf735c
+- **Captured at:** 20260921-220717
 
-The mockup is the full Settings page; its bottom-right panel switches the nine 15a states, dark
-mode, and a 375 px phone width, and shows what the status region would announce. That panel is
-mockup chrome, not part of the design. Adversarial review (scoped, item 15a, 2026-09-21): where
-the state table below and this mockup disagree on the Waiting headline or the "may still be
-running" line, the table wins. Update the mockup to match before treating the file as truth. The two text-only items — the iCloud "Last synced" dot
+The mockup is the full Settings page; its bottom-right panel switches fourteen fixtures across
+the 15a states, dark mode, and a 375 px phone width, and shows what the status region would
+announce. That panel is mockup chrome, not part of the design. Adversarial review (scoped, item
+15a, 2026-09-21): where the state table below and this mockup disagree, the table wins.
+Design re-review (scoped, item 15a, 2026-09-21): the mockup had fallen behind the table on
+exactly those points, and it has been brought back. Its one Waiting fixture (two syncs run, two
+sweeps not) still read "Waiting for the first runs", the case the adversarial pass found. State
+2 had only the "may still be running" line. A never-run job past its grace would have rendered
+"last ran null min ago", and its row text was keyed on `write_error` alone, so a fresh row that
+carried it turned red. Now: two state 5 fixtures (no job has run; "Waiting on 2 jobs"), three
+state 2 fixtures (some jobs fresh; all stale and flagged; all stale with one unflagged), state 3
+"Nothing has run yet", state 4 with never-run rows overdue, and row text from the row's own
+values (item 15a, "what a row says"). All fourteen were rendered and read back against the
+table, at desktop and 375 px. Layout and styles are unchanged, so 8C stands. The pin moved
+from `c0f7f30` because #55 added a Recipes-grid breakpoint note to `FRONTEND_GUIDELINES.md`. No
+token and nothing on Settings changed. The two text-only items — the iCloud "Last synced" dot
 and gray change (5A, 6A) and the page-header wrapper — are specified in item 15a's tables and
 also render in the mockup as page context. Design review 8D folded three corrections back into
 15a from the mockup: the top alert is inline text rather than a flex row, its link never wraps
@@ -1499,6 +1510,13 @@ Two surfaces, one data source: both read the same `/healthz` query, so they can 
   dismiss control — the alert disappears when the jobs recover, because a dismissible outage
   warning is how an outage gets ignored. It is not shown for "can't check" (a deploy or edge
   problem, not a job failure, and not something to put at the top of the household's Settings).
+  Design re-review (scoped, item 15a, 2026-09-21): since Eng review 5, "can't check" also covers
+  a database or a table the web cannot read now, which the earlier wording would have called
+  "Stopped" with an alert and a hand-off line. It still gets neither. With no reading the card
+  has nothing true to say about the jobs. When the database is down, every other screen is
+  already showing errors (journey row 10). When only the table is missing, the jobs still run
+  and the household loses nothing. The cron's "web cannot read job_heartbeats" reaches the one
+  person who can act.
 - **Card, first:** one headline stating the overall state, with the dot. **Second:** one row per
   beat job, plain-English name plus how long ago it last succeeded. **Third:** nothing.
 - **The per-job rows are always visible** in every state that has a reading (Design review 8C:
@@ -1515,7 +1533,7 @@ The card's state is the first row of this table that matches:
 | # | Card state | When | Dot | Headline | Per-job rows | Top alert |
 |---|---|---|---|---|---|---|
 | 1 | Can't check | never loaded and the fetch failed; `jobs` key missing; `jobs.read` is `"unavailable"`; the newest reading is more than 2 min old (2B); or the contract calls the reading unusable, including a malformed `jobs` object, a null `read_at`, or a `now` that does not parse (Adversarial review, scoped, item 15a, 2026-09-21) | gray | "Can't check right now" | hidden; one muted line "Trying again every 30 seconds." | none |
-| 2 | Can't record | any stale row has `write_error` true (the contract, 2A) | red | "Can't record job runs" | affected rows: "can't record runs" in red; others normal | "Background jobs can't be recorded · See background jobs" |
+| 2 | Can't record | any stale row has `write_error` true (the contract, 2A) | red | "Can't record job runs" | affected rows (stale **and** `write_error`; Design re-review, 2026-09-21): "can't record runs" in red; others normal | "Background jobs can't be recorded · See background jobs" |
 | 3 | Stopped | every row stale | red | "Nothing has run in 3 hr" (age of the newest success); "Nothing has run yet" when no row has ever succeeded (Eng review 4, 1A) | every row "last ran N ago · overdue" in red; a never-run row "hasn't run yet · overdue" | "Background jobs have stopped · See background jobs" |
 | 4 | Behind | some rows stale | red | "1 job is behind schedule" / "2 jobs are behind schedule" | stale rows "last ran 3 hr ago · overdue" in red; a never-run row past its grace "hasn't run yet · overdue" in red (Eng review 4, 1A); fresh rows normal | one job: "Unused photo cleanup is behind schedule · See background jobs"; several: "2 background jobs are behind schedule · See background jobs" |
 | 5 | Waiting | any row has never run (`last_success_at` NULL) and none is stale, i.e. every NULL row is still inside 3× its interval of **this web process** starting (Eng review 4, 1A). A restore or downgrade that empties the table without restarting web is not this row: `started_at` is already old, so those NULL rows are stale (Adversarial review, scoped, item 15a, 2026-09-21) | gray | every row NULL: "Waiting for the first runs". Some rows have a success: "Waiting on 1 job" / "Waiting on N jobs" (N = how many are still NULL) | NULL rows "hasn't run yet · runs every 10 min" / "runs every hour"; rows that have run show "ran N ago" | none |
@@ -1533,6 +1551,26 @@ other row renders by its own `stale` flag, as it would in state 4: a stale row w
 both match: a reading the web cannot refresh is "Can't check" once it is 2 minutes old, whatever
 its rows say, so an outage that takes the database away from web and worker together never
 reads "Stopped" (item 15's limit).
+
+**What a row says** (Design re-review, scoped, item 15a, 2026-09-21). A row's text and color
+follow that row's own values, never the card's state. The cells above are instances of this,
+and the mockup's `rowHtml` is written from it. Not a new rule: it is the contract's "a
+`write_error` on a row that is not stale does not change the card", said per row.
+
+| The row's own values | Row text | Color |
+|---|---|---|
+| `stale` and `write_error` | "can't record runs" | red |
+| `stale`, no `write_error`, has succeeded before | "last ran N ago · overdue" | red |
+| `stale`, no `write_error`, never succeeded | "hasn't run yet · overdue" | red |
+| not `stale`, never succeeded | "hasn't run yet · runs every 10 min" / "runs every hour" | normal |
+| not `stale`, has succeeded | "ran N ago" ("ran just now" under a minute) | normal |
+
+So a fresh row that carries `write_error` reads "ran N ago" in state 2, as it does in state 6.
+Row 2's "affected rows" left that open, and the mockup had keyed the red text on `write_error`
+alone. That is the recorder-broken, worker-alive picture about 45 minutes in: both syncs "can't
+record runs", both sweeps still "ran 1 hr ago". Keyed on the flag alone, state 6 would put red
+text under a green headline, and a row would change its words because of its neighbours. The
+rows are the headline's evidence, so they must not depend on it.
 
 | Feature | Loading | Empty | Error | Success | Partial |
 |---|---|---|---|---|---|
@@ -1591,6 +1629,19 @@ both strings word for word. "Not stale" here is `stale: false`, so a NULL row in
 counts. As one expression: `rows.every(r => r.stale) && rows.some(r => !r.write_error)` picks the
 second line; anything else in state 2 picks the first.
 
+**The limit of the second line, stated where the copy lives** (Design re-review, scoped, item
+15a, 2026-09-21). State 2 always has a flagged row. So whenever "Nothing has run" shows, one job
+did run inside its window and only its recording failed. After a worker dies, that was the last
+run before it died: the flag ages out within 3× that job's interval, and state 3 takes over with
+a true "Nothing has run in N". With two faults at once (a recorder that fails for some jobs
+while another job stops for its own reasons), the flagged jobs keep running and the line
+overstates for as long as both faults last. That is the direction this card is allowed to be
+wrong in (CEO review 2B-A: never the reassuring one). The alternative wording, "Some jobs have
+stopped", would understate a dead worker for up to 3 hours, and one fault is likelier than two.
+The rows under the line say which job is which, the household's next step is the same sentence
+either way, and the worker's `Task … succeeded` lines stay the operator's tiebreaker. Both
+strings stand.
+
 When several jobs are behind, their lines are shown once each, calendar first, and "Nothing
 you'll notice yet." only when it is the sole line. The copy says "if you use iCloud sync" rather
 than reading the integrations list, so the card stays independent of iCloud (and of the
@@ -1607,7 +1658,9 @@ authenticated API).
 | 7 | Operator rotates the password while a household member is mid-edit on the kitchen tablet | confusion, maybe alarm ("were we hacked?"); the unsaved form is lost | RUNBOOK: tell the household before rotating, unless the rotation is because the password leaked (then rotate first, tell after). The sign-in page's existing "Your session ended" banner gains the likely causes (item 6, Design review 10 TODO 1) |
 | 8 | Someone saves a meal during the `web=1` machine replacement | "did it save?" | the existing error toast and optimistic revert; RUNBOOK: deploy at a quiet hour, and say so if someone is using the app; the execution log records the observed downtime in seconds |
 | 9 | A tab left open across the deploy hits a missing JS chunk | a flash, then it works | the existing chunk-load invariant, verified by the runbook's manual check |
-| 10 | Anyone opens Settings while the edge or API is degraded | nothing more alarming than the rest of the app | state 1, "Can't check right now", and no top alert |
+| 10 | Anyone opens Settings while the edge or API is degraded, or while the web process cannot read the jobs table (Eng review 5; Design re-review, 2026-09-21) | nothing more alarming than the rest of the app | state 1, "Can't check right now", and no top alert. For up to 2 minutes before that, the last reading with the "Couldn't refresh" footnote. Never "Stopped": that word is kept for a table the web reads fine and nothing writes to |
+| 11 | Operator, or a second household's parent, sees "Can't record job runs" (Design re-review, scoped, item 15a, 2026-09-21) | "are the jobs dead, or only the bookkeeping?" | the line under the headline answers from evidence (Eng review 5, 1A). "They may still be running…" while some row is fresh or every stale row is flagged, because a flag proves that job ran. "Nothing has run, and the app can't record that either." once every row is stale and one of them has no flag. The headline, the top alert and the hand-off sentence are identical in both, so the household's next step never changes and the status region stays quiet. The rows show which job is which |
+| 12 | Operator empties or restores `job_heartbeats` under a running web process (not the drill, which uses a scratch app) and opens Settings (Design re-review, scoped, item 15a, 2026-09-21) | a jolt, "did I break it?", then watching it clear | not Waiting, because this web process started long ago. State 3: "Nothing has run yet", every row "hasn't run yet · overdue", top alert "Background jobs have stopped". With a live worker the syncs land within about 10 minutes and the card steps down to state 4, "2 jobs are behind schedule" with "Nothing you'll notice yet.", until the sweeps land within about an hour. Only the state 3 stage carries the hand-off line, and it asks the household to wait an hour; that stage lasts about 10 minutes, so nobody is sent to the operator over it |
 
 - **5 seconds:** the dot and one headline. Green means move on; red names the job.
 - **5 minutes:** the operator can leave Settings open after a deploy and watch the ages tick
@@ -2205,6 +2258,13 @@ the Postgres primary's hourly stop/start cycle is deliberate (open question 4).
 - One neutral state 2 line with no branch (1C) — rejected: simplest code, but it hands design a copy rewrite and drops a distinction the rows already support; 1A keeps both approved strings. TODOS.md: no.
 - A smoke message that reports an unusable reading *and* its stale rows — rejected: one rule, one message, the same order Settings uses; the rows of a reading just called unusable are not evidence. TODOS.md: no.
 - Persisting `started_at` (a column or a Redis key) so a web restart stops rearming the never-run grace — out of this pass's scope; the adversarial review named the limit and it only bites before a job's first-ever success. TODOS.md: no.
+<!-- Design re-review (scoped re-review of item 15a's user-visible outcomes, 2026-09-21): considered and rejected -->
+- Making state 2's "Nothing has run" case read as state 3, so the headline and alert say "stopped" when the line under them does — rejected: it reverses the adversarial ladder (state 2 before state 3) and changes the state number, so the status region would announce it. With a dead worker the mismatch is bounded: that line needs a flagged row, a flag lives at most 3× its job's interval, and then state 3 takes over. The household's next step is the same sentence in both. TODOS.md: no.
+- A third state 2 line for two faults at once ("Some jobs have stopped, and the app can't record the others.") — rejected: it would understate a dead worker for up to 3 hours, the reassuring direction CEO 2B-A forbids, to be exact about a double fault. The limit is stated under item 15a's "What this means" table instead. TODOS.md: no.
+- An alert or a hand-off line for a "Can't check" that lasts for hours — rejected: see the top-alert bullet in item 15a. The card cannot time its own blindness across reloads, and the cron already tells the operator. TODOS.md: no.
+- Announcing the change of state 2's line, or of the state 5 headline — rejected: the status region speaks only when the state number changes, and the next change that matters (to state 3, or to state 6) is announced. TODOS.md: no.
+- Rewording "can't record that either" or "Waiting on N jobs" — not reopened: both strings were decided on 2026-09-21 and read correctly beside their rows. TODOS.md: no.
+- Removing the mockup's leftover `ui.expanded` and `jobs-toggle` wiring from options B and C — mockup chrome with no effect on what renders; left alone. TODOS.md: no.
 
 ## What already exists
 | Sub-problem | Existing code or flow | Plan reuses it? |
@@ -2518,6 +2578,11 @@ None. 1A (state 2 says "Nothing has run" only when every row is stale and some r
 pre-table-snapshot sentence, the smoke message order, "others normal" in state 2, and the two
 leftover sentences (item 2, the test artifact) were obvious fixes, folded in with `Eng review 5`
 breadcrumbs.
+<!-- Design re-review (scoped re-review of item 15a's user-visible outcomes, 2026-09-21): decisions the user did not answer or moved on from; never defaulted -->
+None, and no question was asked. Every string this pass checked was already decided on
+2026-09-21 and none was changed. The mockup update, "what a row says", the wider reason state 1
+has no alert, journey rows 10 to 12 and the stated limit of state 2's second line were obvious
+fixes, folded in with `Design re-review` breadcrumbs.
 
 ## REVIEW REPORT
 
@@ -2526,7 +2591,7 @@ breadcrumbs.
 | CEO Review | `/plan-ceo-review` | Scope and strategy | ISSUES OPEN at review (SELECTIVE_EXPANSION, 2026-09-12), matching its `issues_open` log entry; the one remaining critical gap was closed by Eng review the same day (see item 2's break-glass entry and the Failure modes note). Corrected 2026-09-14: this row previously read "CLEAR". · resolved by /plan-eng-review, 2026-09-17 (framework 1.1.0 `resolved` entry): item 2's break-glass entry and the Failure modes note — `/healthz.gate_break_glass` plus the `ops-check` edge assertion. | 4 expansions accepted: scheduled `ops-check.yml` (both real incidents fell between releases, where nothing looked); `/healthz` reports the deployed commit (closes an existing REVIEW_CHECKLIST violation and the backend/frontend verification asymmetry); `RUNBOOK.md` naming + per-release migration reversibility (REVIEW_CHECKLIST cites a file that did not exist, one citation being M8's own criterion); in-app background-job staleness (flips `ui_scope` true). 4 CRITICAL GAPs found and closed in-plan: gate logging could turn 421 into 500; the watchdog had no watchdog; `/healthz` sits on Fly's health-check path; `fly ssh` is unreliable in CI (items 13/15 now compose over HTTP). 1 CRITICAL GAP left for PR1: the break-glass flag has no expiry and no detector. Also caught: the logged 2026-09-11 timezone bug would recur because `parseServerTime` is module-private; the CLI could set a >128-char password and lock out the account it exists to rescue. 0 unresolved decisions. PRD + roadmap synced. |
 | Eng Review | `/plan-eng-review` | Architecture and tests (required) | CLEAN (FULL_REVIEW, 2026-09-12) · clean (2026-09-21): scoped re-review of item 15a's backend contract · re-review demanded by /plan-adversarial-review, 2026-09-21: State 5's headline is no longer always "Waiting for the first runs" (only while every row is NULL; otherwise "Waiting on N jobs"), and a restore that does not restart web is overdue rather than Waiting. State 2 no longer says jobs may still be running when every row is stale. A database the web has never read is "Can't check", not "Stopped"; "Stopped" is only once a snapshot ages out with no write_error · clean (2026-09-21): scoped re-review of what that adversarial pass changed in item 15a (Eng review 5) | **2026-09-21, Eng review 5 (scoped to the adversarial pass's changes to item 15a; Fable 5.1):** 0 critical gaps; every miss erred toward alarm. Sound as written: the state 5 headline split, a restore without a web restart reading overdue (it falls out of the pure payload function, no new code), and the cron reading `stale`; `jobs.now`, `label` and the `last_error_at` 3× window hold. Not sound, decided 1A: state 2's "Nothing has run" line was keyed on "every row is stale", but `write_error` is stamped only by a SUCCESS, so a row that carries it ran. A broken recorder with a live worker would have read "Nothing has run" from hour 3 on. The line now also needs a stale row with no `write_error`; both strings are unchanged. Moved: "Stopped" vs "Can't check" turns on whether the web can read the table now, not whether it ever has, so an outage web and worker share is "Can't check" after 2 min and never "Stopped" (truth table in item 15). Corrected: a pre-table snapshot is a missing table, which is an unusable reading, not NULL rows. Removed two leftovers the adversarial sweep missed: item 2's "both read Stopped", and the test artifact's "the cron tolerates one interval of NULL". Pinned: the smoke script checks the unusable rule first; "others normal" in state 2 means each row renders by its own `stale` flag. Tests: artifact edited in place, critical path 17 and three state 2 fixtures added. Performance 0. 0 TODOs. Flags unchanged. 0 unresolved. Adversarial re-review demanded for the state 2 predicate. Note for the design re-review: the adversarial demand note's sentence on state 2 is now narrower than it reads; item 15a's two state 2 rows are the truth. **2026-09-21, Eng review 4 (scoped, item 15a; Opus 5):** 1 CRITICAL GAP found and closed. A never-run job read "Waiting for the first runs" forever, so a worker dead at the PR1b deploy was silent on the card and the cron. Now a NULL row turns stale 3× its interval after the web process starts (1A). State 2's "recent write error" was measured on a column that did not exist, over a 30 s window. Now it uses `last_error_at` and a per-task window, and states its limit: a database outage reads "Stopped" (2A). The `jobs` shape is pinned once as a contract in item 15. `jobs.now` gives a server-aligned clock, since the 2-minute cap had compared a server timestamp with the browser clock. The server sends each row's `label`, so there is one name map for JS and Python (3A). `backend/app/job_health.py` is the one home for `beat_intervals()`, labels, the payload builder and the refresher, doc-mapped. Tests: diagram + critical paths 15 and 16, artifact edited in place. Performance 0. 0 TODOs. Flags unchanged. 0 unresolved. Adversarial re-review demanded, because 15a's contract never had an adversarial pass and 2A changes its write-error rule. **2026-09-12:** Step 0: complexity check triggered (~35–40 files); scope kept, PR1 split into 1a (docs, scripts, config) and 1b (code, UI) so criteria 8 and 19 fall out of the sequence. 2 CRITICAL GAPs found and closed in-plan: the backend rollback named a flyctl command that does not exist (`fly releases rollback`) and would have failed across a migration boundary regardless → `fly deploy --image <ref> --skip-release-command`; item 15's TTL-cached database read sat on Fly's probe path → background refresher, the handler never awaits the store. The CEO review's remaining gap (break-glass left on) closed via `/healthz.gate_break_glass` + the cron. Decided: `web=1`; `job_heartbeats` table, one row per task; the drill exercises both restore paths; scripts in Python with `infra/tests` + an `infra-tests` CI job. Verified on this host or the live site: `fly tokens create readonly` exists (OQ5 largely answered), `/mealboard` already gets `max-age=0, must-revalidate` (item 11 needs no change), `%VITE_GIT_COMMIT%` + `vercel.json` `buildCommand` is check 8's mechanism. Architecture 8 issues / Code quality 7 / Tests: diagram + 13 critical paths, 0 gaps / Performance 0 blocking. 2 TODOs added, `risk_tags` += `migration`, 0 unresolved. |
 | Adversarial Review | `/plan-adversarial-review` | Red-team pass, prefer another model | ISSUES FOUND (7 passes, 2026-09-14) · clean (2026-09-21): scoped re-review of item 15a's /healthz.jobs contract · re-review demanded by /plan-eng-review, 2026-09-21: state 2's "Nothing has run, and the app can't record that either" line no longer applies whenever every row is stale. It now also needs at least one row with no write_error. When every row is stale and every row has write_error the line stays "They may still be running", because write_error is stamped only when a task reached SUCCESS inside 3x its interval, so those jobs ran (Eng review 5, 1A, user-decided) | **2026-09-21, scoped re-review of item 15a's `/healthz.jobs` contract (Grok 4.7):** the contract had never been attacked, and two older sentences still contradicted it. Item 13 no longer re-derives a minimum beat interval; the cron reads `stale`. The "one schedule interval" grace is gone. State 5's headline is "Waiting for the first runs" only while every row is NULL, then "Waiting on N jobs". State 2 says jobs may still be running only while some row is fresh. A malformed `jobs` body is "can't check", not green. Named limit: restarting web rearms the never-run grace. Design and eng re-review demanded for the headline and the state 2 line. **2026-09-14:** PR1a smoke skip list inverted (dropped check 1, kept PR1b-only `gate_break_glass`); `task_postrun` on all 16 tasks would poison "worker dead"; GitHub 60-day disable is real on this public repo and workflow runs do not reset it; `--self-test` of check 3 cannot prove the cron; Settings via `api.js` can log the household out; `logout()` commits so rotation must share the session; drill counted `job_heartbeats` before the table exists; Vercel "latest staged" is the wrong promote. All folded in-plan. Named limitation: 60-day watchdog death if no commit. 0 new critical gaps left open. |
-| Design Review | `/plan-design-review` | UI and UX | CLEAN (7 passes + HTML mockups, 2026-09-14) · re-review demanded by /plan-adversarial-review, 2026-09-21: State 5's headline is no longer always "Waiting for the first runs" (only while every row is NULL; otherwise "Waiting on N jobs"), and a restore that does not restart web is overdue rather than Waiting. State 2 no longer says jobs may still be running when every row is stale. A database the web has never read is "Can't check", not "Stopped"; "Stopped" is only once a snapshot ages out with no write_error | Design completeness 3 → 9. New item 15a specifies what the household sees: a "Background jobs" card above Account plus a top-of-Settings alert only when a job is behind (1A); six states plus loading whose headline follows the **worst** job, never the newest success (a dead sweep could otherwise hide behind a fresh sync); a stale reading keeps its last value with a note for 2 min instead of flapping to "can't check" every time the Postgres primary wakes (2B, supersedes Eng 1.2's rendering); plain-language "what this means" lines and a hand-off for a second household (3A); one name everywhere (4A); sage dot + documented stock red (5A); measured AA contrast, darker gray for the card and iCloud line (6A); version and break-glass never on Settings (7A, 7B); always-visible job rows chosen from 3 mockups (8C). **Backend contract added, not yet re-reviewed by eng/adversarial:** `jobs.read_at`, `stale` computed at serve time, every beat task listed with `null` when never run. Found and corrected: the sign-in redirect is not silent (APP_FLOW §4 stale); the specific "password changed" message is not derivable, so PR1b ships an honest generic bounce-banner copy change (TODO 1 → built). Runbook: tell the household before rotating, deploy at a quiet hour, record observed downtime. 2 TODOs added (app-wide contrast, Calendar-page sync alert). 0 unresolved. |
+| Design Review | `/plan-design-review` | UI and UX | CLEAN (7 passes + HTML mockups, 2026-09-14) · re-review demanded by /plan-adversarial-review, 2026-09-21: State 5's headline is no longer always "Waiting for the first runs" (only while every row is NULL; otherwise "Waiting on N jobs"), and a restore that does not restart web is overdue rather than Waiting. State 2 no longer says jobs may still be running when every row is stale. A database the web has never read is "Can't check", not "Stopped"; "Stopped" is only once a snapshot ages out with no write_error · clean (2026-09-21): scoped re-review of item 15a's user-visible outcomes after the adversarial pass and Eng review 5 | **2026-09-21, scoped re-review of item 15a's user-visible outcomes (Fable 5.1):** 7 → 9. The tables held on all four demanded points: the state 5 headline split; a restore without a web restart reading overdue (state 3 "Nothing has run yet", then state 4); state 2's two lines per Eng review 5 (1A); and "Can't check" vs "Stopped" turning on whether the web can read now. The mockup did not hold: its one Waiting fixture still read "Waiting for the first runs" with two jobs run, state 2 had one line, a never-run overdue row would have rendered "last ran null min ago", and red row text was keyed on `write_error` alone. Brought to the table, fourteen fixtures rendered and read back at desktop and 375 px, layout unchanged (8C stands), pin refreshed. Pinned: "what a row says" follows the row's own values, so a fresh flagged row reads "ran N ago" in state 2 as in state 6 (row 2's "affected rows" had left it open). Added: why state 1 still has no alert now that it covers an unreadable database; journey rows 11 (state 2) and 12 (a restore under a running web); the stated limit of state 2's second line (under two faults at once it overstates, toward alarm; both strings stand). No string changed, no question asked, 0 TODOs, 0 unresolved, no re-review demanded. **2026-09-14:** Design completeness 3 → 9. New item 15a specifies what the household sees: a "Background jobs" card above Account plus a top-of-Settings alert only when a job is behind (1A); six states plus loading whose headline follows the **worst** job, never the newest success (a dead sweep could otherwise hide behind a fresh sync); a stale reading keeps its last value with a note for 2 min instead of flapping to "can't check" every time the Postgres primary wakes (2B, supersedes Eng 1.2's rendering); plain-language "what this means" lines and a hand-off for a second household (3A); one name everywhere (4A); sage dot + documented stock red (5A); measured AA contrast, darker gray for the card and iCloud line (6A); version and break-glass never on Settings (7A, 7B); always-visible job rows chosen from 3 mockups (8C). **Backend contract added, not yet re-reviewed by eng/adversarial:** `jobs.read_at`, `stale` computed at serve time, every beat task listed with `null` when never run. Found and corrected: the sign-in redirect is not silent (APP_FLOW §4 stale); the specific "password changed" message is not derivable, so PR1b ships an honest generic bounce-banner copy change (TODO 1 → built). Runbook: tell the household before rotating, deploy at a quiet hour, record observed downtime. 2 TODOs added (app-wide contrast, Calendar-page sync alert). 0 unresolved. |
 | Implementation Review | `/review-implementation` | First code review (required) | — | — |
 | QA | `/qa` | Browser verification | — | — |
 | Design Audit | `/design-review` | Live-site grade | — | — |

@@ -11,6 +11,14 @@
   Settings page (FamilyMembersPage.jsx) with the project's tokens (FRONTEND_GUIDELINES.md).
   The floating panel at the bottom right is mockup chrome, not part of the design.
   Breakpoints use container queries on .frame so the "Phone 375" preview is exact.
+
+  Design re-review (scoped, item 15a, 2026-09-21): fixtures and copy brought to the plan's state
+  table after the adversarial pass and Eng review 5. State 5's headline splits ("Waiting for the
+  first runs" only while no job has run, then "Waiting on N jobs"); state 2 has its two lines
+  across three fixtures; a never-run job past its grace reads "hasn't run yet · overdue" and
+  state 3 reads "Nothing has run yet" when nothing ever ran; row text follows the row's own
+  values, so a fresh row with write_error reads "ran N ago". Layout and styles are unchanged.
+  Where this file and the table in item 15a disagree, the table wins.
 -->
 <style>
 :root{
@@ -286,8 +294,10 @@ const JOBS = [
 ]
 const fresh = (age) => ({ age, stale: false })
 const stale = (age) => ({ age, stale: true })
-const never = { age: null, stale: false }
+const never = { age: null, stale: false }          // never ran, still inside the post-start grace
+const neverStale = { age: null, stale: true }      // never ran, past its grace (Eng review 4, 1A)
 const failing = (age) => ({ age, stale: true, err: true })
+const freshErr = (age) => ({ age, stale: false, err: true }) // write_error on a fresh row changes nothing
 const rowsOf = (cal, rem, del, pho) => ({ cal, rem, del, pho })
 
 // [id, label, reading]; ages are minutes since last_success_at
@@ -296,9 +306,17 @@ const STATES = [
   ['refresh', "6 · Running, couldn't refresh (2B)", { rows: rowsOf(fresh(5), fresh(5), fresh(33), fresh(33)), footnote: true }],
   ['behind1', '4 · Behind, one job', { rows: rowsOf(fresh(4), fresh(4), fresh(32), stale(184)) }],
   ['behind2', '4 · Behind, two jobs', { rows: rowsOf(stale(52), fresh(6), fresh(32), stale(184)) }],
+  // a restore that did not restart web, about 10 min on: the syncs have run, the sweeps have not
+  ['behindnever', '4 · Behind, never-run jobs overdue', { rows: rowsOf(fresh(3), fresh(3), neverStale, neverStale) }],
   ['stopped', '3 · Stopped', { rows: rowsOf(stale(181), stale(181), stale(190), stale(190)) }],
-  ['cantrecord', "2 · Can't record", { rows: rowsOf(failing(41), fresh(4), fresh(32), fresh(32)) }],
-  ['waiting', '5 · Waiting for first runs', { rows: rowsOf(fresh(2), fresh(2), never, never) }],
+  // the same restore, first reading: every row NULL and already past its grace
+  ['stoppednever', '3 · Stopped, nothing has ever run', { rows: rowsOf(neverStale, neverStale, neverStale, neverStale) }],
+  // recorder broken about 45 min ago, worker alive: the sweeps' last recorded success is still fresh
+  ['cantrecord', "2 · Can't record, some jobs fresh", { rows: rowsOf(failing(48), failing(48), freshErr(95), freshErr(95)) }],
+  ['cantrecordall', "2 · Can't record, all stale and flagged", { rows: rowsOf(failing(240), failing(240), failing(240), failing(240)) }],
+  ['cantrecordnone', "2 · Can't record, all stale, one unflagged", { rows: rowsOf(failing(240), failing(240), failing(240), stale(240)) }],
+  ['waitingall', '5 · Waiting, no job has run', { rows: rowsOf(never, never, never, never) }],
+  ['waitingsome', '5 · Waiting on 2 jobs', { rows: rowsOf(fresh(2), fresh(2), never, never) }],
   ['cantcheck', "1 · Can't check", { cantCheck: true }],
   ['loading', 'Loading (after 200 ms)', { loading: true }],
 ]
@@ -327,17 +345,23 @@ function deriveJobsState(reading) {
   else if (staleRows.length) n = 4
   else if (rows.some((r) => r.age === null)) n = 5
   else n = 6
-  const newest = Math.min(...rows.filter((r) => r.age !== null).map((r) => r.age))
+  const ran = rows.filter((r) => r.age !== null)
+  const newest = ran.length ? Math.min(...ran.map((r) => r.age)) : null
+  const waitingOn = rows.length - ran.length
   const handoff = ' If this lasts more than an hour, tell whoever set up this app.'
   const headline = {
     2: "Can't record job runs",
-    3: `Nothing has run in ${durationSince(newest)}`,
+    3: newest === null ? 'Nothing has run yet' : `Nothing has run in ${durationSince(newest)}`,
     4: `${staleRows.length} ${staleRows.length === 1 ? 'job is' : 'jobs are'} behind schedule`,
-    5: 'Waiting for the first runs',
+    5: ran.length === 0 ? 'Waiting for the first runs' : `Waiting on ${waitingOn} ${waitingOn === 1 ? 'job' : 'jobs'}`,
     6: 'All running on schedule',
   }[n]
   let cons = []
-  if (n === 2) cons = ["They may still be running, but the app can't confirm it." + handoff]
+  if (n === 2) {
+    // Eng review 5, 1A: write_error proves a run, so "Nothing has run" needs a stale row without it
+    const nothingRan = rows.every((r) => r.stale) && rows.some((r) => !r.err)
+    cons = [(nothingRan ? "Nothing has run, and the app can't record that either." : "They may still be running, but the app can't confirm it.") + handoff]
+  }
   if (n === 3) cons = ["iCloud events and reminders won't sync until this is fixed." + handoff]
   if (n === 4) {
     const lines = [...new Set(staleRows.map((r) => r.cons))]
@@ -352,15 +376,18 @@ function deriveJobsState(reading) {
   return { n, tone: n >= 2 && n <= 4 ? 'bad' : n === 6 ? 'ok' : 'unknown', headline, cons, alert, rows, stale: staleRows, footnote: !!reading.footnote }
 }
 
+// Row text follows the row's own values, never the card's state (15a, "what a row says").
+// Only a stale row is red; write_error on a fresh row changes nothing.
 function rowHtml(r) {
-  let text, bad = false
-  if (r.err) { text = "can't record runs"; bad = true }
-  else if (r.stale) { text = `last ran ${relativeTime(r.age)} · overdue`; bad = true }
+  let text
+  if (r.stale && r.err) text = "can't record runs"
+  else if (r.stale) text = r.age === null ? "hasn't run yet · overdue" : `last ran ${relativeTime(r.age)} · overdue`
   else if (r.age === null) text = `hasn't run yet · runs ${r.every}`
-  if (r.age === null) return `<div class="row"><dt>${r.label}</dt><dd>${text}</dd></div>`
+  else text = `ran ${relativeTime(r.age)}`
+  const cls = r.stale ? 'bad' : ''
+  if (r.age === null) return `<div class="row"><dt>${r.label}</dt><dd class="${cls}">${text}</dd></div>`
   const t = absolute(r.age)
-  if (!text) text = `ran ${relativeTime(r.age)}`
-  return `<div class="row"><dt>${r.label}</dt><dd class="${bad ? 'bad' : ''}"><time datetime="${t.iso}" title="${t.title}">${text}</time></dd></div>`
+  return `<div class="row"><dt>${r.label}</dt><dd class="${cls}"><time datetime="${t.iso}" title="${t.title}">${text}</time></dd></div>`
 }
 const rowsHtml = (rows) => `<dl class="rows">${rows.map(rowHtml).join('')}</dl>`
 const headlineHtml = (d, text = d.headline) =>
