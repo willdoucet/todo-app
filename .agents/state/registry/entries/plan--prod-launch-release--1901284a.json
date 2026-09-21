@@ -9,9 +9,9 @@
   "parent_epic": "v1-productionization",
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
-  "reason": "Design review (2026-09-14) is clean, 3 -> 9, 0 unresolved, but item 15a adds a backend contract (jobs.read_at, serve-time stale, every beat task listed with null) not yet re-reviewed by eng/adversarial. Carried from adversarial review: GitHub 60-day scheduled-workflow disable documented not solved; OQ 1/2/4 open; Mode B accepted risk. Refreshed 2026-09-20 UTC after merging master (todo-app PR 57, framework 1.3.1): the design-sync drift and the zsh pin-SHA items are gone (module off; pin-sha prints under zsh). The recorded design pin c0f7f30 now reads 628891f, docs-only: PR 55 edited FRONTEND_GUIDELINES.md and no token file changed (workflow-rereview-utc plan, section 11).",
-  "reason_at": "2026-09-20T04:43:06Z",
-  "reason_by": "operator",
+  "reason": "Eng review 5 (scoped to the adversarial pass's changes to item 15a) clean. Verified: state 5 headline split, restore without a web restart reads overdue, cron reads stale; jobs.now, label and the last_error_at 3x window hold. Changed (1A, user-decided): state 2 says Nothing has run only when every row is stale and some row has no write_error, since write_error proves a run. Stopped vs Can't check turns on whether the web can read now. Two leftover sentences removed (item 2, test artifact). Adversarial re-review demanded for the state 2 predicate; design re-review still open. Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm.",
+  "reason_at": "2026-09-21T21:34:12Z",
+  "reason_by": "plan-eng-review",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
@@ -21,6 +21,6 @@
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-20T04:43:06Z",
-  "workflow_status": "design-reviewed"
+  "updated_at": "2026-09-21T21:34:12Z",
+  "workflow_status": "eng-reviewed"
 }
