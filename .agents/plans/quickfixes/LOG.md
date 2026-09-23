@@ -98,3 +98,12 @@
 - Tests: none (docs only); re-grep for the stale phrases is clean; PRD.md:36 is byte-identical to prod-launch-release and `git merge-tree` against that branch is clean
 - Docs: updated 5 docs; flagged, not fixed: PRD "Rebuilding" rows + 5.5 "Planned Enhancement (v1.1)" for shipped shopping auto-sync, BACKEND_STRUCTURE meal-entry DELETE "removal immediately" wording
 - Branch: quickfix/reconcile-stale-doc-status · PR: https://github.com/willdoucet/todo-app/pull/55
+
+## 2026-09-23 — pause-celery-worker
+- Source: free text (M8 PR1a operator session, plan "Between the PRs" step 1)
+- What: P1 TODOS entry recording that the mealy-app-prod `worker` and `beat` machines are stopped on purpose, with the resume steps
+- Why: the worker had been down since a 2026-09-21 Fly host migration and crash-looped on the Upstash request cap (500,000) when started; PR #49 (restart `always`, low-usage worker flags) was never deployed. Without the record, a stopped worker looks like the next silent outage
+- Files: .agents/docs/TODOS.md
+- Tests: none (docs only); production state re-read 2026-09-23T17:18:47Z (worker and beat stopped, web started); resume commands checked against flyctl help and infra/incident-diagnostics.md
+- Docs: no doc impact (TODOS.md entry only; no documented surface changed)
+- Branch: quickfix/pause-celery-worker · PR: https://github.com/willdoucet/todo-app/pull/61
