@@ -71,10 +71,13 @@ tree. Ownership is in `_shared/docs-contract.md`; the blueprint shapes come from
   `status: <shipped>/<total> milestones shipped` line, and the milestone table
   `| # | Milestone | Size | Status | Branch | Plan | Shipped |`.
 - Change set: the phase this plan belongs to. Status is `in-progress` while the summary has
-  open boxes or the registry says `implementing` or `ready-for-review`; `shipped <utc-date>` when
-  the registry says `shipped`, with the pull request URL appended to the Plan line. For an
-  epic child, update its milestone row from `epic-get`: Status from the derived status, Branch,
-  Plan link, and Shipped as the date plus the pull request; then refresh the `status:` count.
+  open boxes or the registry says `implementing`, `ready-for-review` or `partially-shipped`;
+  `shipped <utc-date>` when the registry says `shipped`, with the pull request URL appended to
+  the Plan line. For an epic child, update its milestone row from `epic-get`: Status from the
+  derived status, Branch, Plan link, and Shipped as the date plus the pull request; then
+  refresh the `status:` count. A `partially-shipped` plan has shipped a part, not the phase or
+  milestone: its row reads `implementing` with the Shipped cell empty, and each part's pull
+  request goes on the Plan line as `<part>: <url>`; the count does not move.
   Never write step-level detail into this doc; a phase is feature-sized.
 - Full audit: every phase's status agrees with `"$BIN/workflow-state" --history` and
   `--epics`; every plan link resolves to a file; no phase carries step-level detail (a

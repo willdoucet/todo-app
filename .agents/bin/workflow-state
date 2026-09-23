@@ -19,6 +19,9 @@ A review reads `stale` when a later review declared it must run again (`rereview
 declarer's entry); stale blocks like failed, its dashboard row reads `stale !`, and only its
 own re-run clears it. `Concern:` lines (a review's own `concern` field) and the `Reason:`
 line (the plan's frontmatter `reason`) are shown under the Open lines and gate nothing.
+A plan that ships in parts (`ship_parts`, `shipped_parts`; `_lib.ship_parts_state`) gets a
+`Parts:` line, and reads `partially-shipped` between two parts: Next is /execute-plan, and the
+part's ship-stage reviews no longer count (`_lib.plan_review_history`).
 Nothing here is project-specific; branches, paths and skill names come from config, git and
 the log.
 
@@ -41,12 +44,13 @@ KNOWN_STATUSES = {
     "not-started",
     "implementing",
     "ready-for-review",
+    _lib.PARTIAL_STATUS,
     "shipped",
     "abandoned",
     "blocked",
     "needs-context",
 }
-STUCK_STATUSES = ("ready-for-review", "implementing")
+STUCK_STATUSES = ("ready-for-review", "implementing", _lib.PARTIAL_STATUS)
 TERMINAL_STATUSES = ("shipped", "abandoned")
 
 HARNESS_NOTE = "skill invocation syntax depends on the harness (/name or $name)"
@@ -113,6 +117,7 @@ def gather(root: Path, cfg: dict) -> dict:
         "epic_slug": None,
         "epic": None,
         "milestone": None,
+        "parts": None,
         "stuck": stuck_entries(root, cfg, branch),
     }
     if not branch:
@@ -140,12 +145,29 @@ def gather(root: Path, cfg: dict) -> dict:
         key = fm.get("registry_key") or _lib.plan_key(branch)
         st["entry"] = _lib.registry_get(root, cfg, key)
         st["progress"] = summary_progress(plan)
+        parts = _lib.ship_parts_state(fm)
+        parts["ship_stage_since"] = _lib.plan_review_history(root, cfg, plan.name, entries)["part_boundary"]
+        st["parts"] = parts
         if fm.get("parent_epic"):
             st["epic_slug"] = str(fm["parent_epic"])
             st["milestone"] = str(fm.get("milestone") or "") or None
             st["epic"] = _lib.epic_progress(root, cfg, st["epic_slug"])
     st["status"] = infer_status(fm, st["entry"])
+    if st["parts"] is not None:
+        st["parts"]["unlogged"] = None if st["status"] in TERMINAL_STATUSES else unlogged_part(st["parts"])
     return st
+
+
+def unlogged_part(parts: dict) -> str | None:
+    """The newest recorded part when the review log has no partial ship at or after its
+    `shipped_at`, else None. `ship-record` writes the record and ship's next step logs the
+    entry that closes the part's ship stage; between the two, or when the log call never ran,
+    the part's reviews would still count for the next part. `gate_state` fails closed on it."""
+    last = parts["shipped"][-1] if parts["shipped"] else None
+    if not last:
+        return None
+    since = parts.get("ship_stage_since")
+    return None if since is not None and since >= last.get("shipped_at", "") else last["part"]
 
 
 # --------------------------------------------------------------------------
@@ -171,6 +193,9 @@ def gather(root: Path, cfg: dict) -> dict:
 #                                                                                a stale plan review re-runs here, scoped)
 #                         final not ok? → /final-review (+ Optional /qa, /design-review when missing and ui_scope)
 #                         else → /ship
+#    partially-shipped ──▶ /execute-plan, "<part> shipped (<pr>) — merge it, then continue with <next part>";
+#                          Open: lines as for implementing. The part's ship-stage reviews no longer count
+#                          (_lib.plan_review_history), so the next part's --next reaches /review-implementation
 #    shipped · abandoned ──▶ unchanged; no Open:, Concern: or Reason: lines
 #
 #   ok = passed | resolved · blocking = failed | stale · a gates=False tier (office-hours) never enters any list
@@ -247,10 +272,11 @@ def blocking_reason(skill: str, reviews: dict, dispositions: dict) -> str:
     return failed_reason(skill, reviews, dispositions)
 
 
-def gate_state(reviews: dict, fm: dict, status: str, unreadable: int) -> dict:
+def gate_state(reviews: dict, fm: dict, status: str, unreadable: int, parts: dict | None = None) -> dict:
     """Pure. Dispositions per tier, the Open list, `missing`, `missing_to_ship`, and the
     verdict, from the latest entry per skill and the plan's frontmatter. Everything that
-    routes or reports reads this; nothing recomputes it."""
+    routes or reports reads this; nothing recomputes it. A recorded part whose partial ship is
+    not in the log (`parts["unlogged"]`) puts `ship` in both lists: its reviews still count."""
     dispositions = {t["skill"]: _lib.review_disposition(reviews.get(t["skill"])) for t in _lib.REVIEW_TIERS}
     out = {
         "dispositions": dispositions,
@@ -277,6 +303,9 @@ def gate_state(reviews: dict, fm: dict, status: str, unreadable: int) -> dict:
             out["missing_to_ship"].append(skill)
         if blocking and status not in TERMINAL_STATUSES:
             out["open"].append({"skill": skill, "invoke": tier["invoke"], "reason": blocking_reason(skill, reviews, dispositions)})
+    if (parts or {}).get("unlogged"):
+        out["missing"].append("ship")
+        out["missing_to_ship"].append("ship")
     if not out["missing_to_ship"]:
         out["verdict"] = "CLEARED TO SHIP"
     elif not out["missing"]:
@@ -326,6 +355,41 @@ def line_text(value) -> str:
     """Frontmatter and registry text on a status line: a milestone's id and title, an epic's
     slug, a branch, a risk tag. Free text like a reason, so it takes the same one helper."""
     return _lib.one_line(value if isinstance(value, str) else str(value), _lib.DISPLAY_LIMIT)
+
+
+def partial_reason(parts: dict) -> str:
+    """The Next: reason between two parts: what shipped, where, and what comes after the merge.
+    Every value is frontmatter text, so each goes through `line_text`."""
+    last = parts["shipped"][-1] if parts["shipped"] else {}
+    head = f"{line_text(last['part'])} shipped" if last else "a part shipped"
+    if last.get("pr"):
+        head += f" ({line_text(last['pr'])})"
+    if parts["problem"]:
+        return f"{head} — repair the plan's parts first: {line_text(parts['problem'])}"
+    if parts["next"]:
+        return f"{head} — merge it, then continue with {line_text(parts['next'])}"
+    return f"{head} — merge it, then declare the parts still to ship in ship_parts"
+
+
+def fmt_parts(parts: dict | None) -> str | None:
+    """`PR1a ✓ · PR1b (next) · PR2` for a plan that declares or recorded parts, the problem
+    when either key is malformed, else None (a plan that ships whole prints no line)."""
+    if not parts:
+        return None
+    if parts["problem"]:
+        return f"malformed — {line_text(parts['problem'])}"
+    if not parts["declared"] and not parts["shipped"]:
+        return None
+    items = [f"{line_text(r['part'])} ✓" for r in parts["shipped"]]
+    items += [line_text(p) + (" (next)" if i == 0 else "") for i, p in enumerate(parts["remaining"])]
+    return " · ".join(items)
+
+
+def parts_summary(parts: dict | None) -> dict | None:
+    """The `parts` key of `--next --json` and `--dashboard --json`: None for no plan or an epic."""
+    if not parts:
+        return None
+    return {k: parts[k] for k in ("declared", "shipped", "remaining", "next", "final", "total", "problem", "ship_stage_since", "unlogged")}
 
 
 def milestone_next(ep: dict, ms: dict) -> dict:
@@ -380,10 +444,11 @@ def attention(st: dict, unreadable: int) -> dict:
 
 
 def decide(st: dict) -> dict:
-    gs = gate_state(st["reviews"], st["fm"], st["status"], st.get("unreadable", 0))
+    gs = gate_state(st["reviews"], st["fm"], st["status"], st.get("unreadable", 0), st.get("parts"))
     result = _decide(st, gs)
     named = result.pop("next_log_skill", None)
     result["unreadable"] = gs["unreadable"]
+    result["parts"] = parts_summary(st.get("parts"))
     shown = attention(st, gs["unreadable"])
     result.update(shown)  # concerns, reason, reason_by, reason_at
     if gs["unreadable"] > 0:
@@ -391,9 +456,25 @@ def decide(st: dict) -> dict:
         result["optional"] = []
         result["open"] = []
         return result
+    unlogged = (st.get("parts") or {}).get("unlogged")
+    if unlogged:
+        result["next"] = nxt(None, None, True, unlogged_reason(st, unlogged))
+        result["optional"] = []
     # A failed review that is already the next step is not repeated as an Open line.
     result["open"] = [o for o in gs["open"] if o["skill"] != named]
     return result
+
+
+def unlogged_reason(st: dict, part: str) -> str:
+    """Next: for a recorded part the log does not close: the one command that does, which the
+    ship skill's step 9 runs. Logged now, it is dated after the record and after any
+    ship-stage run since, so those runs no longer count either and run again."""
+    last = st["parts"]["shipped"][-1]
+    pr = f" --field pr=\"{line_text(last['pr'])}\"" if last.get("pr") else ""
+    return (
+        f"the ship of {line_text(part)} is not in the review log, so its ship-stage reviews still count — log it first: "
+        f"review-log --skill ship --status done --plan \"{line_text(st['plan'].name)}\" --field part=\"{line_text(part)}\" --field partial=true{pr}"
+    )
 
 
 def _decide(st: dict, gs: dict) -> dict:
@@ -468,6 +549,11 @@ def _decide(st: dict, gs: dict) -> dict:
     if status == "shipped":
         result["stage"] = "SHIPPED"
         result["next"] = nxt(None, None, False, "merge the PR")
+    elif status == _lib.PARTIAL_STATUS:
+        parts = st["parts"]
+        counted = f" ({len(parts['shipped'])}/{parts['total']} parts)" if parts["total"] else ""
+        result["stage"] = f"PARTIALLY SHIPPED{counted}"
+        result["next"] = nxt("/execute-plan", None, True, partial_reason(parts))
     elif status == "abandoned":
         result["stage"] = "ABANDONED"
         result["next"] = nxt("/office-hours", None, True, "plan abandoned — supersede it with a new plan")
@@ -640,8 +726,11 @@ def banner_lines(st: dict, decision: dict) -> list[str]:
     if st["on_base"] and not plan:
         stage += " — on base branch"
     lines.append(f"Stage:   {stage}")
+    parts_line = fmt_parts(st.get("parts"))
+    if parts_line:
+        lines.append(f"Parts:   {parts_line}")
     if plan:
-        gs = gate_state(st["reviews"], st["fm"], st["status"], st.get("unreadable", 0))
+        gs = gate_state(st["reviews"], st["fm"], st["status"], st.get("unreadable", 0), st.get("parts"))
         lines.append(f"Reviews: {fmt_reviews(gs['dispositions'])}")
     if st["on_base"]:
         for ep in active_epics(st):
@@ -658,9 +747,9 @@ def banner_lines(st: dict, decision: dict) -> list[str]:
 def dashboard(st: dict) -> dict:
     plan = st["plan"]
     if not plan:
-        return {"plan": None, "rows": [], "verdict": "NO PLAN", "missing": [], "missing_to_ship": [], "unreadable": st.get("unreadable", 0), "concerns": [], "reason": None, "reason_by": None, "reason_at": None}
+        return {"plan": None, "rows": [], "verdict": "NO PLAN", "missing": [], "missing_to_ship": [], "unreadable": st.get("unreadable", 0), "parts": None, "concerns": [], "reason": None, "reason_by": None, "reason_at": None}
     reviews = st["reviews"]
-    gs = gate_state(reviews, st["fm"], st["status"], st.get("unreadable", 0))
+    gs = gate_state(reviews, st["fm"], st["status"], st.get("unreadable", 0), st.get("parts"))
     rows = []
     for tier in _lib.REVIEW_TIERS:
         entry = reviews.get(tier["skill"])
@@ -686,6 +775,7 @@ def dashboard(st: dict) -> dict:
         "missing": gs["missing"],
         "missing_to_ship": gs["missing_to_ship"],
         "unreadable": gs["unreadable"],
+        "parts": parts_summary(st.get("parts")),
         **shown,  # concerns, reason, reason_by, reason_at
     }
 
@@ -695,10 +785,16 @@ def fmt_extra(extra: dict) -> str:
     return ",".join(f"{k}={_lib.fmt_review_value(v)}" for k, v in sorted(extra.items()))
 
 
-def fmt_missing(names: list[str], rows: list[dict]) -> str:
+def fmt_missing(names: list[str], rows: list[dict], unlogged: bool = False) -> str:
     disposition = {r["skill"]: r["disposition"] for r in rows}
     suffix = {"failed": " (issues open)", "stale": " (re-review demanded)"}
-    return ", ".join(f"{n}{suffix.get(disposition.get(n), '')}" for n in names)
+
+    def one(n: str) -> str:
+        if n == "ship" and unlogged:
+            return "ship (partial ship not logged)"
+        return f"{n}{suffix.get(disposition.get(n), '')}"
+
+    return ", ".join(one(n) for n in names)
 
 
 def dashboard_lines(d: dict) -> list[str]:
@@ -707,7 +803,14 @@ def dashboard_lines(d: dict) -> list[str]:
     lines = []
     if d.get("unreadable"):
         lines.append(f"Warn: {d['unreadable']} unreadable review-log line(s)")
-    lines += [f"Plan: {d['plan']}", f"{'Review':<13}| {'Status':<14}| {'When (UTC)':<11}| Extra"]
+    lines.append(f"Plan: {d['plan']}")
+    parts = d.get("parts") or {}
+    parts_line = fmt_parts(parts or None)
+    since = parts.get("ship_stage_since")
+    if parts_line or since is not None:
+        after = f" — ship-stage reviews count after {line_text(since) or 'the undated partial ship'}" if since is not None else ""
+        lines.append(f"Parts: {parts_line or 'none declared'}{after}")
+    lines.append(f"{'Review':<13}| {'Status':<14}| {'When (UTC)':<11}| Extra")
     for r in d["rows"]:
         if r["status"] is None:
             status = "—"
@@ -720,10 +823,10 @@ def dashboard_lines(d: dict) -> list[str]:
         lines.append(f"{r['label']:<13}| {status:<14}| {r['when'] or '':<11}| {fmt_extra(r['extra'])}")
     verdict = f"Verdict: {d['verdict']}"
     if d["verdict"] == "NOT CLEARED":
-        verdict += f" — missing: {fmt_missing(d['missing'], d['rows'])}"
+        verdict += f" — missing: {fmt_missing(d['missing'], d['rows'], bool((d.get('parts') or {}).get('unlogged')))}"
     lines.append(verdict)
     if d["verdict"] == "CLEARED FOR IMPLEMENTATION":
-        lines.append(f"To ship: {fmt_missing(d['missing_to_ship'], d['rows'])}")
+        lines.append(f"To ship: {fmt_missing(d['missing_to_ship'], d['rows'], bool((d.get('parts') or {}).get('unlogged')))}")
     reason = d.get("reason")
     if reason and reason not in {c["text"] for c in d.get("concerns", [])}:
         lines.append(f"Reason: {reason_author(d)}{reason}")  # in full: the dashboard is the untruncated view

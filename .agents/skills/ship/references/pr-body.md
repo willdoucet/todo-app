@@ -11,17 +11,18 @@ version prefix, no ticket prefix unless `AGENTS.md` requires one.
 
 ```bash
 BODY_FILE=$(mktemp)                         # write the body below into it
-EXISTING=$(gh pr view --json url -q .url 2>/dev/null || true)
+EXISTING=$(gh pr view --json url,state -q 'select(.state == "OPEN") | .url' 2>/dev/null || true)
 if [ -z "$EXISTING" ]; then
   gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE"
 else
   gh pr edit "$EXISTING" --body-file "$BODY_FILE"
 fi
-PR_URL=$(gh pr view --json url -q .url)
+PR_URL=$(gh pr view --json url,state -q 'select(.state == "OPEN") | .url')
 ```
 
-One pull request per branch. An existing one is updated in place; its number and reviewers
-survive.
+One open pull request per branch. An open one is updated in place; its number and reviewers
+survive. A merged or closed one is never edited: on the next part of a plan that ships in
+parts, the branch's earlier pull request is that part's record, and this part gets its own.
 
 ## Without `gh`
 
@@ -47,6 +48,7 @@ Ask for the pull request URL once the user has opened it, then update the regist
 - Plan: `<repo-relative _PLAN_FILE>`
 - Summary: `<repo-relative SUMMARY_FILE>`
 - Epic / milestone: `<slug> — M<n> <title>`            <!-- omit when not an epic child -->
+- Part: `<label>` of `<declared labels>`; earlier parts: <label: pull request URL, ...>   <!-- omit when nothing is declared -->
 - Intake: <note ref, note path, roadmap phase, epic milestone, or "free text">
 
 ## Review dashboard

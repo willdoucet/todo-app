@@ -1242,6 +1242,13 @@ def command_plan_metadata_set(args: argparse.Namespace) -> int:
         updates["source_note_path"] = ctx.note_rel_lenient(updates["source_note_path"])
     if isinstance(updates.get("source_note_ref"), str):
         updates["source_note_ref"] = normalize_key(ctx, updates["source_note_ref"])
+    if "ship_parts" in updates or "ship_parts" in appends:
+        # the declaration `ship-record` computes from; checked on the merged value, so a
+        # refused --set or --append writes nothing
+        merged = _lib.merge_frontmatter(_lib.read_frontmatter(plan), updates, appends)
+        problem = _lib.ship_parts_problem(merged.get("ship_parts"))
+        if problem:
+            raise _lib.FrameworkError(problem, plan_path=ctx.repo_rel(plan))
     metadata = _lib.update_frontmatter(plan, updates, appends)
     return _lib.print_json({"status": "ok", "plan_path": ctx.repo_rel(plan), "metadata": metadata})
 
@@ -1329,6 +1336,93 @@ def command_abandon(args: argparse.Namespace) -> int:
     if result.get("entry"):
         result["tasks"] = sync_entry_notes(ctx, result["entry"], check=False, state="abandoned")
     return _lib.print_json(result)
+
+
+# Statuses a ship cannot be recorded from, and why: the first three are refused by /ship's step 1
+# (the reviews cannot be current), the rest already carry a record.
+SHIP_RECORD_REFUSED = {
+    "implementing": "the implementation is not finished, so the reviews cannot be current; run /execute-plan",
+    "blocked": "the plan is blocked; resolve it through /execute-plan",
+    "needs-context": "the plan needs context; resolve it through /execute-plan",
+    _lib.PARTIAL_STATUS: "this part is already recorded; the next part ships after /execute-plan and its own reviews",
+    "shipped": "the plan already shipped; merge the pull request",
+    "abandoned": "the plan is abandoned",
+}
+
+
+def one_line_arg(flag: str, value: str | None) -> str | None:
+    """A value stored in frontmatter and on a status line: stripped, non-empty, printable."""
+    if value is None:
+        return None
+    text = value.strip()
+    if not text or not text.isprintable():
+        raise _lib.FrameworkError(f"{flag} must be a non-empty printable value on one line, got {value!r}")
+    return text
+
+
+def command_ship_record(args: argparse.Namespace) -> int:
+    """Record what /ship landed, in the plan's frontmatter and its registry entry. The part is
+    computed (`_lib.ship_parts_state`), never typed: the first declared label not yet in
+    `shipped_parts`. Not the last part: `partially-shipped`, the part appended to
+    `shipped_parts`, `pr` set, no `completed`, and the plan's reason replaced by `--reason` or
+    cleared (it described the part that shipped). The last part, or nothing declared:
+    `shipped`, `completed`, `pr`, as `/ship` wrote it before 1.4.0, plus the record when parts
+    are declared; the reason is left unless `--reason` is given. Every refusal writes nothing."""
+    ctx = Ctx.load()
+    plan = ctx.plan_file(args.plan_path)
+    meta = _lib.read_frontmatter(plan)
+    if plan_kind_at(ctx, plan) == "epic":
+        raise _lib.FrameworkError("epics never ship; ship a milestone from its own branch", plan_path=ctx.repo_rel(plan))
+    status = meta.get("implementation_status")
+    if isinstance(status, str) and status in SHIP_RECORD_REFUSED:
+        raise _lib.FrameworkError(f"implementation_status is {status}: {SHIP_RECORD_REFUSED[status]}", plan_path=ctx.repo_rel(plan))
+    pr = one_line_arg("--pr", args.pr)
+    commit = one_line_arg("--commit", args.commit)
+    parts = _lib.ship_parts_state(meta)
+    if parts["problem"]:
+        raise _lib.FrameworkError(f"{parts['problem']}; repair it with plan-metadata-set before recording the ship", plan_path=ctx.repo_rel(plan))
+    if parts["declared"] and parts["next"] is None:
+        raise _lib.FrameworkError(
+            "every declared part is already in shipped_parts; add the part this pull request is to ship_parts, or clear ship_parts",
+            plan_path=ctx.repo_rel(plan),
+        )
+    key, entry, _plan = resolve_target(ctx, args.plan_path)
+    if key is None:
+        raise _lib.FrameworkError("no registry key for this plan: set registry_key in its frontmatter", code=2, plan_path=ctx.repo_rel(plan))
+
+    final = parts["final"]
+    word = "shipped" if final else _lib.PARTIAL_STATUS
+    updates: dict[str, Any] = {"workflow_status": word, "implementation_status": word, "pr": pr}
+    if final:
+        updates["completed"] = _lib.today()
+    if parts["declared"]:
+        record = {"part": parts["next"], "pr": pr, "shipped_at": _lib.now_iso()}
+        if commit:
+            record["commit"] = commit
+        updates["shipped_parts"] = parts["shipped"] + [record]
+    if args.reason is not None:
+        updates.update(reason=args.reason, reason_by="ship")
+    elif not final and any(r not in (None, "") for r in (meta.get("reason"), (entry or {}).get("reason"))):
+        updates["reason"] = ""
+    updates = _lib.stamp_reason(updates)  # one stamp, shared by the frontmatter and the entry
+
+    metadata = _lib.update_frontmatter(plan, updates)
+    entry_updates = dict(updates, plan_path=ctx.repo_rel(plan))
+    if commit:
+        entry_updates["commit"] = commit
+    entry = upsert_entry(ctx, key, (entry or {}).get("kind") or kind_for_key(key), entry_updates)
+    return _lib.print_json(
+        {
+            "status": "ok",
+            "plan_path": ctx.repo_rel(plan),
+            "key": key,
+            "part": parts["next"],
+            "final": final,
+            "remaining": parts["remaining"][1:],
+            "metadata": metadata,
+            "entry": entry,
+        }
+    )
 
 
 def command_link_parent(args: argparse.Namespace) -> int:
@@ -1555,6 +1649,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("target", help="registry key or plan path")
     p.add_argument("--reason", required=True)
     p.set_defaults(func=command_abandon)
+
+    p = sub.add_parser("ship-record", help="Record a shipped pull request on a plan: the whole plan, or its next declared part")
+    p.add_argument("plan_path")
+    p.add_argument("--pr", required=True, help="the pull request URL")
+    p.add_argument("--commit", help="the commit that landed (short SHA)")
+    p.add_argument("--reason", help="replaces the plan's reason, as reason_by=ship; a partial ship without it clears the reason")
+    p.set_defaults(func=command_ship_record)
 
     p = sub.add_parser("quickfix-register", help="Create or update a quickfix entry")
     p.add_argument("--slug", required=True)

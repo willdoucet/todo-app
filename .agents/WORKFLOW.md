@@ -126,10 +126,12 @@ Every plan carries frontmatter the helpers read and write. Skills set these thro
 |---|---|
 | `plan_kind` | `feature`, `epic` |
 | `plan_mode` | `single-task`, `batch-note`, `feature`, `quickfix`, `epic` |
-| `implementation_status` | `not-started`, `implementing`, `ready-for-review`, `shipped`, `blocked`, `needs-context`, `abandoned` |
-| `workflow_status` | `planning`, `plan-approved`, `ceo-reviewed`, `eng-reviewed`, `adversarial-reviewed`, `design-reviewed`, `implementing`, `ready-for-review`, `shipped`, `blocked`, `needs-context`, `abandoned`, `escalated` |
+| `implementation_status` | `not-started`, `implementing`, `ready-for-review`, `partially-shipped`, `shipped`, `blocked`, `needs-context`, `abandoned` |
+| `workflow_status` | `planning`, `plan-approved`, `ceo-reviewed`, `eng-reviewed`, `adversarial-reviewed`, `design-reviewed`, `implementing`, `ready-for-review`, `partially-shipped`, `shipped`, `blocked`, `needs-context`, `abandoned`, `escalated` |
 | `review_status` | list of completed reviews: `ceo-reviewed`, `eng-reviewed`, `adversarial-reviewed`, `design-reviewed`, `impl-reviewed`, `qa-done`, `design-audited`, `final-reviewed` |
 | `ui_scope` | `true` when the plan changes anything a user sees |
+| `ship_parts` | the pull requests a plan ships as, in order (`["PR1a", "PR1b", "PR2"]`); unset when it ships as one |
+| `shipped_parts` | one record per part `/ship` landed (`part`, `pr`, `commit`, `shipped_at`), written by `obsidian-workflow ship-record` |
 | `risk_tags` | list drawn from `auth`, `infra`, `data`, `payments`, `security`, `migration` |
 | `parent_epic`, `milestone` | set on epic children |
 | `registry_key` | the registry entry this plan belongs to |
@@ -139,8 +141,16 @@ Registry entries live one per file under `state/registry/entries/`. Keys: `Notes
 and `Notes/File.md#batch` for vault-sourced work (paths relative to the vault root),
 `plan:<safe-branch>` for freeform features, `quickfix:<slug>`, `epic:<slug>`.
 
+A plan that ships in parts keeps one plan file for every part. `/ship` records each part with
+`obsidian-workflow ship-record`, which computes it from `ship_parts`: a part that is not the last
+leaves the plan `partially-shipped` (no `completed`, no note box, the roadmap row still
+`implementing`), and `workflow-state --next` names `/execute-plan` for the next part. The last
+part ships the plan as usual.
+
 The review log is `state/review-log.jsonl`. A review is current when it was logged against the
-current plan file. Age is informational only. Every entry's `status` is one of `clean`,
+current plan file, and, for the implementation review, adversarial subagent, QA, design audit
+and final review, dated after the plan's last partial ship (the `ship` entry with
+`partial: true`): each part runs its own. Plan reviews count for every part. Age is informational only. Every entry's `status` is one of `clean`,
 `issues_open`, `resolved`, `done`, defined once in `skills/_shared/obsidian-sync.md` → Review
 log; `review-log` refuses any other word, and `workflow-state` gates on their dispositions: a
 review that ran and did not pass blocks its stage until it is re-run or resolved, while a
@@ -198,4 +208,6 @@ All state is in the repo, so any step can run in any harness.
 - **quickfix log**: `plans/quickfixes/LOG.md`, one block per completed quickfix.
 - **doc map**: the path-to-doc ownership table in `config.json`.
 - **ready-for-review**: execute-plan finished; reviews may begin.
+- **partially-shipped**: a declared part landed as its own pull request; the plan continues
+  with the next part through `/execute-plan`.
 - **shipped**: committed, pushed, pull request open, registry updated, note box checked.

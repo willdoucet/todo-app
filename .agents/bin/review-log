@@ -29,6 +29,11 @@ nothing else may, and a `rereview_note` with no declaration is refused. On read 
 review's name until that review runs again without one. The keys the reader derives
 (`_lib.READER_ONLY_KEYS`) are refused in both forms.
 
+A plan that ships in parts: `ship` logs `--field part=<label>`, and `--field partial=true`
+when the pull request did not complete the plan. `partial` is refused on any other skill and
+as anything but a boolean, and a partial ship without its `part` is refused. On read that
+entry closes the part's ship stage, so a ship-stage entry dated at or before it is refused.
+
 Prints the stored entry as JSON. On any rejection prints a JSON error and writes nothing;
 exit 2 when the log has unreadable lines, or when no plan resolves for a `resolved` entry or a
 non-empty demand.
@@ -127,6 +132,11 @@ def build_entry(args: argparse.Namespace) -> dict:
 #   concern, when present:
 #     status != resolved                           no ─▶ a resolution record carries no concern
 #     non-empty str                                no ─▶ quote it (parse_scalar makes 42 a number)
+#   partial, when present: skill == ship, a bool   no ─▶ ship's alone; true or false
+#   part on a ship entry: non-empty str            no ─▶ the label that shipped
+#   ship with partial true ⇒ part present          no ─▶ a partial ship names its part
+#   ship-stage skill, the plan has a partial ship:
+#     ts > that ship's ts                          no ─▶ the reader drops it (a tie too)
 #   plan review logging clean | issues_open        ⇒ `rereview` present (the declaration)
 #                                                  no ─▶ names --rereview none / --rereview <skill>
 #   rereview_note without rereview                 no ─▶ a note belongs to a declaration (any skill, any status)
@@ -233,6 +243,36 @@ def validate_declaration(root: Path, cfg: dict, entry: dict, entries: list[dict]
             )
 
 
+def validate_part(root: Path, cfg: dict, entry: dict, entries: list[dict] | None = None) -> None:
+    """A plan that ships in parts. `partial` is ship's alone and a JSON boolean; a partial ship
+    names its `part`. After one, a ship-stage entry dated at or before it is refused: the reader
+    drops it (`_lib.plan_review_history`), so it would be stored and never count."""
+    skill = entry["skill"]
+    if "partial" in entry:
+        if skill != "ship":
+            raise _lib.FrameworkError("partial belongs on a ship entry: it marks a pull request that did not complete its plan")
+        if not isinstance(entry["partial"], bool):
+            raise _lib.FrameworkError(f"partial is true or false, got {entry['partial']!r}")
+    if skill == "ship" and "part" in entry and not _non_empty_str(entry["part"]):
+        raise _lib.FrameworkError(f"part is the label of the part that shipped, a non-empty string; got {entry['part']!r}")
+    if skill == "ship" and entry.get("partial") is True and "part" not in entry:
+        raise _lib.FrameworkError('a partial ship names its part: --field part="<label>" (ship-record prints it)')
+    if skill not in _lib.SHIP_STAGE_SKILLS:
+        return
+    plan = entry.get("plan")
+    if not plan:
+        found, _kind = _lib.current_plan(root, cfg, _lib.current_branch(root))
+        plan = found.name if found else None
+    if not plan:
+        return
+    boundary = _lib.plan_review_history(root, cfg, plan, entries)["part_boundary"]
+    if boundary is not None and entry["ts"] <= boundary:
+        raise _lib.FrameworkError(
+            f"ts {entry['ts']!r} is at or before the partial ship on {plan} ({boundary or 'undated'}); ship-stage entries count "
+            "only after it, so this one would never count. Omit ts to stamp now; if now is earlier, this machine's clock is behind"
+        )
+
+
 def validate_entry(root: Path, cfg: dict, entry: dict, entries: list[dict] | None = None) -> dict:
     """`entries` is the log as `main` already scanned it; the rules that read history use it
     instead of reading the file again."""
@@ -268,6 +308,7 @@ def validate_entry(root: Path, cfg: dict, entry: dict, entries: list[dict] | Non
             raise _lib.FrameworkError("concern belongs on a run entry; a resolved record carries none (the run it resolves keeps its own)")
         if not _non_empty_str(entry["concern"]):
             raise _lib.FrameworkError(f"concern must be a non-empty string, got {entry['concern']!r}; quote it: --field concern=\"...\"")
+    validate_part(root, cfg, entry, entries)
     validate_declaration(root, cfg, entry, entries)
     if status != "resolved":
         return entry

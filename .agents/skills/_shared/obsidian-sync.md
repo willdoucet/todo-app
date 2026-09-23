@@ -17,7 +17,7 @@ registry files, or note files by hand. The block below is parameterized by `STAT
 | qa | unchanged | `qa-done` |
 | design-review | unchanged | `design-audited` |
 | final-review | unchanged | `final-reviewed` |
-| ship | `shipped` (+ `implementation_status=shipped`, `completed=<utc-date>`) | none |
+| ship | `shipped` (+ `implementation_status=shipped`, `completed=<utc-date>`); `partially-shipped` for a declared part that is not the last. Written by `obsidian-workflow ship-record`, not this block | none |
 
 ```bash
 "$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" \
@@ -41,7 +41,8 @@ value verbatim; the helper accepts objects or plain ids.
 
 Rules:
 
-- Only `/ship` and `/quickfix` check task boxes (`note-update --check`). No review does.
+- Only `/ship` and `/quickfix` check task boxes (`note-update --check`). No review does, and
+  `/ship` does not after a partial ship: the task is the whole plan's.
 - Whenever you write a `reason`, in both commands, say who is writing it: `--set reason="..."
   --set reason_by=<your skill>` (`operator` when the user dictated it). The helper stamps the
   UTC time itself (`reason_at`), and the banner prints `Reason:  /<skill> (<utc-date>): <text>` until

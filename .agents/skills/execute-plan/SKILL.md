@@ -6,7 +6,8 @@ description: >-
   step, verifies each step's behavior against the plan and the eng-review test artifact,
   consumes the design source of truth and the adversarial summary, runs /update-docs when the
   last step lands, and leaves the plan in ready-for-review. Never commits and never checks a
-  note box. Resumes safely, including multi-PR plans where part of the work already merged.
+  note box. Resumes safely, including a plan that ships in parts (partially-shipped) whose
+  earlier part merged.
   Use when asked to "execute the plan", "implement the plan", "start implementation",
   "continue implementation", "resume the plan", or "pick up where we left off". Refuses epics
   and the base branch.
@@ -39,7 +40,8 @@ belong to `/ship`.
 - A feature plan has passed `/plan-eng-review` (and `/plan-design-review` when it has UI scope)
   and `workflow-state --next` names `/execute-plan`.
 - Implementation started earlier and needs to continue, on this branch or after a merged
-  first pull request of a multi-PR plan.
+  part of a plan that ships in parts: the plan reads `partially-shipped` and `--next` names
+  this skill.
 - The plan is `blocked` or `needs-context` and the blocker is now resolved.
 
 ## Do not use when
@@ -48,7 +50,9 @@ belong to `/ship`.
   `/office-hours <epic file>#Mx`.
 - There is no plan yet. Use `/office-hours`.
 - The change is small enough for `/quickfix`.
-- The plan is already `shipped`. Supersede it with a new plan through `/office-hours`.
+- The plan is already `shipped`. Supersede it with a new plan through `/office-hours`. A plan
+  that ships in parts reads `partially-shipped` between its pull requests, never `shipped`
+  until its last declared part ships (`ship_parts`, recorded by `/ship`).
 
 ## Procedure
 
@@ -99,7 +103,11 @@ that are in progress), when:
 - `plan_kind` is `epic`: print "Epics never execute; start a milestone with
   `/office-hours <epic file>#Mx`" and report `NEEDS_CONTEXT`.
 - `implementation_status` is `shipped`: print "This plan shipped; supersede it through
-  `/office-hours`" and report `NEEDS_CONTEXT`.
+  `/office-hours`" and report `NEEDS_CONTEXT`. `/ship` writes `shipped` only for the part
+  that completes the plan; `partially-shipped` is not refused. When a plan meant to ship in parts
+  reads `shipped` after its first pull request, it was shipped before its parts were declared:
+  say so, and ask whether to supersede it through `/office-hours` or have the operator restore
+  its status and declare `ship_parts`.
 
 If `parent_epic` is set, run `epic-get` per plan-discovery and read the child's
 `## Inherited constraints` section. Those are the contract. If a step would break one, stop
@@ -202,8 +210,9 @@ in this file to show progress, so a box anywhere else miscounts. A finished step
 **Reconcile** when the file exists. Read it and compare its boxes with reality before doing
 anything. Signals that the boxes are behind: the registry entry
 (`"$BIN/obsidian-workflow" registry-get "$REGISTRY_KEY"`) carries a commit or pull request;
-`implementation_status` is `ready-for-review`; the plan body says an earlier pull request
-merged; or steps the summary shows open are already on the base branch:
+`implementation_status` is `ready-for-review` or `partially-shipped`; the plan's
+`shipped_parts` records a part; the plan body says an earlier pull request merged; or steps
+the summary shows open are already on the base branch:
 
 ```bash
 git log "$BASE_BRANCH" --oneline -n 20
@@ -215,6 +224,19 @@ When any signal fires, list every step with the box you believe is right and the
 confirm this list, or tell me which steps are actually done. Tick the confirmed steps with a
 `(reconciled <utc-date>)` note before continuing. This is what makes multi-PR plans resumable;
 guessing here makes the second pull request redo or skip work.
+
+**The next part** of a plan that ships in parts (`implementation_status` was
+`partially-shipped` before step 3 ran; the `Parts:` line of the banner names it). First confirm
+the last recorded part's pull request merged; its URL is the last `pr` in `shipped_parts`:
+
+```bash
+gh pr view "$LAST_PART_PR" --json state -q .state
+```
+
+Anything but `MERGED`, or no `gh`, is one question before any code: this part's commits would
+otherwise land in the open pull request of the last one. Then append this part's steps under
+`## Steps`, after the boxes of the parts that shipped, each objective prefixed with the part's
+label (`- [ ] Step 10 — PR1b: <objective>`); earlier boxes stay as they are.
 
 ### 7. Surface assumptions
 
