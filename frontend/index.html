@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Release smoke check 8 (infra/release-smoke.py) reads this. Vite fills it at build time
+         from VITE_GIT_COMMIT (vercel.json passes VERCEL_GIT_COMMIT_SHA). An unset variable leaves
+         the literal placeholder, which the check treats as a failure. -->
+    <meta name="build-commit" content="%VITE_GIT_COMMIT%" />
     <title>Family Planner</title>
   </head>
   <body>

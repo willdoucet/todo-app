@@ -125,6 +125,44 @@ jobs:
         working-directory: frontend
         run: npm run test:run
 
+      - name: Build with the commit stamp
+        # M8: release smoke check 8 reads <meta name="build-commit"> from the
+        # deployed index.html. Vite substitutes %VITE_GIT_COMMIT% at build time
+        # (vercel.json passes VERCEL_GIT_COMMIT_SHA); this proves the substitution
+        # and runs the production build as its own step.
+        working-directory: frontend
+        env:
+          VITE_GIT_COMMIT: ${{ github.sha }}
+          # The production env shape (REVIEW_CHECKLIST → Vite): without it the bundle
+          # builds but apiBase.js throws on load.
+          VITE_API_BASE_URL: https://api.mealy.dev
+        run: |
+          npm run build
+          grep -q "<meta name=\"build-commit\" content=\"${VITE_GIT_COMMIT}\"" dist/index.html \
+            || { echo "::error::dist/index.html does not carry build-commit ${VITE_GIT_COMMIT}"; exit 1; }
+
+  infra-tests:
+    # M8: the host-side operator scripts (infra/release-smoke.py,
+    # infra/cloudflare-drift.py). Standard library only; pytest is the one
+    # install. Same command as development-commands.md. Nothing here reaches
+    # production: every fly/curl/git call and the Cloudflare API are faked.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: python3 -m pip install 'pytest>=8,<10'
+
+      - name: Run infra tests
+        run: python3 -m pytest infra/tests -q
+
   visual-tests:
     # No `needs:` — the visual-test stack shares nothing with backend-tests or
     # frontend-tests and runs ~3 min. Parallel scheduling saves wall-time per PR.

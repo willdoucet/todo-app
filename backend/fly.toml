@@ -45,7 +45,11 @@ primary_region = "sjc"
   worker = "celery -A app.celery_app worker --loglevel=info --concurrency=2 --without-gossip --without-mingle --without-heartbeat"
   # Beat must be exactly one process — multiple beat instances would fire
   # the iCloud sync schedule N times every 10 min and corrupt task state.
-  # Singleton invariant enforced via `fly scale count beat=1` post-deploy.
+  # Machine counts cannot be expressed in this file: they are set out-of-band
+  # with `fly scale count` and pinned in infra/fly-scale.json (web=1, worker=1,
+  # beat=1). `infra/release-smoke.py` check 3 diffs `fly machines list --json`
+  # against that file on every release, and asserts its keys equal the
+  # [processes] keys here. `min_machines_running` below is a floor, not a cap.
   # --schedule writes the shelve DB to /tmp because /app is owned by root
   # in the prod image (USER appuser cannot write the default cwd location).
   beat = "celery -A app.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule"

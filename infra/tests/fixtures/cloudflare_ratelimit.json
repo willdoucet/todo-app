@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result": {
+    "id": "rs_ratelimit_example",
+    "name": "default",
+    "kind": "zone",
+    "phase": "http_ratelimit",
+    "rules": [
+      {
+        "id": "rule_ratelimit_example",
+        "version": "1",
+        "action": "block",
+        "expression": "(starts_with(http.request.uri.path, \"/auth/\"))",
+        "description": "Mealy api-auth burst limit",
+        "enabled": true,
+        "ratelimit": {
+          "characteristics": ["cf.colo.id", "ip.src"],
+          "period": 10,
+          "requests_per_period": 5,
+          "mitigation_timeout": 10
+        }
+      }
+    ]
+  }
+}

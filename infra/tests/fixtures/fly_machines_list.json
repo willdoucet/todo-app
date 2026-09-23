@@ -1,0 +1,41 @@
+[
+  {
+    "id": "2861e54f9dee48",
+    "name": "web-1",
+    "state": "started",
+    "region": "sjc",
+    "image_ref": {"registry": "registry.fly.io", "repository": "mealy-app-prod", "tag": "deployment-01"},
+    "created_at": "2026-04-30T23:34:58Z",
+    "updated_at": "2026-09-21T16:00:00Z",
+    "config": {"metadata": {"fly_platform_version": "v2", "fly_process_group": "web", "fly_release_version": "40"}}
+  },
+  {
+    "id": "d8d2e06fed20d8",
+    "name": "worker-1",
+    "state": "started",
+    "region": "sjc",
+    "image_ref": {"registry": "registry.fly.io", "repository": "mealy-app-prod", "tag": "deployment-01"},
+    "created_at": "2026-04-30T23:47:18Z",
+    "updated_at": "2026-09-21T16:00:00Z",
+    "config": {"metadata": {"fly_platform_version": "v2", "fly_process_group": "worker", "fly_release_version": "40"}}
+  },
+  {
+    "id": "d894036c173778",
+    "name": "beat-1",
+    "state": "started",
+    "region": "sjc",
+    "image_ref": {"registry": "registry.fly.io", "repository": "mealy-app-prod", "tag": "deployment-01"},
+    "created_at": "2026-09-10T15:25:48Z",
+    "updated_at": "2026-09-21T16:00:00Z",
+    "config": {"metadata": {"fly_platform_version": "v2", "fly_process_group": "beat", "fly_release_version": "40"}}
+  },
+  {
+    "id": "e7840d1234abcd",
+    "name": "release-command",
+    "state": "destroyed",
+    "region": "sjc",
+    "created_at": "2026-09-21T15:59:00Z",
+    "updated_at": "2026-09-21T15:59:40Z",
+    "config": {"metadata": {"fly_process_group": "fly_app_release_command"}}
+  }
+]
