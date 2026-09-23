@@ -7,13 +7,15 @@ milestone: "M8"
 ui_scope: true
 risk_tags: ["infra", "security", "auth", "data", "migration"]
 ship_parts: ["PR1a", "PR1b", "PR2"]
-workflow_status: "ready-for-review"
+workflow_status: "partially-shipped"
 review_status: ["ceo-reviewed", "eng-reviewed", "adversarial-reviewed", "design-reviewed", "impl-reviewed", "final-reviewed"]
-implementation_status: "ready-for-review"
-reason: "Final review clean (30 found, 0 open; plan overruled on the frontend rollback and the break-glass clear). PR1b and PR2 remain under this plan (ship_parts). Before the PR1a deploy (carried from the operator's note): the two Vercel toggles, confirm/enable a restore point, fly scale count web=1 (now also RUNBOOK 0). New: a missing /assets chunk is served as year-cached HTML, so every frontend rollback needs RUNBOOK 5.1's Cloudflare purge until TODOS P2 lands; consider the read-only smoke subsets against production before merge."
-reason_by: "final-review"
-reason_at: "2026-09-23T04:00:39Z"
-updated_at: "2026-09-23T04:00:39Z"
+implementation_status: "partially-shipped"
+shipped_parts: [{"part": "PR1a", "pr": "https://github.com/willdoucet/todo-app/pull/60", "shipped_at": "2026-09-23T16:07:56Z", "commit": "6f0a608"}]
+reason: "PR1a shipped as #60 (not merged). Before merging it: the two Vercel toggles, confirm/enable a restore point, fly scale count web=1 (RUNBOOK 0); consider the read-only smoke subsets against production. After merge: Between the PRs steps 0-6. Before PR1b's /execute-plan: merge master into prod-launch-release (PR1a's squash), and never change ship_parts."
+reason_by: "ship"
+reason_at: "2026-09-23T16:07:56Z"
+updated_at: "2026-09-23T16:07:56Z"
+pr: "https://github.com/willdoucet/todo-app/pull/60"
 ---
 # Design: M8 — `prod-launch-release`
 
