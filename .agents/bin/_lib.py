@@ -492,11 +492,13 @@ FRONTMATTER_ORDER = [
     "milestone",
     "ui_scope",
     "risk_tags",
+    "ship_parts",
     "supersedes",
     "workflow_status",
     "review_status",
     "implementation_status",
     "completed",
+    "shipped_parts",
     "reason",
     "reason_by",
     "reason_at",
@@ -557,9 +559,11 @@ def write_frontmatter(path: Path, meta: dict, order: list[str] | None = None) ->
     atomic_write(path, render_frontmatter(meta, order) + body)
 
 
-def update_frontmatter(path: Path, updates: dict, appends: dict | None = None) -> dict:
-    """Merge updates into a plan's frontmatter. `appends` adds to list-valued keys without duplicates."""
-    meta = read_frontmatter(path)
+def merge_frontmatter(meta: dict, updates: dict, appends: dict | None = None) -> dict:
+    """`meta` with `updates` set and `appends` added to list-valued keys without duplicates.
+    Pure: a caller that validates the result (`ship_parts`) merges first and writes nothing on
+    a refusal."""
+    meta = dict(meta)
     meta.update(updates)
     for key, values in (appends or {}).items():
         current = meta.get(key)
@@ -567,10 +571,18 @@ def update_frontmatter(path: Path, updates: dict, appends: dict | None = None) -
             current = []
         elif isinstance(current, str):
             current = [current]
+        elif isinstance(current, list):
+            current = list(current)  # the caller's `meta` keeps its own list
         for v in values if isinstance(values, list) else [values]:
             if v not in current:
                 current.append(v)
         meta[key] = current
+    return meta
+
+
+def update_frontmatter(path: Path, updates: dict, appends: dict | None = None) -> dict:
+    """Merge updates into a plan's frontmatter. `appends` adds to list-valued keys without duplicates."""
+    meta = merge_frontmatter(read_frontmatter(path), updates, appends)
     meta["updated_at"] = now_iso()
     write_frontmatter(path, meta)
     return meta
@@ -615,6 +627,83 @@ def stamp_reason(updates: dict, appends: dict | None = None) -> dict:
 
 def truthy(value: Any) -> bool:
     return value is True or (isinstance(value, str) and value.strip().lower() in ("true", "yes", "1"))
+
+
+# --------------------------------------------------------------------------
+# A plan that ships in parts
+# --------------------------------------------------------------------------
+#
+# One plan file, more than one pull request. `ship_parts` in the plan's frontmatter declares
+# the parts in order (`["PR1a", "PR1b", "PR2"]`); `shipped_parts` records each part that
+# `obsidian-workflow ship-record` landed, as {part, pr, commit, shipped_at}. The part being
+# shipped is the first declared label no record names; it completes the plan when no other
+# declared label is left. Nothing declared: the pull request completes the plan, as in 1.3.
+#
+#   ship-record ─▶ a declared label is left after this one ─▶ partially-shipped, no `completed`
+#               └▶ none is left, or nothing is declared    ─▶ shipped, `completed`
+#
+# Between two parts the plan reads `partially-shipped`: `workflow-state --next` names
+# /execute-plan and the epic counts the milestone in progress. The `ship` entry logged with
+# `partial: true` closes that part's ship stage on read (`plan_review_history`).
+
+PARTIAL_STATUS = "partially-shipped"
+
+
+def ship_parts_problem(value: Any) -> str | None:
+    """Why a `ship_parts` value is not a declaration, or None. Unset, "" and [] declare nothing;
+    otherwise it is a JSON list of distinct labels, each a non-empty printable string without
+    surrounding spaces. `plan-metadata-set` refuses a value this rejects; readers show it."""
+    if value in (None, "", []):
+        return None
+    if not isinstance(value, list):
+        return f'ship_parts must be a JSON list of part labels, such as ["PR1", "PR2"]; got {one_line(value, 80)}'
+    for label in value:
+        if not isinstance(label, str) or not label.strip() or not label.isprintable() or label != label.strip():
+            return f"each ship_parts label is a non-empty printable string without surrounding spaces; got {one_line(label, 80)}"
+    if len(set(value)) != len(value):
+        return "ship_parts labels must be distinct"
+    return None
+
+
+def ship_parts_state(meta: dict) -> dict:
+    """The parts of a plan, from its frontmatter. Pure, and never raises: the banner reads it.
+
+    `declared`: the `ship_parts` labels ([] when unset or malformed). `shipped`: the
+    `shipped_parts` records, each a dict whose `part` is a non-empty string, its other values
+    kept only when they are strings. `remaining`: the declared labels no record names, in
+    declared order. `next`: the first of them, or None. `final`: shipping `next` completes the
+    plan (nothing declared is one part, so final). `total`: records plus remaining, 0 when
+    nothing is declared. `problem`: a sentence when either key is malformed, else None;
+    `ship-record` refuses on it, `workflow-state` prints it, and with a problem nothing is
+    `remaining`."""
+    raw_declared = meta.get("ship_parts")
+    raw_shipped = meta.get("shipped_parts")
+    problem = ship_parts_problem(raw_declared)
+    declared = list(raw_declared) if problem is None and isinstance(raw_declared, list) else []
+    shipped: list[dict] = []
+    if raw_shipped not in (None, "", []):
+        if not isinstance(raw_shipped, list):
+            problem = problem or "shipped_parts must be a JSON list of records written by ship-record"
+        else:
+            for record in raw_shipped:
+                part = record.get("part") if isinstance(record, dict) else None
+                if not isinstance(part, str) or not part.strip():
+                    problem = problem or "each shipped_parts record names its part: {\"part\": \"<label>\", \"pr\": \"<url>\", ...}"
+                    continue
+                shipped.append({k: v for k, v in record.items() if isinstance(v, str)})
+    labels = [r["part"] for r in shipped]
+    if len(set(labels)) != len(labels):
+        problem = problem or "a part is recorded twice in shipped_parts"
+    remaining = [] if problem else [p for p in declared if p not in labels]
+    return {
+        "declared": declared,
+        "shipped": shipped,
+        "remaining": remaining,
+        "next": remaining[0] if remaining else None,
+        "final": not declared or len(remaining) <= 1,
+        "total": len(shipped) + len(remaining) if declared else 0,
+        "problem": problem,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -1095,6 +1184,15 @@ def is_run(entry: dict) -> bool:
 #   before the run it overtakes", `can_demand`), so the writer and the reader cannot disagree
 #   about what a run or a demand is.
 #
+#   A plan that ships in parts. Before anything else, pass 1 finds the plan's part boundary:
+#   the newest `ts` of a `ship` entry whose `partial` is true (`_lib.truthy`). Every entry of a
+#   SHIP_STAGE_SKILLS review dated at or before it is dropped (a tie drops: the next part's
+#   review runs again), with every resolution and demand among them. Plan-stage reviews and
+#   the `ship` rows are kept. So after PR1a ships, PR1b reads its implementation and final
+#   reviews as missing until they run on PR1b; a failed QA or design audit of PR1a reads
+#   missing too. Undated entries are the oldest here as well: an undated boundary drops only
+#   undated ship-stage entries.
+#
 #   Accepted limit: order is `ts` alone. A run of X made on another branch against the same
 #   plan file, dated after a demand and union-merged in later, clears that demand without having
 #   seen the change. Nothing on a log line proves what a run read (reviews run on uncommitted
@@ -1108,12 +1206,21 @@ def is_run(entry: dict) -> bool:
 #   against an undated run. Counting it as always outstanding would leave `--next` naming a
 #   review no re-run can clear. A hand-appended line is repaired by fixing or deleting it;
 #   migrated history is left as it is, where as the oldest run it yields to any dated one.
+def part_boundary(ship_entries: list[dict]) -> str | None:
+    """The newest `ts` among a plan's `ship` entries logged with a true `partial`, or None.
+    `review_ts` reads an undated entry as "", the oldest."""
+    stamps = [review_ts(e) for e in ship_entries if truthy(e.get("partial"))]
+    return max(stamps) if stamps else None
+
+
 def plan_review_history(root: Path, cfg: dict, plan_name: str, entries: list[dict] | None = None) -> dict:
     """Pass 1. {"entries": {skill: [entries sorted by ts]}, "runs": {skill: [runs]},
-    "demands": [(declarer, target, ts, note)]}. Reader-only keys are stripped from every
-    entry first; a demand survives only when the reader can re-check it (diagram above).
-    `entries` is the log as the caller already read it (`review_log_scan`); left out, it is read
-    here. A caller that scanned for unreadable lines passes them on rather than reading twice."""
+    "demands": [(declarer, target, ts, note)], "part_boundary": ts or None}. Reader-only keys
+    are stripped from every entry first, then ship-stage entries at or before the part
+    boundary are dropped; a demand survives only when the reader can re-check it (diagram
+    above). `entries` is the log as the caller already read it (`review_log_scan`); left out,
+    it is read here. A caller that scanned for unreadable lines passes them on rather than
+    reading twice."""
     entries_by_skill: dict[str, list[dict]] = {}
     all_entries = review_log_read(root, cfg)[0] if entries is None else entries
     for raw in all_entries:
@@ -1123,6 +1230,12 @@ def plan_review_history(root: Path, cfg: dict, plan_name: str, entries: list[dic
         if not isinstance(skill, str) or not skill:
             continue
         entries_by_skill.setdefault(skill, []).append(strip_reader_only(raw))
+    boundary = part_boundary(entries_by_skill.get("ship", []))
+    if boundary is not None:
+        for skill in SHIP_STAGE_SKILLS:
+            kept = [e for e in entries_by_skill.pop(skill, []) if review_ts(e) > boundary]
+            if kept:
+                entries_by_skill[skill] = kept
     runs: dict[str, list[dict]] = {}
     for skill, items in entries_by_skill.items():
         items.sort(key=review_ts)  # stable: equal ts keeps file order, so the later line wins
@@ -1143,7 +1256,7 @@ def plan_review_history(root: Path, cfg: dict, plan_name: str, entries: list[dic
                 if demand not in seen:
                     seen.add(demand)
                     demands.append(demand)
-    return {"entries": entries_by_skill, "runs": runs, "demands": demands}
+    return {"entries": entries_by_skill, "runs": runs, "demands": demands, "part_boundary": boundary}
 
 
 def last_run(history: dict, skill: str) -> dict | None:
@@ -1233,7 +1346,7 @@ def reviews_for_plan(root: Path, cfg: dict, plan_name: str, entries: list[dict] 
 # --------------------------------------------------------------------------
 
 MILESTONE_DONE_STATUSES = ("shipped", "subsumed")
-MILESTONE_ACTIVE_STATUSES = ("implementing", "ready-for-review", "blocked", "needs-context")
+MILESTONE_ACTIVE_STATUSES = ("implementing", "ready-for-review", "blocked", "needs-context", PARTIAL_STATUS)
 
 
 def epic_slug_from_path(path: Path) -> str:

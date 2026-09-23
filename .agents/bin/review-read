@@ -16,7 +16,9 @@ run again) shows `stale` with `was`, `stale_by`, `stale_ts`, `stale_note`, `stal
 `stale_count`; a failed one with an outstanding demand carries `demanded_by`. `--all` lists
 entries and computes each one's disposition from that entry alone, with the reader-derived
 keys stripped first, so it never reads `stale`: staleness is a property of a review's
-current state, not of a line. A log with unreadable lines is an error (exit 2; the envelope
+current state, not of a line. Plan mode leaves out the ship-stage entries a partial ship
+closed (a plan that ships in parts, `_lib.plan_review_history`); `--all` still lists them.
+A log with unreadable lines is an error (exit 2; the envelope
 names the lines and carries "unreadable": N); nothing is printed as if a partial parse were
 the whole log.
 """

@@ -158,4 +158,8 @@ own re-run clears it). **ok** is `passed` or `resolved`; **blocking** is `failed
   refuses until the log is whole.
 
 A review counts only when it was logged against the current plan file. Superseding a plan resets
-the dashboard, by design.
+the dashboard, by design. A plan that ships in parts resets its ship stage at each partial ship:
+the implementation review, adversarial subagent, QA, design audit and final review read
+`missing` again for the next part (the dashboard's `Parts:` line says since when), while the
+plan reviews carry over. `ship (partial ship not logged)` in the missing list means a part was
+recorded without its `ship` log entry; `Next:` prints the command that logs it.

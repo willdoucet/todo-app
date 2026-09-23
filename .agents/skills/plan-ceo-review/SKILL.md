@@ -399,11 +399,12 @@ when every answer is no; `review-log` refuses the entry without one or the other
 adds `· re-review demanded by …` to that review's REVIEW REPORT row.
 
 ```bash
+KIND_FIELD=(); [ -n "$PLAN_KIND" ] && KIND_FIELD=(--field plan_kind="$PLAN_KIND")
 "$BIN/review-log" --skill plan-ceo-review --status "$STATUS" --plan "$(basename "$_PLAN_FILE")" \
   --rereview none \
   --field mode="$MODE" --field unresolved="$UNRESOLVED" \
   --field critical_gaps_found="$CRITICAL_GAPS_FOUND" --field critical_gaps_open="$CRITICAL_GAPS_OPEN" \
-  ${PLAN_KIND:+--field plan_kind="$PLAN_KIND"}
+  "${KIND_FIELD[@]}"
 ```
 
 `STATUS` is `clean` when unresolved decisions and `critical_gaps_open` are both zero, otherwise

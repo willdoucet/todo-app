@@ -7,7 +7,10 @@ eval "$("$(git rev-parse --show-toplevel)/.agents/bin/ctx")"
 BIN="$REPO_ROOT/.agents/bin"
 
 # Resolution order: explicit argument > registry > newest plan on this branch > the epic whose branch this is.
-_RESOLVED=$("$BIN/obsidian-workflow" resolve-plan ${PLAN_ARG:+--plan-path "$PLAN_ARG"} ${NOTE_REF:+--note-ref "$NOTE_REF"})
+_RESOLVE_ARGS=()   # an array: bash word-splits an unquoted ${VAR:+...}, zsh passes it as one argument
+[ -n "$PLAN_ARG" ] && _RESOLVE_ARGS+=(--plan-path "$PLAN_ARG")
+[ -n "$NOTE_REF" ] && _RESOLVE_ARGS+=(--note-ref "$NOTE_REF")
+_RESOLVED=$("$BIN/obsidian-workflow" resolve-plan "${_RESOLVE_ARGS[@]}")
 _PLAN_FILE=$(printf '%s' "$_RESOLVED" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("plan_path",""))')
 _PLAN_KIND=$(printf '%s' "$_RESOLVED" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("kind",""))')
 echo "Plan file: ${_PLAN_FILE:-none} (kind: ${_PLAN_KIND:-unknown})"

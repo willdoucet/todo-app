@@ -471,7 +471,7 @@ Discovered 2026-04-30 during M2 prod-deploy-skeleton Slice 2 (Fly).
 - Assuming feature completion status from prior conversation context without verifying current code.
 - Trusting animation-related class names without verifying that the underlying CSS or plugin actually exists.
 - Shipping CSS fixes based on theory instead of checking computed styles in the browser.
-- Treating `implementation_status: blocked` as a gate. Under framework 1.1.0 (unchanged through 1.3.1) a blocked or needs-context plan's `--next` still names `/execute-plan` ("resolve the blocker first: <reason>"), the execute-plan guard checks only that name, and its step 2 refuses only epics and shipped plans; only `/ship` refuses on `blocked`. The reason line is the whole control; TODOS.md carries the fix as P3. Found 2026-09-18 (UTC) by the scoped `/plan-eng-review` of `workflow-rereview-utc`.
+- Treating `implementation_status: blocked` as a gate. Under framework 1.1.0 (unchanged through 1.4.1) a blocked or needs-context plan's `--next` still names `/execute-plan` ("resolve the blocker first: <reason>"), the execute-plan guard checks only that name, and its step 2 refuses only epics and shipped plans; only `/ship` refuses on `blocked`. The reason line is the whole control; TODOS.md carries the fix as P3. Found 2026-09-18 (UTC) by the scoped `/plan-eng-review` of `workflow-rereview-utc`.
 
 ## Test isolation gotchas
 

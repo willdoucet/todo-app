@@ -6,9 +6,10 @@ description: >-
   base branch per the project's convention; runs the full test suites with no bypass; runs
   /update-docs; moves completed TODOS; makes conventional commits the doc guard has already
   passed; pushes; opens the pull request with the review dashboard, test evidence, and doc
-  sync report in its body; records shipped in the plan, registry, note box, and roadmap row;
-  logs the ship. Never merges, never deletes branches, never force-pushes; no version bump,
-  no changelog, no external review services. Use when asked to "ship", "ship it", "land
+  sync report in its body; records shipped in the plan, registry, note box, and roadmap row,
+  or, for a declared part of a plan that ships in parts, partially-shipped with no box
+  checked; logs the ship. Never merges, never deletes branches, never force-pushes; no version
+  bump, no changelog, no external review services. Use when asked to "ship", "ship it", "land
   this", "open the PR", "create the pull request", or "push and open a PR".
 disable-model-invocation: true
 metadata:
@@ -24,6 +25,12 @@ and open as a pull request whose body carries the evidence. Then records the shi
 the workflow reads state: plan frontmatter, registry, the note box, the roadmap row, the
 review log. Merging the pull request is the human's job; this skill never merges and never
 deletes a branch.
+
+A plan may ship as more than one pull request under one plan file. Its frontmatter declares
+the parts in order (`ship_parts`), and `ship-record` computes which part this pull request is.
+A part that is not the last leaves the plan `partially-shipped`: no `completed` date, no note
+box, the roadmap row still `implementing`, and the part's implementation and final reviews no
+longer count, so the next part runs its own.
 
 ## Read first
 
@@ -46,6 +53,7 @@ References in this directory, loaded when the procedure reaches them:
 - A hotfix branch must land before the second review can happen. One question, recorded.
 - A previous ship was interrupted. Every step re-verifies; commits and a pull request that
   already exist are reused and updated, never duplicated.
+- The next declared part of a plan that ships in parts is implemented and reviewed.
 
 ## Do not use when
 
@@ -53,6 +61,8 @@ References in this directory, loaded when the procedure reaches them:
 - The file is an epic. Epics never ship; their milestones do.
 - The plan is already `shipped`. Merge the pull request, or supersede the plan through
   `/office-hours`.
+- The plan is `partially-shipped`. That part is recorded: merge its pull request, then
+  `/execute-plan` continues with the next part.
 - The reviews have not run. Run them; the gate here is not negotiable outside a hotfix.
 - The user wants the pull request merged, the branch deleted, a version bumped, or a changelog
   written. None of those happen here.
@@ -72,11 +82,13 @@ On the base branch, stop with `NEEDS_CONTEXT`: there is no branch to land. Do no
 Follow `_shared/plan-discovery.md` including its metadata step; `plan-metadata-get` is the
 first concrete command after resolution. Capture `plan_mode`, `registry_key`,
 `source_note_path`, `source_note_ref`, `source_tasks`, `parent_epic`, `milestone`,
-`implementation_status`. Refuse, with `NEEDS_CONTEXT` and nothing written, when:
+`implementation_status`, `ship_parts`. Refuse, with `NEEDS_CONTEXT` and nothing written, when:
 
 - no plan resolves: "No plan on this branch. Quickfixes ship through `/quickfix`."
 - `plan_kind` is `epic`: "Epics never ship; ship a milestone from its own branch."
 - `implementation_status` is `shipped`: "Already shipped; merge the pull request."
+- `implementation_status` is `partially-shipped`: "This part is recorded; merge its pull
+  request, then `/execute-plan` continues with the next part."
 - `implementation_status` is `implementing`, `blocked`, or `needs-context`: the reviews
   cannot be current. Name the status and the skill that resolves it.
 
@@ -110,6 +122,45 @@ B) Ship now under the hotfix override; recorded in the pull request body and the
 If the user chooses B, set `HOTFIX_OVERRIDE=1`; steps 7 and 9 read it. Keep the dashboard
 text; it is pasted into the pull request body.
 
+Then the parts. Read them from the same JSON; `ship-record` computes the same answer at step 8:
+
+```bash
+"$BIN/workflow-state" --dashboard --json | python3 -c '
+import json, sys
+p = json.load(sys.stdin).get("parts") or {}
+if p.get("problem"):
+    print("PARTS: malformed: " + p["problem"]); sys.exit(1)
+if not p.get("declared"):
+    print("PARTS: none declared; this pull request completes the plan")
+elif not p.get("next"):
+    print("PARTS: every declared part is recorded; add this one to ship_parts"); sys.exit(1)
+elif p.get("final"):
+    print("PARTS: " + str(p["next"]) + " is the last part; this pull request completes the plan")
+else:
+    print("PARTS: " + str(p["next"]) + " is a partial ship; after it: " + ", ".join(p["remaining"][1:]))'
+```
+
+A non-zero exit is `NEEDS_CONTEXT`: repair `ship_parts` with `plan-metadata-set` first. When
+nothing is declared but the plan or `$SUMMARY_FILE` describes the work as more than one pull
+request (a "Scope of this run" section, part labels such as PR1 and PR2, "the first pull
+request"), do not assume it completes the plan. Ask one question:
+
+```
+RECOMMENDATION: Choose A because the plan ships as <n> pull requests and this is <label>;
+recording it as the whole plan marks the plan and its milestone shipped. Completeness: 10/10
+A) Declare the parts <labels, in order> and ship <label> as a partial ship
+B) This pull request completes the plan
+```
+
+On A, declare them and read the parts again:
+
+```bash
+"$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" --set ship_parts="$SHIP_PARTS_JSON"
+```
+
+`SHIP_PARTS_JSON` is a JSON list of distinct labels, such as `["PR1a","PR1b","PR2"]`; the
+helper refuses anything else and writes nothing.
+
 Then survey what will land. Execute-plan never commits, so most of the work is usually
 uncommitted; that is expected:
 
@@ -122,8 +173,9 @@ git diff "$BASE_BRANCH" --stat | tail -1
 A clean tree with no commits ahead of the base is nothing to ship: stop with `NEEDS_CONTEXT`.
 
 Finally write the `ASSUMPTIONS I'M MAKING` block from the preamble and stop for correction:
-the plan and branch, the sync convention you found (step 2), the test commands you will run
-(step 3), the intended commit split (step 6), and the pull request title.
+the plan and branch, the part (the `PARTS:` line), the sync convention you found (step 2), the
+test commands you will run (step 3), the intended commit split (step 6), and the pull request
+title.
 
 ### 2. Sync with the base branch
 
@@ -228,44 +280,60 @@ git push -u origin "$BRANCH"
 ```
 
 Never `--force`, never `--force-with-lease`. Then read `references/pr-body.md` and build the
-body: summary, plan and summary paths, epic and milestone, the dashboard from step 1 (with
-the hotfix override line when used), the test evidence from step 3, the doc sync report from
-step 4, the TODOS moved in step 5, deviations from the plan, and the intake source.
+body: summary, plan and summary paths, epic and milestone, the part, the dashboard from step 1
+(with the hotfix override line when used), the test evidence from step 3, the doc sync report
+from step 4, the TODOS moved in step 5, deviations from the plan, and the intake source.
 
 ```bash
-gh auth status >/dev/null 2>&1 && gh pr view --json url -q .url 2>/dev/null
+gh auth status >/dev/null 2>&1 && gh pr view --json url,state -q 'select(.state == "OPEN") | .url' 2>/dev/null
 ```
 
-With `gh` available: create the pull request against `$BASE_BRANCH` when none exists, or
-update the existing one's body; never open a second. Without `gh`: print the compare URL
+With `gh` available: create the pull request against `$BASE_BRANCH` when no open one exists,
+or update the open one's body; never open a second. Only an open pull request is this one: on
+the next part of a plan that ships in parts, the branch's earlier pull request is merged, and
+editing it would rewrite that part's record. Without `gh`: print the compare URL
 from the reference and the body for the user to paste, and carry on with that URL, reporting
 `DONE_WITH_CONCERNS` at the end because the pull request was not opened by this skill. Either
 way, `PR_URL` is now set. Fill it into the TODOS rows from step 5.
 
 ### 8. Record shipped
 
-Run the sync block from `_shared/obsidian-sync.md` with the `ship` row, adding the fields the
-row lists plus the pull request and commit:
+`ship-record` is the `ship` row of `_shared/obsidian-sync.md`: it writes the plan frontmatter
+and the registry entry in one call, and computes the part from `ship_parts`. On a partial
+ship, set `NEXT_REASON` to what the next part needs before it starts, such as the operator
+steps the plan places between the pull requests, or leave it empty; without it the plan's
+reason is cleared, since it described the part that just shipped.
 
 ```bash
-"$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" \
-  --set workflow_status=shipped --set implementation_status=shipped \
-  --set completed="$(date -u +%F)" --set pr="$PR_URL"
-"$BIN/obsidian-workflow" registry-upsert "$REGISTRY_KEY" \
-  --set plan_path="$_PLAN_FILE" --set workflow_status=shipped --set implementation_status=shipped \
-  --set completed="$(date -u +%F)" --set pr="$PR_URL" --set commit="$(git rev-parse --short HEAD)"
+REASON_ARGS=(); [ -n "$NEXT_REASON" ] && REASON_ARGS=(--reason "$NEXT_REASON")   # an array: bash and zsh agree
+SHIP_JSON=$("$BIN/obsidian-workflow" ship-record "$_PLAN_FILE" --pr "$PR_URL" \
+  --commit "$(git rev-parse --short HEAD)" "${REASON_ARGS[@]}")
+echo "$SHIP_JSON"
+RECORDED=; PART=; PARTIAL=
+eval "$(printf '%s' "$SHIP_JSON" | python3 -c '
+import json, shlex, sys
+d = json.load(sys.stdin); ok = d.get("status") == "ok"
+print("RECORDED=" + ("1" if ok else ""), "PART=" + shlex.quote(d.get("part") or ""), "PARTIAL=" + ("1" if ok and not d.get("final") else ""))')"
 ```
 
-Note-sourced plans check their boxes now, and only now. Compare the source tasks with the
-summary's deviations first: a task the plan dropped stays unchecked, and if a batch dropped
-one, ask one question before checking any (batch completion is all or nothing by design, so a
-dropped task means the plan should have been adjusted).
+`RECORDED` empty means the helper refused and wrote nothing: say why, check no box, and carry
+on to report `DONE_WITH_CONCERNS`. `PARTIAL=1` is a part that does not complete the plan:
+the plan and registry read `partially-shipped`, and no note box is checked, because the note
+task is the whole plan's.
+
+Note-sourced plans check their boxes now, and only now: after the part that completes the
+plan. Compare the source tasks with the summary's deviations first: a task the plan dropped
+stays unchecked, and if a batch dropped one, ask one question before checking any (batch
+completion is all or nothing by design, so a dropped task means the plan should have been
+adjusted).
 
 ```bash
-case "$PLAN_MODE" in
-  batch-note)  "$BIN/obsidian-workflow" note-update "$SOURCE_NOTE_PATH" --task-ids-json "$SOURCE_TASKS_JSON" --check ;;
-  single-task) "$BIN/obsidian-workflow" note-update "$SOURCE_NOTE_REF" --check ;;
-esac
+if [ -n "$RECORDED" ] && [ -z "$PARTIAL" ]; then
+  case "$PLAN_MODE" in
+    batch-note)  "$BIN/obsidian-workflow" note-update "$SOURCE_NOTE_PATH" --task-ids-json "$SOURCE_TASKS_JSON" --check ;;
+    single-task) "$BIN/obsidian-workflow" note-update "$SOURCE_NOTE_REF" --check ;;
+  esac
+fi
 ```
 
 Read the state back before claiming it; a sync you did not read is a sync you do not know
@@ -280,9 +348,12 @@ Then the roadmap. Invoke `/update-docs` a second time: the registry now says `sh
 marks the phase row, or the milestone row of an epic child, `shipped` with `<utc-date>`, the plan
 link, and `PR_URL`, and refreshes the epic's milestone count. This is the "Ship keeps it
 current" rule from the workflow; the first run could not do it because the status was not yet
-shipped.
+shipped. After a partial ship the registry says `partially-shipped`, and the row stays
+`implementing` (`in-progress` on a phase) with the part's pull request added, never
+`shipped`.
 
-If `modules.learning_summaries` is `true` in `$REPO_ROOT/.agents/config.json`, write the
+On the part that completes the plan, if `modules.learning_summaries` is `true` in
+`$REPO_ROOT/.agents/config.json`, write the
 plain-English summary from `references/learning-summary.md` to
 `$VAULT_DIR/Learning/<plan-name> - Plain English Summary.md`, where `<plan-name>` is
 `$(basename "$_PLAN_FILE" .md)`. Vault files are not committed by this skill.
@@ -295,13 +366,21 @@ If any command in this step fails, keep going through the rest, then report
 Log first so the entry rides in the commit:
 
 ```bash
-"$BIN/review-log" --skill ship --status done --plan "$(basename "$_PLAN_FILE")" --field pr="$PR_URL" \
-  ${HOTFIX_OVERRIDE:+--field hotfix_override=true --field skipped_reviews="$MISSING"}
+SHIP_FIELDS=(--field pr="$PR_URL")
+[ -n "$PART" ] && SHIP_FIELDS+=(--field part="$PART")
+[ -n "$PARTIAL" ] && SHIP_FIELDS+=(--field partial=true)
+[ -n "$HOTFIX_OVERRIDE" ] && SHIP_FIELDS+=(--field hotfix_override=true --field skipped_reviews="$MISSING")
+"$BIN/review-log" --skill ship --status done --plan "$(basename "$_PLAN_FILE")" "${SHIP_FIELDS[@]}"
 git add -A
 "$BIN/doc-guard" --staged --dry-run
-git commit -m "chore(workflow): record ship $(basename "$_PLAN_FILE" .md)"
+git commit -m "chore(workflow): record ship $(basename "$_PLAN_FILE" .md)${PART:+ ($PART)}"
 git push
 ```
+
+On a partial ship this entry is what closes the part's ship stage: from it on, the plan's
+implementation review, adversarial subagent, QA, design audit, and final review read as not
+yet run, and the next part runs them on its own diff. Until it is logged, `workflow-state`
+refuses to move on and prints this command.
 
 This commit holds the plan frontmatter, the registry entry, the review log, the roadmap row,
 and the TODOS pull request links. It touches no mapped code, so the guard passes without a
@@ -317,8 +396,9 @@ If the user corrected you at any point, add a Corrections Log row and the canoni
 
 Report one status per the completion protocol, with the change description:
 
-- **DONE**: pushed, pull request open at `PR_URL`, plan and registry `shipped`, note boxes
-  checked when there were any, roadmap row current, ship logged.
+- **DONE**: pushed, pull request open at `PR_URL`, plan and registry `shipped` (or
+  `partially-shipped` after a part that does not complete the plan), note boxes checked when
+  there were any and the plan is complete, roadmap row current, ship logged.
 - **DONE_WITH_CONCERNS**: landed, but the pull request was not opened by this skill, a state
   sync failed, a TODOS decision was declined, or the hotfix override was used. List each.
 - **BLOCKED**: a test suite failed, or a sync conflict was aborted. The branch is left as it
@@ -336,7 +416,8 @@ TESTS: <suite: N passed, M failed> ...
 DOCS: <DOC IMPACT line>
 COMMITS: <count> (<subjects>)
 PR: <PR_URL>
-RECORDED: plan, registry, note box (<n> tasks | n/a), roadmap row, review log
+PART: <label> (partial; next: <label>) | <label> (completes the plan) | whole plan
+RECORDED: plan, registry, note box (<n> tasks | n/a | not yet: partial), roadmap row, review log
 TODOS: completed [titles] | none
 CONCERNS: [list or none]
 ```
@@ -348,4 +429,6 @@ Never merge the pull request. Never delete the branch. Then:
 "$BIN/workflow-state" --next
 ```
 
-`--next` prints "merge the PR" for a shipped plan; present it as the last thing you say.
+`--next` prints "merge the PR" for a shipped plan, and `/execute-plan` with "<part> shipped
+(<url>) — merge it, then continue with <next part>" after a partial ship; present it as the last
+thing you say.
