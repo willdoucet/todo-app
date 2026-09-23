@@ -1,4 +1,5 @@
 {
+  "buildCommand": "VITE_GIT_COMMIT=$VERCEL_GIT_COMMIT_SHA npm run build",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "headers": [
     {

@@ -1,10 +1,19 @@
 # Cloudflare State (mealy.dev / api.mealy.dev)
 
 Canonical intent file for all Cloudflare dashboard state during M2-M7. The
-dashboard config itself is not in git (real drift detection via API or
-Terraform is M8 runbook scope, tracked in `.agents/docs/IMPLEMENTATION_PLAN.md`).
+dashboard config itself is not in git. Since M8, `infra/cloudflare-drift.py` diffs
+the live config against this file (read-only token, run from the release runbook),
+and `RUNBOOK.md` checks the same settings by eye on every release.
 This file is the diff-able intent — update in the same commit that changes
 the dashboard. Slice 7 manually reconciles file vs. live dashboard.
+
+The drift script reads these fields by their wording, so keep their shape when
+editing: the WAF rule's `Rule name:`, `Match:`, `Threshold:`, `Action:`,
+`Duration:` and `Status:` lines; the Transform Rule's `Rule name:`, `Status:`,
+backticked `(http.host …)` expression and `Header name:`; the Browser Cache TTL
+setting; the `## Access — Application …` headings (any not marked REMOVED counts as
+expected live); and the Bot Fight Mode `Setting:`. A field it cannot find is
+exit 2, never a silent pass.
 
 After M5 PR2 (2026-05-08), the `/plumbing-test*` backend endpoints are
 gone. The Application 2 Bypass policy was **removed 2026-05-14** in
@@ -130,6 +139,17 @@ against the session cookie; any dashboard TTL would override that and let a
 logged-out user on a shared device keep seeing cached photos. Verified in
 DevTools after the cutover (2026-09-11): a private image arrives with
 `cache-control: private, no-cache` unmodified and `cf-cache-status: BYPASS`.
+
+## Security — Bot Fight Mode
+
+Setting (Security → Bots → Bot Fight Mode): **not yet recorded**
+
+Recorded here because a challenge page answers before the app. When Bot Fight Mode (or
+any managed challenge) intercepts a request, `infra/release-smoke.py` sees an HTML
+interstitial where it expected JSON and classifies that as exit 2 (tooling), never as a
+broken deployment. Until a value is recorded, `infra/cloudflare-drift.py` prints the live
+state and does not call it drift. Record `**On**` or `**Off**` after the first drift-script
+run (M8 "Between the PRs" step 6), in the same commit as any dashboard change.
 
 ## WAF — Rate limiting rules
 
@@ -293,8 +313,13 @@ work through them in this order:
    is not being applied: check that it is **Deployed** rather than saved as a
    draft, is a **Request** (not Response) header rule, sits in the `mealy.dev`
    zone, and that its expression matches.
-3. Break-glass: redeploying the previous image restores service and reopens the
-   bypass. Safe for this change because it does not touch `fly.toml`.
+3. Break-glass: see
+   [incident-diagnostics.md → Break-glass](./incident-diagnostics.md#break-glass-the-origin-gate-during-a-cloudflare-outage).
+   *Expired 2026-09-21 (M8):* the line here used to say that redeploying the previous image
+   restores service. That was true on 2026-09-11, when the previous image predated the gate.
+   Every image since PR #46 contains it, so a rollback no longer removes it, and every
+   other lever fails closed. The working break-glass is the `GATE_BREAK_GLASS` flag, which
+   ships in M8 PR1b and is written up in that entry with its blast radius.
 
 ### Rotation
 

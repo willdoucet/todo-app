@@ -2,7 +2,7 @@
 
 > **This is the canonical source of truth for development, build, test, and run commands.**
 >
-> Referenced by [AGENTS.md](./AGENTS.md) (for Grok Build) and [CLAUDE.md](./CLAUDE.md) (for Claude Code compatibility).
+> Referenced by [AGENTS.md](../../AGENTS.md) (for Grok Build) and [CLAUDE.md](../../CLAUDE.md) (for Claude Code compatibility).
 
 ## Critical Rule
 
@@ -11,6 +11,7 @@
 Exceptions (host-side by design):
 - The framework helpers under `.agents/bin/` (`workflow-state`, `obsidian-workflow`, `doc-guard`, `review-log`, `review-read`, `ctx`, `design-sync-check`, `design-sync-mark`)
 - Their tests under `.agents/tests/`
+- The operator scripts under `infra/` (`release-smoke.py`, `cloudflare-drift.py`) and their tests under `infra/tests/`. They shell out to `fly`, `curl` and the Cloudflare API with the operator's own credentials, which a container does not have. Standard library only; see Operator Scripts below.
 
 ## Full Stack (Docker Compose)
 
@@ -91,6 +92,11 @@ cd backend
 # bind-mount for app/ (deliberate), so it bakes the backend in at build time.
 # Omitting it silently runs the suite against the previously-built backend.
 docker-compose --profile visual-test build api-test frontend-preview frontend-visual
+# After a backend pytest run, todo_app_test is left stamped at head with no tables, so api-test
+# would skip its migration and globalSetup fails with a login 500. Reset it first (LESSONS.md →
+# "The visual-test stack and the integration suite share `todo_app_test`"):
+#   docker-compose exec -T db psql -U postgres -d todo_app_test -c "DROP TABLE IF EXISTS alembic_version, recipes_archived, food_items_archived"
+#   docker-compose --profile visual-test restart api-test    # only when api-test is already running
 docker-compose --profile visual-test up -d --wait db redis api-test frontend-preview
 docker-compose --profile visual-test run --rm frontend-visual
 # Teardown. NOTE: `-v` also removes the shared `db` and `uploads_data` volumes.
@@ -116,10 +122,12 @@ python3 -m pytest .agents/tests -q
 
 These cover the framework helpers under `.agents/bin/` only. They are intentionally separate from the Dockerized backend test suite. `framework doctor .` runs them too.
 
-CI runs automatically on push/PR to `master` via `.github/workflows/test.yml` — four parallel jobs:
+CI runs automatically on push/PR to `master` via `.github/workflows/test.yml` — five parallel jobs:
 `backend-tests` (the two pytest commands above, on the runner with `UPLOAD_DIR` and `STOCK_ICONS_DIR`
-pointed at writable/repo paths), `frontend-tests` (`npm run test:run`), `visual-tests` (the
-visual-regression block above via `docker compose`), and `migration-upgrade`:
+pointed at writable/repo paths), `frontend-tests` (`npm run lint`, `npm run test:run`, then
+`VITE_GIT_COMMIT=$GITHUB_SHA npm run build` (with the production `VITE_API_BASE_URL`) and a grep that `dist/index.html` carries the SHA),
+`infra-tests` (`python3 -m pytest infra/tests -q`), `visual-tests` (the visual-regression block
+above via `docker compose`), and `migration-upgrade`:
 
 ```bash
 # What the migration-upgrade job proves, locally:
@@ -129,3 +137,18 @@ docker-compose exec api uv run alembic downgrade -1 && docker-compose exec api u
 ```
 
 `.github/workflows/doc-guard.yml` runs `python3 .agents/bin/doc-guard --range origin/master..HEAD` on every pull request. Job inventory and CI secrets: TECH_STACK.md → CI/CD Pipeline.
+
+## Operator Scripts (host-side)
+
+The release and drift tooling under `infra/` (M8). The procedures that use them, and the exact
+production commands, are in [`infra/RUNBOOK.md`](../../infra/RUNBOOK.md); nothing below touches
+production.
+
+```bash
+python3 -m pytest infra/tests -q            # their tests: every fly/curl/git call and the Cloudflare API are faked
+python3 infra/release-smoke.py --self-test  # proves the exit plumbing; expect "exit 1 production: [3] scale-reconciled"
+python3 infra/release-smoke.py --help
+```
+
+Python ≥ 3.11 on the host (`tomllib`), pytest for the tests; no other dependency. The `infra-tests`
+CI job runs the first command.

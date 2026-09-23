@@ -6,13 +6,14 @@ parent_epic: "v1-productionization"
 milestone: "M8"
 ui_scope: true
 risk_tags: ["infra", "security", "auth", "data", "migration"]
-workflow_status: "adversarial-reviewed"
-review_status: ["ceo-reviewed", "eng-reviewed", "adversarial-reviewed", "design-reviewed"]
-implementation_status: "not-started"
-reason: "Scoped re-review of Eng review 5 (1A), the state 2 predicate, clean. The expression stands. Nothing-has-run only when every row is stale and at least one row has no write_error; all-stale and all-write_error stays They may still be running. Both pins hold. Folded two leftovers that would have undone it: a failure-mode parenthetical, and a diagram that dropped NULL success and called all-flags worker fine. Named limit: all-flags is also a worker that died inside 3x the shortest flag; not a new string. No re-review demanded. Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm."
-reason_by: "plan-adversarial-review"
-reason_at: "2026-09-21T22:27:46Z"
-updated_at: "2026-09-21T22:27:46Z"
+ship_parts: ["PR1a", "PR1b", "PR2"]
+workflow_status: "ready-for-review"
+review_status: ["ceo-reviewed", "eng-reviewed", "adversarial-reviewed", "design-reviewed", "impl-reviewed", "final-reviewed"]
+implementation_status: "ready-for-review"
+reason: "Final review clean (30 found, 0 open; plan overruled on the frontend rollback and the break-glass clear). PR1b and PR2 remain under this plan (ship_parts). Before the PR1a deploy (carried from the operator's note): the two Vercel toggles, confirm/enable a restore point, fly scale count web=1 (now also RUNBOOK 0). New: a missing /assets chunk is served as year-cached HTML, so every frontend rollback needs RUNBOOK 5.1's Cloudflare purge until TODOS P2 lands; consider the read-only smoke subsets against production before merge."
+reason_by: "final-review"
+reason_at: "2026-09-23T04:00:39Z"
+updated_at: "2026-09-23T04:00:39Z"
 ---
 # Design: M8 — `prod-launch-release`
 
@@ -384,8 +385,13 @@ commands with expected output. Contents:
 - Release tagging in GitHub.
 - Rollback trigger points: what conditions abort the release and send the operator to the
   rollback section.
-- **Rollback, as two doctrines.** Frontend: promote the previous Vercel deployment — genuinely
-  one command, genuinely reversible, and it goes **first**. Backend: roll the *code* back to the
+- **Rollback, as two doctrines.** Frontend: promote the previous Vercel deployment ~~— genuinely
+  one command, genuinely reversible~~, and it goes **first**. Final review (PR1a, 2026-09-23):
+  not one command. A request for a chunk that no longer exists gets the app's HTML with a
+  one-year `immutable` header (observed live), which Cloudflare caches under that chunk's
+  name, so a promote-previous is reversible only after a Cloudflare Purge Everything and an
+  empty-cache reload of any browser that opened the old build. RUNBOOK §5.1 carries both;
+  TODOS.md tracks the `vercel.json` fix. Backend: roll the *code* back to the
   previous image, never the schema. <!-- Eng review 1 (CRITICAL GAP, closed): `fly releases
        rollback` does not exist in flyctl (v0.4.102 has only `fly releases`, a listing command);
        the plan named it in five places. --> The command is `fly releases --image -a mealy-app-prod`
@@ -444,8 +450,10 @@ duplicating it:
   open question 3. This entry states both plainly so the distinction is available during an
   outage rather than derived during one. The flag's design is settled (Eng review 7, folded into
   open question 3): enable with `fly deploy -a mealy-app-prod --image <current ref> -e
-  GATE_BREAK_GLASS=1` (no build, about a minute), clear with a plain `fly deploy` from `master`,
-  and the entry's **last step is confirming `/healthz` reports `gate_break_glass: false`** — the
+  GATE_BREAK_GLASS=1` (no build, about a minute), clear ~~with a plain `fly deploy` from `master`~~
+  by redeploying the running image from its release tag's checkout without `-e` (Final review,
+  PR1a, 2026-09-23, user decision: a deploy from `master` also releases any merged but
+  unreleased code or migration mid-incident, past every RUNBOOK gate), and the entry's **last step is confirming `/healthz` reports `gate_break_glass: false`** — the
   daily `ops-check.yml` asserts the same, which is what closes the CEO review's remaining CRITICAL
   GAP (a flag left on after an incident). `cloudflare-state.md:296`'s expired "redeploy the
   previous image" break-glass line is replaced in PR1a with a pointer to this entry.
@@ -593,13 +601,18 @@ catch the contradiction.
    literal, an empty value, and an absent tag all as failure. The `frontend-tests` CI job gains a
    `VITE_GIT_COMMIT=$GITHUB_SHA npm run build` step that greps `dist/index.html` for the SHA, which
    proves the substitution and closes REVIEW_CHECKLIST's "build runs in CI as its own step" gap
-   at the same time. Assert the deployed SHA is an **ancestor of** the release commit, not
-   equal to it — under the deploy-before-merge fallback the deploy can precede the squash-merge, so
-   equality would false-fail. **No fallback check.**
+   at the same time. ~~Assert the deployed SHA is an **ancestor of** the release commit, not
+   equal to it.~~ **Review-implementation (PR1a, 2026-09-23): assert the deployed build has the release's code for its tier**,
+   `git diff --quiet <deployed> <release> -- frontend/` (`backend/` for the API). The ancestor
+   rule failed both of its goals: the previous release is always an ancestor, so a forgotten
+   promote passed; and a squash merge never makes the pull request's head an ancestor of
+   `master`, so the deploy-before-merge fallback false-failed. The code comparison catches a
+   forgotten promote of a changed tier, passes a release that did not touch the tier, and
+   passes deploy-before-merge. **No fallback check.**
 
    **Both tiers, not just the frontend** (CEO review 0, candidate 2). `GET /healthz` now returns
-   the backend's commit alongside its status (item 14), so this check asserts the same
-   ancestor relationship for the API. The asymmetry was a real gap: the plan went to considerable
+   the backend's commit alongside its status (item 14), so this check makes the same
+   comparison for the API (Review-implementation (PR1a, 2026-09-23): of `backend/`, was "the same ancestor relationship"). The asymmetry was a real gap: the plan went to considerable
    trouble to prove the *frontend* was the code you just shipped while nothing at all proved it of
    the *backend*, which is the tier that runs migrations. An empty or absent version on either
    tier fails the check loudly — it never passes on a missing value. **Run this check only after
@@ -667,7 +680,7 @@ in the output as `skipped`, never as `pass`. After PR1b the skip list is empty; 
 then is exit 1. Image-rollback to a pre-PR1b image against a post-PR1b workflow is the same
 signal — fail loudly, then either roll forward or disable `ops-check.yml` for the duration.
 
-**`--release-commit` is required.** Check 8's ancestor test is against this value, defaulting
+**`--release-commit` is required.** Check 8's comparison (Review-implementation (PR1a, 2026-09-23): was "ancestor test") is against this value, defaulting
 to `git rev-parse HEAD`. The runbook runs the script from the release-commit checkout and
 passes `--release-commit=$(git rev-parse HEAD)` explicitly, so a script invoked from a
 different branch cannot false-fail or false-pass.
@@ -698,7 +711,9 @@ runbook states the scheme once so releases are greppable in `git tag`.
 
 **Exit codes distinguish a broken deployment from broken tooling** (CEO review 2E): `0` pass,
 `1` a check failed (production is broken), `2` a precondition failed (fly CLI missing, token
-expired, no network). Conflating them means the operator cannot tell which of the two they are
+expired, no network). Review-implementation (PR1a, 2026-09-23), user decision: an error the script
+did not anticipate is also `2`, in both scripts. Python's own crash exit is 1, which read as
+"production is broken" and skipped the remaining checks and the summary line. Conflating them means the operator cannot tell which of the two they are
 looking at, at the exact moment that distinction matters most. The script also exposes **named
 check groups** — `--only=liveness,recoverability,edge` (CEO review 1A) — so item 13's cron runs a
 subset of the same script rather than reimplementing or grepping it: one place to fix a check.
@@ -986,6 +1001,11 @@ against the checked-in intent. Requires a **read-only, narrowly-scoped** API tok
 local operator credential, not in CI for now. Standard-library `urllib` only, so host `python3`
 runs it with no dependency story — it sits beside the smoke script in `infra/` so there is one
 operator-tooling directory, not two.
+
+Review-implementation (PR1a, 2026-09-23), user decision: the Access-application comparison counts applications and does not
+compare names, so an application swapped for another reads as recorded. Accepted: it cannot
+happen while the file expects none; compare names once the first application is recorded
+(the script's docstring says the same).
 
 **Recorded dissent.** The spec reviewer argued this is the plan's one scope overreach: it is
 absent from the epic's Done-when, it introduces a credential surface launch does not require,
@@ -1849,12 +1869,19 @@ Ordered, because two of these are preconditions that live nowhere else and round
 review found them asserted in prose but absent from any sequence. Re-sequenced for the PR1a/PR1b
 split (Eng review 0):
 
-**After PR1a merges (no application code, no migration):**
+**Before PR1a merges** (Review-implementation (PR1a, 2026-09-23), user decision: step 0 moved here from "after"). The merge is
+what makes Vercel build. Flipped after it, PR1a's own frontend auto-promotes ahead of the
+backend (the order this plan exists to fix), and, with the variables not yet exposed, it is
+stamped with an empty commit: Vite writes `""` for the set-but-empty `VITE_GIT_COMMIT`, so
+check 8 fails the first run on a healthy release. RUNBOOK §0 carries the same rule.
 
 0. **Flip the two Vercel settings**: Settings → Environments → Production → Branch Tracking →
    disable "Auto-assign Custom Production Domains"; and Settings → Environment Variables → enable
    "Automatically expose System Environment Variables" (check 8's build command needs
    `VERCEL_GIT_COMMIT_SHA`). Run `vercel login` first; the local token is expired.
+
+**After PR1a merges (no application code, no migration):**
+
 0a. **Confirm a restore point exists** (item 12). `fly pg backup list -a mealy-app-prod-db`
    and `fly volumes snapshots list` (volume id at runtime, `-a mealy-app-prod-db`). Enable
    continuous backups only if still disabled — this step is a confirm, because enabling was
@@ -1989,8 +2016,9 @@ Still open:
    stays — and every admitted request logs one `app.gate` WARNING with `outcome="bypassed"`;
    `/healthz` reports `gate_break_glass`. Enable during an incident with
    `fly deploy -a mealy-app-prod --image <current ref> -e GATE_BREAK_GLASS=1` (no build, about a
-   minute; `-e` overrides the toml value for that release only), clear with a plain `fly deploy`
-   from `master`. Detection of a flag left on: the daily cron asserts `/healthz.gate_break_glass`
+   minute; `-e` overrides the toml value for that release only), clear ~~with a plain `fly deploy`
+   from `master`~~ by redeploying the running image from its release tag's checkout without `-e`
+   (Final review, PR1a, 2026-09-23, user decision; see item 2). Detection of a flag left on: the daily cron asserts `/healthz.gate_break_glass`
    is false *and* that the direct-to-origin probe still 421s, and `fly secrets list` must never
    show the name (a secret would survive a rollback and override the toml default). Rehearsed in
    the integration suite and a local `APP_ENV=production` compose run; never in production.
@@ -2106,7 +2134,8 @@ emitter, not a wrapper and not a `trust_edge_headers` parameter).
     as Fly allows. The RUNBOOK header records that this repo is public and that 50 days without
     a commit is a re-arm of the GitHub 60-day scheduled-workflow disable.
 18. **`/healthz` reports the deployed commit** (item 14), `RUNBOOK.md`'s deploy step passes the
-    build arg, and smoke check 8 asserts the ancestor relationship on **both** tiers, treating
+    build arg, and smoke check 8 asserts on **both** tiers that the deployed code matches the
+    release's (`frontend/`, `backend/`; Review-implementation (PR1a, 2026-09-23), was "the ancestor relationship"), treating
     `unknown` as a failure.
 19. **`infra/RUNBOOK.md` exists and every release lists its migration with its reversibility**
     (item/candidate 3), so `REVIEW_CHECKLIST.md:128` and `:217` both resolve to a real file.
@@ -2382,7 +2411,7 @@ Adversarial review: do not implement from this table's older `N` cells.
 | `service.rotate_password` | database drops mid-call | Y | Y (one commit inside `logout`) | exit 2; both writes or neither | no |
 | `release-smoke.py` | flyctl output shape changes | Y (`infra/tests` fixtures) | Y (exit 2 on parse failure) | named cause | no |
 | `release-smoke.py` check 5 | 429 from the WAF | Y | Y | exit 1 "unverified" | no |
-| `release-smoke.py` check 8 | placeholder / `unknown` / not an ancestor | Y | Y | exit 1 naming the tier | no |
+| `release-smoke.py` check 8 | placeholder / empty / `unknown` / tier code differs from the release (Review-implementation (PR1a, 2026-09-23)) | Y | Y | exit 1 naming the tier | no |
 | `cloudflare-drift.py` | API response carries the header value | Y (3G fixture) | Y (redaction) | value never printed | no |
 | `ops-check.yml` | stops running (disabled, inactive repo) | manual (RUNBOOK pre-gate) | Y | caught at the next release | no |
 | `ops-check.yml` | Bot Fight Mode challenge instead of JSON | Y (fixture) | Y (exit 2) | no false alarm | no |
@@ -2620,12 +2649,13 @@ fixes, folded in with `Design re-review` breadcrumbs.
 | Eng Review | `/plan-eng-review` | Architecture and tests (required) | CLEAN (FULL_REVIEW, 2026-09-12) · clean (2026-09-21): scoped re-review of item 15a's backend contract · re-review demanded by /plan-adversarial-review, 2026-09-21: State 5's headline is no longer always "Waiting for the first runs" (only while every row is NULL; otherwise "Waiting on N jobs"), and a restore that does not restart web is overdue rather than Waiting. State 2 no longer says jobs may still be running when every row is stale. A database the web has never read is "Can't check", not "Stopped"; "Stopped" is only once a snapshot ages out with no write_error · clean (2026-09-21): scoped re-review of what that adversarial pass changed in item 15a (Eng review 5) | **2026-09-21, Eng review 5 (scoped to the adversarial pass's changes to item 15a; Fable 5.1):** 0 critical gaps; every miss erred toward alarm. Sound as written: the state 5 headline split, a restore without a web restart reading overdue (it falls out of the pure payload function, no new code), and the cron reading `stale`; `jobs.now`, `label` and the `last_error_at` 3× window hold. Not sound, decided 1A: state 2's "Nothing has run" line was keyed on "every row is stale", but `write_error` is stamped only by a SUCCESS, so a row that carries it ran. A broken recorder with a live worker would have read "Nothing has run" from hour 3 on. The line now also needs a stale row with no `write_error`; both strings are unchanged. Moved: "Stopped" vs "Can't check" turns on whether the web can read the table now, not whether it ever has, so an outage web and worker share is "Can't check" after 2 min and never "Stopped" (truth table in item 15). Corrected: a pre-table snapshot is a missing table, which is an unusable reading, not NULL rows. Removed two leftovers the adversarial sweep missed: item 2's "both read Stopped", and the test artifact's "the cron tolerates one interval of NULL". Pinned: the smoke script checks the unusable rule first; "others normal" in state 2 means each row renders by its own `stale` flag. Tests: artifact edited in place, critical path 17 and three state 2 fixtures added. Performance 0. 0 TODOs. Flags unchanged. 0 unresolved. Adversarial re-review demanded for the state 2 predicate. Note for the design re-review: the adversarial demand note's sentence on state 2 is now narrower than it reads; item 15a's two state 2 rows are the truth. **2026-09-21, Eng review 4 (scoped, item 15a; Opus 5):** 1 CRITICAL GAP found and closed. A never-run job read "Waiting for the first runs" forever, so a worker dead at the PR1b deploy was silent on the card and the cron. Now a NULL row turns stale 3× its interval after the web process starts (1A). State 2's "recent write error" was measured on a column that did not exist, over a 30 s window. Now it uses `last_error_at` and a per-task window, and states its limit: a database outage reads "Stopped" (2A). The `jobs` shape is pinned once as a contract in item 15. `jobs.now` gives a server-aligned clock, since the 2-minute cap had compared a server timestamp with the browser clock. The server sends each row's `label`, so there is one name map for JS and Python (3A). `backend/app/job_health.py` is the one home for `beat_intervals()`, labels, the payload builder and the refresher, doc-mapped. Tests: diagram + critical paths 15 and 16, artifact edited in place. Performance 0. 0 TODOs. Flags unchanged. 0 unresolved. Adversarial re-review demanded, because 15a's contract never had an adversarial pass and 2A changes its write-error rule. **2026-09-12:** Step 0: complexity check triggered (~35–40 files); scope kept, PR1 split into 1a (docs, scripts, config) and 1b (code, UI) so criteria 8 and 19 fall out of the sequence. 2 CRITICAL GAPs found and closed in-plan: the backend rollback named a flyctl command that does not exist (`fly releases rollback`) and would have failed across a migration boundary regardless → `fly deploy --image <ref> --skip-release-command`; item 15's TTL-cached database read sat on Fly's probe path → background refresher, the handler never awaits the store. The CEO review's remaining gap (break-glass left on) closed via `/healthz.gate_break_glass` + the cron. Decided: `web=1`; `job_heartbeats` table, one row per task; the drill exercises both restore paths; scripts in Python with `infra/tests` + an `infra-tests` CI job. Verified on this host or the live site: `fly tokens create readonly` exists (OQ5 largely answered), `/mealboard` already gets `max-age=0, must-revalidate` (item 11 needs no change), `%VITE_GIT_COMMIT%` + `vercel.json` `buildCommand` is check 8's mechanism. Architecture 8 issues / Code quality 7 / Tests: diagram + 13 critical paths, 0 gaps / Performance 0 blocking. 2 TODOs added, `risk_tags` += `migration`, 0 unresolved. |
 | Adversarial Review | `/plan-adversarial-review` | Red-team pass, prefer another model | ISSUES FOUND (7 passes, 2026-09-14) · clean (2026-09-21): scoped re-review of item 15a's /healthz.jobs contract · re-review demanded by /plan-eng-review, 2026-09-21: state 2's "Nothing has run, and the app can't record that either" line no longer applies whenever every row is stale. It now also needs at least one row with no write_error. When every row is stale and every row has write_error the line stays "They may still be running", because write_error is stamped only when a task reached SUCCESS inside 3x its interval, so those jobs ran (Eng review 5, 1A, user-decided) · clean (2026-09-21): scoped re-review of Eng review 5 (1A), the state 2 predicate | **2026-09-21, scoped re-review of Eng review 5 (1A), the state 2 predicate (Grok 4.7):** the predicate holds. "Nothing has run, and the app can't record that either" only when every row is stale and at least one row has no `write_error`; all-stale and all-`write_error` stays "They may still be running". Both pins hold: smoke checks an unusable reading before stale rows, and "Stopped" vs "Can't check" turns on whether the web can read the table now. Folded: a failure-mode parenthetical still said the reassuring line applies only when some row is fresh (that false-alarms a live worker), and the heartbeat diagram dropped a NULL `last_success_at` and called all-flags "worker fine". Named, not a new string: all-flags is also a worker that died inside 3× the shortest flag; the card stays red and the cron already failed. No re-review demanded. **2026-09-21, scoped re-review of item 15a's `/healthz.jobs` contract (Grok 4.7):** the contract had never been attacked, and two older sentences still contradicted it. Item 13 no longer re-derives a minimum beat interval; the cron reads `stale`. The "one schedule interval" grace is gone. State 5's headline is "Waiting for the first runs" only while every row is NULL, then "Waiting on N jobs". State 2 says jobs may still be running only while some row is fresh. A malformed `jobs` body is "can't check", not green. Named limit: restarting web rearms the never-run grace. Design and eng re-review demanded for the headline and the state 2 line. **2026-09-14:** PR1a smoke skip list inverted (dropped check 1, kept PR1b-only `gate_break_glass`); `task_postrun` on all 16 tasks would poison "worker dead"; GitHub 60-day disable is real on this public repo and workflow runs do not reset it; `--self-test` of check 3 cannot prove the cron; Settings via `api.js` can log the household out; `logout()` commits so rotation must share the session; drill counted `job_heartbeats` before the table exists; Vercel "latest staged" is the wrong promote. All folded in-plan. Named limitation: 60-day watchdog death if no commit. 0 new critical gaps left open. |
 | Design Review | `/plan-design-review` | UI and UX | CLEAN (7 passes + HTML mockups, 2026-09-14) · re-review demanded by /plan-adversarial-review, 2026-09-21: State 5's headline is no longer always "Waiting for the first runs" (only while every row is NULL; otherwise "Waiting on N jobs"), and a restore that does not restart web is overdue rather than Waiting. State 2 no longer says jobs may still be running when every row is stale. A database the web has never read is "Can't check", not "Stopped"; "Stopped" is only once a snapshot ages out with no write_error · clean (2026-09-21): scoped re-review of item 15a's user-visible outcomes after the adversarial pass and Eng review 5 | **2026-09-21, scoped re-review of item 15a's user-visible outcomes (Fable 5.1):** 7 → 9. The tables held on all four demanded points: the state 5 headline split; a restore without a web restart reading overdue (state 3 "Nothing has run yet", then state 4); state 2's two lines per Eng review 5 (1A); and "Can't check" vs "Stopped" turning on whether the web can read now. The mockup did not hold: its one Waiting fixture still read "Waiting for the first runs" with two jobs run, state 2 had one line, a never-run overdue row would have rendered "last ran null min ago", and red row text was keyed on `write_error` alone. Brought to the table, fourteen fixtures rendered and read back at desktop and 375 px, layout unchanged (8C stands), pin refreshed. Pinned: "what a row says" follows the row's own values, so a fresh flagged row reads "ran N ago" in state 2 as in state 6 (row 2's "affected rows" had left it open). Added: why state 1 still has no alert now that it covers an unreadable database; journey rows 11 (state 2) and 12 (a restore under a running web); the stated limit of state 2's second line (under two faults at once it overstates, toward alarm; both strings stand). No string changed, no question asked, 0 TODOs, 0 unresolved, no re-review demanded. **2026-09-14:** Design completeness 3 → 9. New item 15a specifies what the household sees: a "Background jobs" card above Account plus a top-of-Settings alert only when a job is behind (1A); six states plus loading whose headline follows the **worst** job, never the newest success (a dead sweep could otherwise hide behind a fresh sync); a stale reading keeps its last value with a note for 2 min instead of flapping to "can't check" every time the Postgres primary wakes (2B, supersedes Eng 1.2's rendering); plain-language "what this means" lines and a hand-off for a second household (3A); one name everywhere (4A); sage dot + documented stock red (5A); measured AA contrast, darker gray for the card and iCloud line (6A); version and break-glass never on Settings (7A, 7B); always-visible job rows chosen from 3 mockups (8C). **Backend contract added, not yet re-reviewed by eng/adversarial:** `jobs.read_at`, `stale` computed at serve time, every beat task listed with `null` when never run. Found and corrected: the sign-in redirect is not silent (APP_FLOW §4 stale); the specific "password changed" message is not derivable, so PR1b ships an honest generic bounce-banner copy change (TODO 1 → built). Runbook: tell the household before rotating, deploy at a quiet hour, record observed downtime. 2 TODOs added (app-wide contrast, Calendar-page sync alert). 0 unresolved. |
-| Implementation Review | `/review-implementation` | First code review (required) | — | — |
+| Implementation Review | `/review-implementation` | First code review (required) | clean (PR1a, 2026-09-23) | 18 found, 17 fixed, 1 accepted (Access apps compared by count; plan item 9); 0 open. Overruled the plan in place, with breadcrumbs: smoke check 8 compares each tier's code (`git diff` of `frontend/`, `backend/`) instead of ancestry, which passed a forgotten promote and failed deploy-before-merge; Between-the-PRs step 0 (the two Vercel settings) moves before the PR1a merge; an unanticipated script error is exit 2. Also fixed: failed WAL rows no longer count as restore points; standbys neither counted nor "start it"; `/healthz` unreachable on one path while the other answers is exit 1; the empty Vercel stamp names the setting; RUNBOOK subshells, `alembic history` first line, verify-stopped before a quiesced migration or a real restore; drill `BEGIN READ ONLY` and a scratch-archive check; CI build carries `VITE_API_BASE_URL`. Item 11 needed no change: `/mealboard` and `/` send `max-age=0, must-revalidate` (re-verified live). `infra/tests` 99 → 110, the 10 new regression tests red on the pre-review scripts. |
+| Adversarial subagent | inside `/review-implementation` | Fresh-context pass on the diff | issues_open (large, 2026-09-23) · resolved by /review-implementation, 2026-09-23: all 13 closed in the working tree (see the Implementation Review row) · final pass inside `/final-review`: issues_open (large, 2026-09-23) · resolved by /final-review, 2026-09-23: 18 fixed, 1 mitigated + TODOS P2, 3 informational (in the Final Review concern), 2 by design / not a defect | 13: check 8 ancestry, standbys, failed WAL rows, one-path timeout, crash exit 1, Access-app count, restart policy vs stop, empty stamp, `cd backend`, `alembic history` first line, break-glass checkout, drill archive and read-only, CI env shape. **Final pass, 24:** a missing `/assets` chunk served as year-cached HTML (confirmed live), break-glass cleared from `master`, first-run `web=1` absent from the RUNBOOK, counts read mid-WAL-replay, quiet-database PITR target, §4 `fly deploy` from the repo root, Access apps on other zones, a started standby uncounted, pre-PR1b `--skip=healthz_jobs`, asyncpg URL reshape, Instant Rollback to roll forward, no Staged build, cancelled CI run, self-test pinned to `web=2`, stale `fly releases rollback` in LESSONS, and more |
 | QA | `/qa` | Browser verification | — | — |
 | Design Audit | `/design-review` | Live-site grade | — | — |
-| Final Review | `/final-review` | Second opinion (required) | — | — |
+| Final Review | `/final-review` | Second opinion (required) | clean (PR1a, 2026-09-23) | claude-code / Opus 5.5, the same harness and model as the first review (independence reduced, warned). 30 found (1 critical), 24 fixed, 1 mitigated and deferred to TODOS P2 with the user's approval, 2 by design or not a defect, 3 informational leads; 0 open. **Critical, confirmed live:** a request for a missing `/assets/*.js` gets `index.html` with a one-year `immutable` header, cacheable at Cloudflare, so the RUNBOOK's own chunk-load check poisons the cache a frontend rollback depends on. RUNBOOK §5.1 now purges and empty-cache-reloads, the check's signal is corrected, and TODOS P2 tracks the `vercel.json` fix. **Overruled the plan in place:** item 1's "genuinely one command, genuinely reversible" frontend rollback; item 2 and open question 3's break-glass clear, now a redeploy of the running image from its release tag (user decision). Also fixed: RUNBOOK §5.2 on its first run (no previous tag; the smoke script missing from the previous checkout), §4 `cd backend`, first-run `web=1`, a cancelled CI run, no Staged build, rolling the frontend forward; the dead-worker purge now runs from web before the worker starts; never start a standby, and a *started* standby now counts in check 3; drill counts wait for `pg_is_in_recovery() = f` and check `archive_*` on both paths; an R2 upload check that closes the boto3 TODO at the first M8 release (user decision); Access apps filtered to the zone, failing closed (user decision); the self-test fails whatever the pin. `infra/tests` 110 → 133 (real-git and mutation controls). Unverified leads: the read-only smoke subsets against production before merge; Vercel's apex certificate for Mode A; check 6's `max-age` branch may never fire. |
 
-**VERDICT:** CLEARED FOR IMPLEMENTATION
+**VERDICT:** CLEARED TO SHIP
 
 ## Adversarial Review Summary
 

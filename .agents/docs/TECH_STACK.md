@@ -11,6 +11,9 @@
 3. [Development Tools](#3-development-tools)
 4. [Infrastructure](#4-infrastructure)
 5. [Version Constraints](#5-version-constraints)
+6. [API Contracts](#6-api-contracts)
+7. [Browser Support](#7-browser-support)
+8. [File Structure Reference](#8-file-structure-reference)
 
 ---
 
@@ -281,6 +284,17 @@ rollback revert the storage flip atomically. See
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
+`VITE_GIT_COMMIT` is build-time only and never set by hand: Vercel's `buildCommand` passes
+`VERCEL_GIT_COMMIT_SHA`, and CI passes `GITHUB_SHA`. Vite writes it into `index.html`'s
+`<meta name="build-commit">`; a local or visual-test build leaves the literal
+`%VITE_GIT_COMMIT%`, which smoke check 8 treats as a failure. It is a commit SHA of this public
+repository, so nothing secret reaches the bundle.
+
+**Operator-only (never an app runtime variable)** — `CLOUDFLARE_API_TOKEN`: a read-only token
+held in the operator's shell for `infra/cloudflare-drift.py`; its scopes are listed in the
+[`infra/RUNBOOK.md`](../../infra/RUNBOOK.md) header. Never in CI (scheduling the drift script
+is a v1.1 item).
+
 ### Ports
 
 | Service | Port | Purpose |
@@ -298,15 +312,16 @@ VITE_API_BASE_URL=http://localhost:8000
 | GitHub Actions | CI/CD automation |
 | `.github/workflows/test.yml` | Run tests on push/PR |
 | `.github/workflows/doc-guard.yml` | On pull requests: `.agents/bin/doc-guard --range` refuses merges that change a documented code area without updating its owning doc (see `.agents/WORKFLOW.md`) |
-| `.github/workflows/deploy.yml` | Deploy to production (deferred to v1.1; the M8 manual runbook comes first) |
+| `.github/workflows/deploy.yml` | Deploy to production (deferred to v1.1; the M8 manual runbook, [`infra/RUNBOOK.md`](../../infra/RUNBOOK.md), comes first) |
 
 **CI Pipeline (Current)** — `.github/workflows/test.yml`, on push to `master` and on pull
-requests to `master`. Four jobs, no `needs:` between them, so they run in parallel:
+requests to `master`. Five jobs, no `needs:` between them, so they run in parallel:
 
 | Job | Services | Runs |
 |---|---|---|
 | `backend-tests` | postgres:16, redis:7 | `uv run pytest tests/unit` then `uv run pytest tests/integration` |
-| `frontend-tests` | — | `npm run test:run` (Vitest, single-run) |
+| `frontend-tests` | — | `npm run lint`, `npm run test:run` (Vitest, single-run), then `VITE_GIT_COMMIT=$GITHUB_SHA npm run build` (with the production `VITE_API_BASE_URL`) and a grep that `dist/index.html` carries that SHA in `<meta name="build-commit">` (M8: proves smoke check 8's stamp and runs the production build as its own step) |
+| `infra-tests` | — | `python3 -m pytest infra/tests -q` on Python 3.12, pytest the only install (M8: the host-side operator scripts; every `fly`/`curl`/`git` call and the Cloudflare API are faked) |
 | `visual-tests` | docker-compose `visual-test` profile | Playwright against `vite preview` + a baked `api-test` backend |
 | `migration-upgrade` | postgres:16 | `alembic upgrade head` from base, then newest-revision down/up symmetry |
 
@@ -344,9 +359,9 @@ Chosen and shipped in the v1 productionization epic ([plan](../plans/features/pr
 
 | Component | Service | Purpose |
 |-----------|---------|---------|
-| Frontend | Vercel | `mealy.dev` — static SPA with CDN; git-integration auto-deploys |
-| Backend | Fly.io (`mealy-app-prod`, region `sjc`) | `api.mealy.dev` — `web` (uvicorn), `worker` (Celery), `beat` (scheduler) process groups; `backend/fly.toml`. `worker` and `beat` carry `[[restart]] policy = "always"` so a stopped machine comes back on its own |
-| Database | Fly Postgres | Managed PostgreSQL 16; `asyncpg` with `ssl=` (see LESSONS.md) |
+| Frontend | Vercel | `mealy.dev` — static SPA with CDN. Since M8 the git integration builds every `master` merge but no longer promotes it: Settings → Environments → Production → Branch Tracking → "Auto-assign Custom Production Domains" is off, so a build sits **Staged** until [`infra/RUNBOOK.md`](../../infra/RUNBOOK.md) promotes it *after* the Fly deploy (backend first). `frontend/vercel.json`'s `buildCommand` (`VITE_GIT_COMMIT=$VERCEL_GIT_COMMIT_SHA npm run build`) stamps the commit into `<meta name="build-commit">`, which needs Settings → Environment Variables → "Automatically expose System Environment Variables" on |
+| Backend | Fly.io (`mealy-app-prod`, region `sjc`) | `api.mealy.dev` — `web` (uvicorn), `worker` (Celery), `beat` (scheduler) process groups; `backend/fly.toml`. Counts: `web=1`, `worker=1`, `beat=1` (M8, Eng review 1C), set out-of-band with `fly scale count` (`fly.toml` cannot express them), pinned in [`infra/fly-scale.json`](../../infra/fly-scale.json) and asserted by smoke check 3; `beat=1` is invariant. Deployed by hand with the release runbook. `worker` and `beat` carry `[[restart]] policy = "always"` so a stopped machine comes back on its own |
+| Database | Fly Postgres Flex (unmanaged) | `mealy-app-prod-db`, image `flyio/postgres-flex:17.2` (compose and CI run 16; TODOS P3), volume `pg_data` with scheduled snapshots (5-day retention). Continuous WAL backups (`fly pg backup`) are M8 item 12; smoke check 9 reports both mechanisms and the restore drill is [`infra/backup-restore-drill.md`](../../infra/backup-restore-drill.md). `asyncpg` with `ssl=` (see LESSONS.md) |
 | Redis | Upstash | Celery broker + result backend over `rediss://`. Upstash bills per command and a Celery worker polls even when idle, so the worker runs `--without-gossip --without-mingle --without-heartbeat` (single-worker deployment: those only coordinate a cluster) |
 | File Storage | Cloudflare R2 | User uploads (photos, icons) — provisioned in M2; **cutover executed 2026-09-11** (M7 PR2, #44; execution log in `infra/r2-cutover-runbook.md`); see Object storage below |
 | DNS / edge | Cloudflare | Proxied DNS for both hosts, WAF rate limit on `/auth/*`, origin-lock Transform Rule (sets the `X-Origin-Verify` header the host gate requires), Browser Cache TTL "Respect Existing Headers" (private media relies on it); Access Application 1 removed at M7's cutover (2026-09-11); `infra/cloudflare-state.md` |
@@ -383,6 +398,28 @@ Public Suffix List, so **every Vercel preview origin is a different site and eve
 there** — expected, not a regression; see the runbook and the P3 entry in
 [TODOS.md](./TODOS.md). Moving the frontend off a `mealy.dev` subdomain would break private
 image reads in production.
+
+### Operator tooling (`infra/`)
+
+Since M8 the release is a written procedure with mechanical checks. Everything here runs on the
+operator's **host**, never in a container: the scripts shell out to `fly`, `curl` and the
+Cloudflare API with the operator's own credentials (a host-side exception in
+[development-commands.md](./development-commands.md)). Standard library only, Python ≥ 3.11
+(`tomllib`); minimum flyctl v0.4.102.
+
+| File | Purpose |
+|---|---|
+| [`RUNBOOK.md`](../../infra/RUNBOOK.md) | The release procedure: gates, backend-first deploy, promote, smoke, Cloudflare and manual checks, tagging (`v1-<UTC date>-<short sha>`), rollback as two doctrines, execution log |
+| [`incident-diagnostics.md`](../../infra/incident-diagnostics.md) | One entry per known failure mode (symptom, distinguishing signal, ordered recovery), including break-glass Mode A/B; every smoke failure line links an entry |
+| [`backup-restore-drill.md`](../../infra/backup-restore-drill.md) | Snapshot and point-in-time restores into dated scratch clusters, with the observed numbers and a restore-point log |
+| `release-smoke.py` | Mechanical assertions in four groups (`release`, `liveness`, `recoverability`, `edge`); exit `0` pass, `1` production, `2` tooling; `--only`, `--skip` (PR1b-only `/healthz` keys print `skipped`, never `pass`), `--release-commit`, `--self-test` |
+| `cloudflare-drift.py` | Read-only diff of the live WAF rule, origin-lock Transform Rule (presence only; the header value is dropped at parse), Browser Cache TTL, Access apps and Bot Fight Mode against `cloudflare-state.md` |
+| `fly-scale.json` | The pinned machine counts smoke check 3 diffs against; its keys must equal `fly.toml [processes]` |
+| `cloudflare-state.md`, `r2-cutover-runbook.md` | Cloudflare intent (the drift script's diff target) and the executed M7 cutover |
+
+`infra/*.md` is exempt from the doc map (an execution-log row is not a documented-surface
+change); the scripts and `fly-scale.json` route here. Tests: `python3 -m pytest infra/tests -q`,
+also the `infra-tests` CI job.
 
 ### External API Integrations
 
@@ -521,7 +558,9 @@ todo-app/
 │   └── tests/                # Backend tests
 │
 ├── AGENTS.md                 # Project rules for every AI harness (CLAUDE.md imports it)
-├── infra/                    # cloudflare-state.md, r2-cutover-runbook.md
+├── infra/                    # RUNBOOK.md, incident-diagnostics.md, backup-restore-drill.md,
+│                             # release-smoke.py, cloudflare-drift.py, fly-scale.json, tests/,
+│                             # cloudflare-state.md, r2-cutover-runbook.md (host-side; see §4)
 └── .agents/docs/             # Documentation (framework docs set)
     ├── PRD.md
     ├── APP_FLOW.md

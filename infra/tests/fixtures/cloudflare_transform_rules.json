@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result": {
+    "id": "rs_transform_example",
+    "name": "default",
+    "kind": "zone",
+    "phase": "http_request_late_transform",
+    "rules": [
+      {
+        "id": "rule_transform_example",
+        "version": "1",
+        "action": "rewrite",
+        "expression": "(http.host eq \"api.mealy.dev\")",
+        "description": "Mealy origin lock",
+        "enabled": true,
+        "action_parameters": {
+          "headers": {
+            "X-Origin-Verify": {
+              "operation": "set",
+              "value": "dummy-origin-verify-value-DO-NOT-PRINT"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

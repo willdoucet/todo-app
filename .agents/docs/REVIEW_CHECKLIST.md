@@ -214,7 +214,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - A separate test database is created by an init script; `TEST_DATABASE_URL` is never the dev URL.
 
 ### Operations
-- The backup/restore drill in RUNBOOK.md has been run at least once against a scratch database.
+- The backup/restore drill (`infra/backup-restore-drill.md`, linked from `infra/RUNBOOK.md`) has been run at least once against a scratch database.
 
 ## React
 
@@ -253,6 +253,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 ### Operations
 - End-to-end and visual suites run against `vite preview` (the production build), never the dev server.
 - Chunk-size warnings are reviewed; heavy dependencies (emoji pickers, editors, charts) are lazy-loaded.
+- The host's SPA catch-all rewrite does not match the hashed-asset path, so a missing chunk is a 404 and never `index.html` served under the asset rule's `immutable` header; otherwise an old tab caches HTML under the chunk's name at the CDN and a rollback to that build cannot load it. Verify with a request for a nonexistent `/assets/*.js`.
 - `node_modules` inside a container uses an anonymous volume so host and container installs do not collide.
 
 ### Testing
@@ -429,3 +430,15 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 
 ### Operations
 - A shell snippet in a skill body holds no bare positional (`$0`, `$1`, `$2`): a harness that substitutes the invocation's arguments rewrites it before the agent reads it, and the result can be valid shell that computes the wrong thing (`awk '{i+=$1; d+=$2}'` arrived as `awk '{i+=re-review; d+=of}'`, printed `0 0`, and the rule that followed skipped a review tier). Write `$(1)`, or avoid field variables.
+
+## Operator scripts (Python, `infra/`)
+
+### Operations
+- A script whose exit codes mean something (`1` production, `2` tooling) catches unexpected errors per check and at the top level and reports them in its tooling class: Python's own uncaught-exception exit is 1. An error message that could quote an API response prints the exception type only.
+- "The deployed build is the release" compares the built tree (`git diff --quiet <deployed> <release> -- <tier dir>`), never ancestry: the previous release is always an ancestor, so an ancestor test passes a forgotten deploy, and a squash merge never makes the pre-merge head an ancestor of the base branch.
+- A reader that pulls timestamps out of a table skips rows that say they failed; a failed backup is not a restore point.
+- A printed remediation never tells the operator to start a machine the platform keeps stopped on purpose (a Fly standby). A standby that *is* started counts toward its group: a running beat standby beside its primary is two beats.
+- A runbook step never runs a repo script from a checkout of another commit (a rollback's previous release): the script may not exist there, or checks less. Run it from the release checkout.
+
+### Testing
+- A check's rule is tested against real `git` in a scratch repository (squash merge included) when the rule is about commit relationships; a faked runner only proves the classification of git's answer.

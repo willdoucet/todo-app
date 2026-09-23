@@ -227,8 +227,11 @@ ones in `.agents/docs/development-commands.md`; the host-side `infra/tests` suit
   `infra/fly-scale.json` → exit 1 naming check 3 and the differing group; a `fly-scale.json` whose
   keys differ from `fly.toml [processes]` → exit 1 before any diff.
 - Check 5 fixture returning 429 → exit 1 with "rate-limited, unverified", never 0.
-- Check 8 fixtures: deployed SHA an ancestor of the release commit → pass; not an ancestor → fail;
-  `unknown`, empty, absent, or the literal `%VITE_GIT_COMMIT%` → fail on that tier.
+- Check 8 fixtures (Review-implementation (PR1a, 2026-09-23): code, not ancestry): the deployed build's `frontend/` (`backend/`)
+  equals the release's → pass, however the commits are related (a squash-merged pull request
+  head passes); it differs (a forgotten promote of a changed frontend) → fail; not in local
+  history → fail; `unknown`, empty, absent, or the literal `%VITE_GIT_COMMIT%` → fail on that
+  tier. A real-git test drives all three cases.
 - Check 9 fixtures: a snapshot under 48 h → pass; only a WAL recovery point under 48 h → pass with
   both mechanisms reported; neither → exit 1.
 - flyctl missing, token rejected, or no network → exit 2 with the cause named; a Cloudflare
@@ -461,8 +464,8 @@ ones in `.agents/docs/development-commands.md`; the host-side `infra/tests` suit
   **once the workflow has ever run**; before that the gate records `n/a`.
 - At least one restore point under 48 hours exists for `mealy-app-prod-db` (volume snapshot or WAL
   recovery point), and the cron says so daily.
-- The deployed frontend and backend commits are ancestors of the release commit after every
-  release.
+- The deployed frontend and backend builds have the release's `frontend/` and `backend/` after
+  every release (Review-implementation (PR1a, 2026-09-23), was "are ancestors of the release commit").
 - RUNBOOK header names the 50-day public-repo re-arm for GitHub's 60-day scheduled-workflow disable.
 
 ## Log hygiene

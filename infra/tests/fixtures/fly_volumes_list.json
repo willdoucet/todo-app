@@ -1,0 +1,15 @@
+[
+  {
+    "id": "vol_4qlnz9q037wl2qwr",
+    "name": "pg_data",
+    "state": "created",
+    "size_gb": 1,
+    "region": "sjc",
+    "zone": "d2a4",
+    "encrypted": true,
+    "attached_machine_id": "6835444b795398",
+    "snapshot_retention": 5,
+    "auto_backup_enabled": true,
+    "created_at": "2026-09-11T23:30:52Z"
+  }
+]

@@ -1,7 +1,7 @@
 {
   "branch": "prod-launch-release",
   "created_at": "2026-09-11T22:37:41Z",
-  "implementation_status": "not-started",
+  "implementation_status": "ready-for-review",
   "key": "plan:prod-launch-release",
   "kind": "plan",
   "milestone": "M8",
@@ -9,18 +9,20 @@
   "parent_epic": "v1-productionization",
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
-  "reason": "Scoped re-review of Eng review 5 (1A), the state 2 predicate, clean. The expression stands. Nothing-has-run only when every row is stale and at least one row has no write_error; all-stale and all-write_error stays They may still be running. Both pins hold. Folded two leftovers that would have undone it: a failure-mode parenthetical, and a diagram that dropped NULL success and called all-flags worker fine. Named limit: all-flags is also a worker that died inside 3x the shortest flag; not a new string. No re-review demanded. Carried: GitHub 60-day disable, OQ 1/2/4, Mode B, web-restart rearm.",
-  "reason_at": "2026-09-21T22:27:46Z",
-  "reason_by": "plan-adversarial-review",
+  "reason": "Final review clean (30 found, 0 open; plan overruled on the frontend rollback and the break-glass clear). PR1b and PR2 remain under this plan (ship_parts). Before the PR1a deploy (carried from the operator's note): the two Vercel toggles, confirm/enable a restore point, fly scale count web=1 (now also RUNBOOK 0). New: a missing /assets chunk is served as year-cached HTML, so every frontend rollback needs RUNBOOK 5.1's Cloudflare purge until TODOS P2 lands; consider the read-only smoke subsets against production before merge.",
+  "reason_at": "2026-09-23T04:00:39Z",
+  "reason_by": "final-review",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
     "eng-reviewed",
     "adversarial-reviewed",
-    "design-reviewed"
+    "design-reviewed",
+    "impl-reviewed",
+    "final-reviewed"
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-21T22:27:46Z",
-  "workflow_status": "adversarial-reviewed"
+  "updated_at": "2026-09-23T04:00:39Z",
+  "workflow_status": "ready-for-review"
 }

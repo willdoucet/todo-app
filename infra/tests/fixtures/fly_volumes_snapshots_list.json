@@ -1,0 +1,4 @@
+[
+  {"id": "vs_older", "size": 52428800, "digest": "sha256:older", "status": "created", "retention_days": 5, "created_at": "2026-09-20T08:14:00Z"},
+  {"id": "vs_newest", "size": 52428800, "digest": "sha256:newest", "status": "created", "retention_days": 5, "created_at": "2026-09-21T08:14:00Z"}
+]

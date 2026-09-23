@@ -44,8 +44,12 @@
       "**/.dockerignore",
       "**/.gitignore",
       "**/__init__.py",
-      "**/.vrt-token"
+      "**/.vrt-token",
+      "infra/*.md"
     ],
+    "exempt_notes": {
+      "infra/*.md": "M8 (prod-launch-release, item 10). The root-level `*.md` entry does not cover infra/ (a single `*` is `[^/]*`), so without this every runbook execution-log row would route to TECH_STACK.md -> Infrastructure and demand a doc edit or a `Docs: n/a` trailer, on every future release. An execution-log row is not a change to a documented surface. Deliberately broad: this also un-routes the existing cloudflare-state.md and r2-cutover-runbook.md. The runbooks are the documentation for their own procedures; TECH_STACK.md links them. The infra/ scripts and fly-scale.json stay routed to TECH_STACK.md -> Infrastructure by the `infra/**` rule, and infra/tests/** is covered by `**/tests/**`. doc-guard reads only `exempt` and `rules`; this key is a note for humans."
+    },
     "rules": [
       {
         "doc": "BACKEND_STRUCTURE.md",
@@ -82,7 +86,10 @@
           "backend/app/auth/**",
           "backend/app/utils/**",
           "backend/app/database.py",
-          "backend/app/constants/**"
+          "backend/app/constants/**",
+          "backend/app/cli/**",
+          "backend/app/gate_logging.py",
+          "backend/app/job_health.py"
         ],
         "section": "Code Organization"
       },

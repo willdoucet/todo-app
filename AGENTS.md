@@ -34,7 +34,7 @@ Plans live in `.agents/plans/`, workflow state in `.agents/state/`, and the idea
 
 **IMPORTANT: app commands run through Docker Compose from `backend/`. Never run `npm`, backend `uv`, or backend `pytest` directly on the host.**
 
-Host-side exceptions: the framework helpers under `.agents/bin/` and their tests under `.agents/tests/` run directly on the host, never through a container.
+Host-side exceptions: the framework helpers under `.agents/bin/` and their tests under `.agents/tests/`, and the operator scripts under `infra/` (`release-smoke.py`, `cloudflare-drift.py`) and their tests under `infra/tests/`, run directly on the host, never through a container. The `infra/` scripts need the operator's `fly` and Cloudflare credentials, which a container does not have.
 
 The single source of truth for services, ports, required environment variable names, and the exact commands for running, building, migrating, and testing is [development-commands.md](./.agents/docs/development-commands.md).
 
