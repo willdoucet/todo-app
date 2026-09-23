@@ -1,5 +1,26 @@
 # TODOs
 
+## P1 — Resume the Celery worker and beat (paused on purpose 2026-09-23 at the Upstash request cap)
+**What:** On `mealy-app-prod`, the `worker` machine (`d8d2e06fed20d8`) and the `beat` machine (`d894036c173778`) are **stopped on purpose** (beat at 2026-09-23T17:07:50Z, `requested_stop=true`; the worker had already stopped at 17:00:43Z after its restart attempts ran out). Resume both once Upstash accepts commands again. This entry is the record that the stop is deliberate: a stopped worker nobody remembers stopping is exactly the failure M8 exists to catch.
+**Why:** Upstash, Celery's broker, refuses every command: `max requests limit exceeded. Limit: 500000, Usage: 500000` (the monthly allowance). Two findings came before the pause. First, the worker had been stopped since a Fly host migration on 2026-09-21 22:33Z (`launch … migrated=true`, then `stopped` 13 s later). Second, started again at 16:57Z, it crash-looped on the cap and exhausted its restarts. Nothing had restarted it after the migration because **PR #49 was never deployed**. #49 merged at 2026-09-11 22:07Z, and the last deploy (v33) ran at 21:30Z, so every machine still runs `restart: on-failure`, and the worker lacks #49's `--without-gossip --without-mingle --without-heartbeat` flags. Those flags cut Celery's idle Redis polling, which Upstash bills per command. That polling probably used up the allowance, but it is not proven. Beat was stopped as well, so that it does not refill the queue, and spend the next allowance, with no worker to drain it.
+**While paused:** none of these run:
+- iCloud calendar and reminder sync, in both directions (Settings shows "sync overdue");
+- deleted-item cleanup and the unused-photo sweep;
+- any on-demand background job, such as a recipe import from a URL.
+
+Edits to synced items still queue push jobs for when the worker returns. The ~590 jobs queued before the pause were kept, by the operator's decision (a purge would drop queued iCloud pushes).
+**Resume:**
+1. Upstash console → the database → Usage. Confirm the allowance has reset or the plan is upgraded.
+2. Prefer resuming as part of the M8 PR1a release (`infra/RUNBOOK.md`). Its deploy ships #49 for the first time. A deploy leaves a stopped machine stopped, so start them after it.
+3. Check the ids with `fly status -a mealy-app-prod`, then run `fly machine start d8d2e06fed20d8 d894036c173778 -a mealy-app-prod`.
+4. Decide whether to purge the backlog first; `infra/incident-diagnostics.md` → Background jobs has the command and the trade-off.
+5. Within the hour, confirm a `succeeded` line for each of the four `beat_schedule` tasks: `fly logs -a mealy-app-prod --no-tail | grep -E 'Task app\.tasks\.[a-z_]+\[.*\] succeeded'`. Then mark this entry done.
+**Blocks:** the M8 PR1a release smoke. Check 2 (every process group started) and check 4 (worker round-trip) fail while the worker is paused. It also blocks PR1b's verification (full smoke, `ops-check`, the Background jobs card).
+**Context:** Found 2026-09-23 during M8's "Between the PRs" step 1 (`fly scale count web=1`). The operator plans to change how the worker uses Upstash later. This entry tracks only the pause and the resume. Related: LESSONS.md → "`fly deploy` leaves an already-stopped machine stopped".
+**Effort:** S (human: ~30 min / CC: ~10 min, once Upstash accepts commands)
+**Priority:** P1
+**Depends on:** The Upstash allowance resetting, or a plan upgrade.
+
 ## P2 — Env-gate `echo=True` on the SQLAlchemy async engine  ✅ DONE (M7 PR1, 2026-09-08)
 **Status:** ✅ DONE in M7 `prod-r2-storage` PR1 — `backend/app/database.py` now reads `SQLALCHEMY_ECHO` (default `false`). Kept as a record; safe to remove on the next TODOS.md prune.
 **What:** Replace the hardcoded `echo=True` in `backend/app/database.py` with `echo=os.getenv("SQLALCHEMY_ECHO", "false").lower() == "true"`. Default off in production; opt-in for local debugging via `SQLALCHEMY_ECHO=true` in compose env.
