@@ -11,10 +11,10 @@ workflow_status: "partially-shipped"
 review_status: ["ceo-reviewed", "eng-reviewed", "adversarial-reviewed", "design-reviewed", "impl-reviewed", "final-reviewed"]
 implementation_status: "partially-shipped"
 shipped_parts: [{"part": "PR1a", "pr": "https://github.com/willdoucet/todo-app/pull/60", "shipped_at": "2026-09-23T16:07:56Z", "commit": "6f0a608"}]
-reason: "PR1a shipped as #60 (not merged). Before merging it: the two Vercel toggles, confirm/enable a restore point, fly scale count web=1 (RUNBOOK 0); consider the read-only smoke subsets against production. After merge: Between the PRs steps 0-6. Before PR1b's /execute-plan: merge master into prod-launch-release (PR1a's squash), and never change ship_parts."
+reason: "PR1a shipped as #60 (not merged). Before merging it: the two Vercel settings (auto-assign off, done; system env vars exposed, already on); optionally the read-only smoke groups from this branch. After merge, before the first deploy: confirm the Staged build carries its commit, confirm/enable a restore point (step 0a), fly scale count web=1 (step 1); then Between the PRs steps 2-6 by RUNBOOK. Before PR1b's /execute-plan: merge master into prod-launch-release (PR1a's squash), and never change ship_parts."
 reason_by: "ship"
-reason_at: "2026-09-23T16:07:56Z"
-updated_at: "2026-09-23T16:07:56Z"
+reason_at: "2026-09-23T16:24:00Z"
+updated_at: "2026-09-23T16:24:00Z"
 pr: "https://github.com/willdoucet/todo-app/pull/60"
 ---
 # Design: M8 — `prod-launch-release`
