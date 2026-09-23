@@ -91,9 +91,11 @@ then invoke `/office-hours` with the same intake argument and stop.
 ### 4. Register
 
 ```bash
+QF_ARGS=()
+[ -n "$NOTE_REF" ] && QF_ARGS+=(--note-ref "$NOTE_REF")
+[ -n "$PARENT_EPIC" ] && QF_ARGS+=(--parent-epic "$PARENT_EPIC" --milestone "$MILESTONE")
 "$BIN/obsidian-workflow" quickfix-register --slug "$SLUG" --title "$TITLE" --branch "$BRANCH" \
-  ${NOTE_REF:+--note-ref "$NOTE_REF"} \
-  ${PARENT_EPIC:+--parent-epic "$PARENT_EPIC" --milestone "$MILESTONE"}
+  "${QF_ARGS[@]}"
 ```
 
 ### 5. Read what the change touches

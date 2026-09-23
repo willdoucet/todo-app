@@ -294,19 +294,27 @@ the reasoning.
 ### 10. Confirm the workflow flags
 
 `workflow-state --next` decides whether design review and adversarial review are on the path
-from two frontmatter keys. The reviewed plan is the last word on both, so confirm them now.
+from two frontmatter keys, and `/ship` whether a pull request completes the plan from a third.
+The reviewed plan is the last word on all three, so confirm them now.
 
 - `ui_scope`: `true` when anything a user sees changes (a page, component, copy, layout,
   interaction). Compare the stored value with what the review found.
 - `risk_tags`: drawn only from `auth`, `infra`, `data`, `payments`, `security`, `migration`.
   A migration, an auth path, or an external dependency the review surfaced adds its tag.
+- `ship_parts`: when the plan ships as more than one pull request under this one plan file
+  (the review sequenced it: PR1 before an operator step, then PR2), the labels in order, as a
+  JSON list such as `["PR1a","PR1b","PR2"]`; unset when it ships as one. `/ship` records each
+  part against it and leaves the plan `partially-shipped` until the last one.
 
 When the stored values match the review, say so in one line. When they differ or are unset,
-ask one question with your recommendation, then set them:
+ask one question with your recommendation, then set them. An unset `ship_parts` needs no
+question unless the plan is sequenced into more than one pull request:
 
 ```bash
 "$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" \
   --set ui_scope="$UI_SCOPE" --set risk_tags="$RISK_TAGS_JSON"
+# only when the plan ships in parts
+"$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" --set ship_parts="$SHIP_PARTS_JSON"
 ```
 
 ### 11. Fold in the decisions
@@ -337,11 +345,12 @@ when every answer is no; `review-log` refuses the entry without one or the other
 adds `· re-review demanded by …` to that review's REVIEW REPORT row.
 
 ```bash
+KIND_FIELD=(); [ -n "$PLAN_KIND" ] && KIND_FIELD=(--field plan_kind="$PLAN_KIND")
 "$BIN/review-log" --skill plan-eng-review --status "$STATUS" --plan "$(basename "$_PLAN_FILE")" \
   --rereview none \
   --field mode="$MODE" --field unresolved="$UNRESOLVED" \
   --field critical_gaps_found="$CRITICAL_GAPS_FOUND" --field critical_gaps_open="$CRITICAL_GAPS_OPEN" \
-  --field model="<your model>" ${PLAN_KIND:+--field plan_kind="$PLAN_KIND"}
+  --field model="<your model>" "${KIND_FIELD[@]}"
 ```
 
 `STATUS` is `clean` when unresolved decisions and `critical_gaps_open` are both zero, otherwise

@@ -347,15 +347,15 @@ and `supersedes` in frontmatter. That is the revision chain across sessions; it 
 dashboard, which is by design. Write the file, then set the frontmatter and register:
 
 ```bash
+META_ARGS=(); [ -n "$PRIOR_PLAN" ] && META_ARGS+=(--set supersedes="$PRIOR_PLAN")
+[ -n "$PARENT_EPIC" ] && META_ARGS+=(--set parent_epic="$PARENT_EPIC" --set milestone="$MILESTONE")
 "$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" \
   --set plan_kind=feature \
   --set plan_mode="$PLAN_MODE" \
   --set registry_key="$REGISTRY_KEY" \
   --set workflow_status=planning \
   --set implementation_status=not-started \
-  --set review_status='[]' \
-  ${PRIOR_PLAN:+--set supersedes="$PRIOR_PLAN"} \
-  ${PARENT_EPIC:+--set parent_epic="$PARENT_EPIC" --set milestone="$MILESTONE"}
+  --set review_status='[]' "${META_ARGS[@]}"
 
 # Note-sourced plans add the source keys.
 "$BIN/obsidian-workflow" plan-metadata-set "$_PLAN_FILE" \
@@ -365,11 +365,11 @@ dashboard, which is by design. Write the file, then set the frontmatter and regi
   --set source_task_id="$SOURCE_TASK_ID"              # single-task
   # batch-note instead: --set source_tasks="$SOURCE_TASKS_JSON" --set task_count="$SOURCE_TASK_COUNT"
 
+BATCH_ARGS=(); [ -n "$SOURCE_TASKS_JSON" ] && BATCH_ARGS=(--batch --source-tasks-json "$SOURCE_TASKS_JSON")
 "$BIN/obsidian-workflow" registry-upsert "$REGISTRY_KEY" \
   --kind "$REGISTRY_KIND" --branch "$BRANCH" \
   --set title="$TITLE" --set plan_path="$_PLAN_FILE" --set plan_mode="$PLAN_MODE" \
-  --set workflow_status=planning --set implementation_status=not-started \
-  ${SOURCE_TASKS_JSON:+--batch --source-tasks-json "$SOURCE_TASKS_JSON"}
+  --set workflow_status=planning --set implementation_status=not-started "${BATCH_ARGS[@]}"
 
 # Milestone children only.
 "$BIN/obsidian-workflow" link-parent "$REGISTRY_KEY" --parent-epic "$PARENT_EPIC" --milestone "$MILESTONE"
@@ -394,11 +394,11 @@ mkdir -p "$(dirname "$EPIC_FILE")"
 Write the file from the template, including the line that says the epic never executes. Then:
 
 ```bash
+NOTE_SET=(); [ -n "$SOURCE_NOTE_REF" ] && NOTE_SET=(--set source_note_ref="$SOURCE_NOTE_REF")
 "$BIN/obsidian-workflow" plan-metadata-set "$EPIC_FILE" \
   --set plan_kind=epic --set plan_mode=epic \
   --set registry_key="epic:$EPIC_SLUG" --set title="$TITLE" --set branch="$BRANCH" \
-  --set workflow_status=planning --set implementation_status=not-started --set review_status='[]' \
-  ${SOURCE_NOTE_REF:+--set source_note_ref="$SOURCE_NOTE_REF"}
+  --set workflow_status=planning --set implementation_status=not-started --set review_status='[]' "${NOTE_SET[@]}"
 "$BIN/obsidian-workflow" epic-register --slug "$EPIC_SLUG" --path "$EPIC_FILE" \
   --milestones-json "$MILESTONES_JSON"
 ```
