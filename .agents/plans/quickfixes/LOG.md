@@ -107,3 +107,12 @@
 - Tests: none (docs only); production state re-read 2026-09-23T17:18:47Z (worker and beat stopped, web started); resume commands checked against flyctl help and infra/incident-diagnostics.md
 - Docs: no doc impact (TODOS.md entry only; no documented surface changed)
 - Branch: quickfix/pause-celery-worker · PR: https://github.com/willdoucet/todo-app/pull/61
+
+## 2026-09-24 — ops-check-fly-path
+- Source: free text (M8 "Between the PRs" step 10, the first `ops-check` dispatch after the PR1b release `v1-20260924-f4a6814`)
+- What: an "Expose flyctl as fly" step in `ops-check.yml` that links `$RUNNER_TEMP/flybin/fly` to `flyctl` and adds it to `$GITHUB_PATH`
+- Why: `setup-flyctl` installs only `flyctl`, and `infra/release-smoke.py` runs `fly`; run 36009722470 exited 2 on `[9]` and `[5]` ("`fly` is not on PATH"). Laptops have both names through Homebrew, so no earlier run showed it
+- Files: .github/workflows/ops-check.yml, infra/tests/test_ops_check_workflow.py
+- Tests: infra/tests/test_ops_check_workflow.py (4: the reproduction with the script's own runner, the workflow's step run as `bash -e`, a missing flyctl fails the step, step order); red before the fix, `python3 -m pytest infra/tests -q` 165 passed after; two mutation checks red then restored; real runner: a dispatch from the branch (`gh workflow run ops-check.yml --ref quickfix/ops-check-fly-path`, run 36017858233) was green on the first attempt, `exit 0: 7 passed, 0 skipped, 1 paused`, with `[5] origin-lock` passing. `[9] restore-point` passed on the volume snapshot, with `also: fly pg backup list … unauthorized`: that read executes on the Postgres VM, which the read-only token cannot do, so the cron cannot see WAL backups. Not this fix's cause (the PATH bug hid it); recorded for M8 PR2 (RUNBOOK correction, a TODO for a narrow machine-exec token)
+- Docs: updated 3 docs (TECH_STACK CI/CD row, LESSONS Bug Log, REVIEW_CHECKLIST GitHub Actions)
+- Branch: quickfix/ops-check-fly-path · PR: https://github.com/willdoucet/todo-app/pull/63
