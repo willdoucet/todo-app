@@ -120,6 +120,20 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Priority:** P2
 **Depends on:** Nothing.
 
+## P2 — Prove at the next release that Fly overwrites a client-sent `Fly-Client-IP`
+**What:** Once a release includes quickfix `gate-log-fly-client-ip`, send one direct request carrying a forged `Fly-Client-IP` and confirm the host gate's `app.gate` line logs the caller's real public address, not the forged one.
+**Why:** Since that quickfix the gate logs `Fly-Client-IP` as `ip` (`backend/app/gate_logging.py` → `_client_ip`), because the last `X-Forwarded-For` entry it logged before was Fly's own anycast address, the same on every request (LESSONS.md → Bug Log, 2026-09-24). Fly's docs (https://docs.fly.io/networking/request-headers/) say the proxy sets `Fly-Client-IP`, but not whether it replaces a copy the client sent. If it passes a client copy through as the last one, the caller chooses the logged `ip`.
+**Check** (after `fly deploy`; IPv4 on both commands so the addresses compare like with like, since `mealy-app-prod.fly.dev` also has an AAAA record):
+1. Your public address: `curl -4 -s https://api.ipify.org`
+2. `curl -4 -s -o /dev/null -w '%{http_code}\n' -H 'Fly-Client-IP: 203.0.113.9' https://mealy-app-prod.fly.dev/auth/status` prints `421`.
+3. `fly logs -a mealy-app-prod --no-tail | grep '"event": "host_gate"' | grep host_mismatch | tail -1`
+**Pass:** step 3's `"ip"` is the address from step 1. Mark this entry done, and drop the "unproven" sentences from BACKEND_STRUCTURE.md → Production host gate and LESSONS.md → "A Host-header check does not stop direct-to-origin bypass".
+**Fail:** step 3's `"ip"` is `203.0.113.9`: the caller chooses the logged `ip`, so nobody may use it to identify a sender. Record the result in LESSONS.md and open a quickfix to decide what the gate logs instead.
+**Context:** Found 2026-09-24 reading `fly logs` after release `v1-20260924-f4a6814`: both rejections logged `66.241.124.153` or `2a09:8280:1::10e:a0e0:0`, the A and AAAA records of `mealy-app-prod.fly.dev`. The same check is in the quickfix's pull request body. It is deliberately not in `infra/RUNBOOK.md`, which M8 PR2 rewrites.
+**Effort:** S (human: ~10 min / CC: ~5 min, during a release)
+**Priority:** P2
+**Depends on:** A release that includes quickfix `gate-log-fly-client-ip`.
+
 ## P2 — App-layer rate limit on `/auth/login`, behind the Cloudflare edge rule
 **What:** Limit login attempts in the app itself, backed by the Redis the app already runs (Upstash in production, `redis` in compose): a per-IP counter on `POST /auth/login` (and `/auth/register`) keyed on `resolve_client_ip`, plus a cap on failed attempts against the single household account, answering 429 before argon2 runs.
 **Why:** The Cloudflare WAF rule (`infra/cloudflare-state.md`, 5 req / 10 s / IP on `/auth/*`) is the only brute-force and argon2-CPU control on login. The 2026-09-11 origin bypass showed what that costs: while the Fly origin was reachable around Cloudflare, login attempts were unlimited and the single 1 GB web VM could be pinned. The origin lock (`quickfix/origin-verify-header`) closes that path, but a future edge misstep — the rule disabled, the zone moved, the plan changed — would reopen it with no signal from the app.
