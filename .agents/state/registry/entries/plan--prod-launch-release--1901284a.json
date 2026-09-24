@@ -2,7 +2,7 @@
   "branch": "prod-launch-release",
   "commit": "6f0a608",
   "created_at": "2026-09-11T22:37:41Z",
-  "implementation_status": "partially-shipped",
+  "implementation_status": "ready-for-review",
   "key": "plan:prod-launch-release",
   "kind": "plan",
   "milestone": "M8",
@@ -11,9 +11,9 @@
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
   "pr": "https://github.com/willdoucet/todo-app/pull/60",
-  "reason": "PR1a shipped as #60 (not merged). Before merging it: the two Vercel settings (auto-assign off, done; system env vars exposed, already on); optionally the read-only smoke groups from this branch. After merge, before the first deploy: confirm the Staged build carries its commit, confirm/enable a restore point (step 0a), fly scale count web=1 (step 1); then Between the PRs steps 2-6 by RUNBOOK. Before PR1b's /execute-plan: merge master into prod-launch-release (PR1a's squash), and never change ship_parts.",
-  "reason_at": "2026-09-23T16:24:00Z",
-  "reason_by": "ship",
+  "reason": "/final-review of PR1b clean: 13 found, 7 fixed (Sign out takes the auth_session_issue lock; ops-check failure lines become annotations; pause review_by at most 31 days out; beat-only resume detected; CLI exit 2 on any unexpected error; UTC pause dates; TODOS P1), 1 accepted, 2 by design, 3 not a defect or a lead. Overruled the plan in place: step 10 checks the run's annotations and records what the email showed. Verify at the PR1b release: the email's content and the gate's logged ip. Suites green (backend 1057, frontend 632, infra 161); nothing committed. Next: /ship.",
+  "reason_at": "2026-09-24T03:23:13Z",
+  "reason_by": "final-review",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
@@ -33,6 +33,6 @@
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-23T16:24:00Z",
-  "workflow_status": "partially-shipped"
+  "updated_at": "2026-09-24T03:23:13Z",
+  "workflow_status": "ready-for-review"
 }

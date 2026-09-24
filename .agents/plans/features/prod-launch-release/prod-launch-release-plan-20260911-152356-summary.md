@@ -21,6 +21,20 @@ PR1a only and stops at ready-for-review, following the M7 precedent (PR1 summary
 a second run). PR1b is a later `/execute-plan` run that reconciles this file and appends its
 own steps.
 
+## Scope of this run: PR1b
+
+- Started: 2026-09-23T17:59:05Z (the start sync), after PR1a merged as #60 (squash `91edffa`); `origin/master`
+  (`f0a8d81`, with #61) merged into the branch as `37334a5`.
+- Metadata: {"implementation_status":"partially-shipped","milestone":"M8","parent_epic":"v1-productionization","plan_kind":"feature","plan_mode":"feature","pr":"https://github.com/willdoucet/todo-app/pull/60","registry_key":"plan:prod-launch-release","review_status":["ceo-reviewed","eng-reviewed","adversarial-reviewed","design-reviewed","impl-reviewed","final-reviewed"],"risk_tags":["infra","security","auth","data","migration"],"ship_parts":["PR1a","PR1b","PR2"],"shipped_parts":[{"commit":"6f0a608","part":"PR1a","pr":"https://github.com/willdoucet/todo-app/pull/60","shipped_at":"2026-09-23T16:07:56Z"}],"ui_scope":true,"workflow_status":"partially-shipped"}
+- Gate: `workflow-state --next --json` named `/execute-plan`, `unreadable == 0`. #60 `MERGED`.
+- Design source of truth: mockup present; `design-sync-check --pin-sha` printed
+  `628891f08a93549a472a78ce8b7dfcf81baf735c`, equal to the plan's pin.
+- Scope (plan § Recommended Approach, Eng review 0): items 5, 6, 13, 14, 15, 15a, the
+  `GATE_BREAK_GLASS` flag, the `job_heartbeats` migration, and every test. Plus the user's
+  approved addition of 2026-09-23: a checked-in pause declaration (`infra/paused.json`) that the
+  smoke script and `ops-check.yml` read, because production's worker and beat are paused on
+  purpose at the Upstash request cap (TODOS.md P1).
+
 ## Steps
 - [✓] Step 1 — Pin the scale: `infra/fly-scale.json` `{"web": 1, "worker": 1, "beat": 1}` and the `backend/fly.toml` comment pointing at it (item 7) (2026-09-21T23:06:20Z)
 - [✓] Step 2 — `infra/release-smoke.py` (nine checks, four groups, exit 0/1/2, `--only`, `--skip`, `--release-commit`, `--self-test`, the `/healthz.jobs` contract reader) with `infra/tests/test_release_smoke.py` (item 4; Eng 2.3, 2.4, 3A) (2026-09-21T23:15:05Z)
@@ -31,6 +45,20 @@ own steps.
 - [✓] Step 7 — `infra/backup-restore-drill.md`: both restore paths, the volume-move failure mode, execution log (items 3, 12) (2026-09-21T23:27:17Z)
 - [✓] Step 8 — `infra/cloudflare-state.md`: replace the expired break-glass line with a pointer; record Bot Fight Mode for the drift script (item 2, Eng 7; item 4) (2026-09-21T23:28:06Z)
 - [✓] Step 9 — `.agents/config.json` doc_map: route `backend/app/cli/**`, `gate_logging.py`, `job_health.py`; exempt `infra/*.md` with the reasoning recorded (item 10) (2026-09-21T23:28:44Z)
+- [✓] Step 10 — PR1b: host-gate rejection reasons: pure `gate_reason()` in `main.py` (six reasons, decision-tree comment), `backend/app/gate_logging.py` emitter under `app.gate`, wrapped so it never changes a 421 (item 5; Eng 2.2, CEO 2A) (2026-09-23T18:13:08Z)
+- [✓] Step 11 — PR1b: `GATE_BREAK_GLASS` flag: `fly.toml [env]` `"0"`, strict parse, bypass skips only origin-verify and logs `outcome="bypassed"` (open question 3; Eng 7) (2026-09-23T18:14:43Z)
+- [✓] Step 12 — PR1b: `/healthz` reports `version` and `gate_break_glass` with `Cache-Control: no-store`; `GIT_COMMIT` build arg in the Dockerfile's `prod` stage; `test_healthz.py` rewritten (item 14; CEO 5D, Eng 1.2, 2.6) (2026-09-23T18:16:17Z)
+- [✓] Step 13 — PR1b: `JobHeartbeat` model and the additive `job_heartbeats` Alembic revision with a real `downgrade()` (open question 6; Eng 1A, Eng 4 2A) (2026-09-23T18:17:26Z)
+- [✓] Step 14 — PR1b: `backend/app/job_health.py` (`beat_intervals()`, `JOB_LABELS`, `build_jobs_payload`, refresher) and `/healthz.jobs` per the pinned contract, from memory only (item 15; Eng 1.2, Eng 4, Eng 5) (2026-09-23T18:24:19Z)
+- [✓] Step 15 — PR1b: `task_postrun` heartbeat writer: SUCCESS and `beat_schedule` names only, upsert, error write, clears on success (item 15; Eng 3, Adversarial) (2026-09-23T18:26:57Z)
+- [✓] Step 16 — PR1b: password rotation: `auth/service.rotate_password` (one commit, inside `logout`) and `backend/app/cli/rotate_password.py` (item 6; Eng 2.1, CEO 2D) (2026-09-23T18:30:32Z)
+- [✓] Step 17 — PR1b: smoke script: the pause declaration `infra/paused.json` (user-approved addition), and check 1 asserting `/healthz` reports a version (item 13) (2026-09-23T18:36:05Z)
+- [✓] Step 18 — PR1b: `.github/workflows/ops-check.yml`: daily schedule and `workflow_dispatch` with `self_test`, retry once, read-only Fly token (item 13; CEO 8A, 2F, Adversarial) (2026-09-23T18:37:20Z)
+- [✓] Step 19 — PR1b: shared `frontend/src/lib/serverTime.js` and `FreshnessDot.jsx`; `ICloudSettings.jsx` consumes them (sage dot, secondary gray) (item 15; CEO 4B-A, Design 5A, 6A) (2026-09-23T18:39:01Z)
+- [✓] Step 20 — PR1b: `useBackgroundJobs.js` with the pure `deriveJobsState(jobs, now)` on a server-aligned clock (item 15a; Eng 4, Eng 5) (2026-09-23T18:42:34Z)
+- [✓] Step 21 — PR1b: `BackgroundJobsSection.jsx`, `BackgroundJobsAlert.jsx`, Settings page header and mount, MSW `/healthz` default handler (item 15a) (2026-09-23T18:59:31Z)
+- [✓] Step 22 — PR1b: sign-in bounce banner copy with the likely causes (item 6, Design review 10) (2026-09-23T19:00:04Z)
+- [✓] Step 23 — PR1b: runbooks for the PR1b surfaces: RUNBOOK password rotation, `FLY_API_TOKEN`, break-glass availability, the pause; diagnostics entries for gate reasons, the jobs card and cron, the pause (items 1, 2, 13) (2026-09-23T19:02:30Z)
 
 ## Step notes
 
@@ -313,6 +341,302 @@ during implementation (assumption 5).
 
   `ctx` and `workflow-state` still load the config. This meets criterion 13.
 
+### Step 10 — PR1b: host-gate rejection reasons (item 5)
+- Files: `backend/app/gate_logging.py` (new: six reason constants in decision-tree order,
+  `REASONS`, `emit_gate_rejection`, `emit_gate_bypass` for step 11); `backend/app/main.py`
+  (`_origin_verified` → `_origin_verify_reason`, new pure `gate_reason()`, `_log_gate` wrapper,
+  the `:193` comment rewritten as the decision tree); `backend/tests/integration/auth/test_host_gate.py`
+  (every existing 421 test asserts its one `app.gate` record and reason; new: `Host: :443` →
+  `host_absent`, byte-identical bodies across all six reasons, the raising emitter, the record's
+  contents); `backend/tests/unit/test_gate_reason.py` (new: one test per branch, including a
+  request with no `Host` header, which h11 and httpx cannot send).
+- Decisions: `main.py` calls `gate_logging.emit_gate_rejection` through the module, so the
+  raising-emitter test patches `app.gate_logging` and records the call as its negative control.
+  The wrapper catches `Exception`, not `BaseException`. A present-but-empty `X-Origin-Verify` is
+  `origin_verify_mismatch`; only a missing header is `origin_verify_absent`. The record carries
+  `ip` (socket peer), `request_id`, `path` (128), and `host_present`/`host_length`,
+  `origin_verify_present`/`origin_verify_length`; no header value.
+- Verification: `docker-compose exec api uv run pytest tests/unit/test_gate_reason.py
+  tests/integration/auth/test_host_gate.py tests/integration/auth/test_log_hygiene.py` →
+  41 passed. Mutation: removing the `try/except` in `_log_gate` turned
+  `test_gate_logging_failure_does_not_change_response` red; `main.py` restored `cmp`-identical.
+
+### Step 11 — PR1b: `GATE_BREAK_GLASS` (open question 3; Eng review 7)
+- Files: `backend/fly.toml` (`[env] GATE_BREAK_GLASS = "0"` with the why: versioned, never a
+  secret); `backend/app/main.py` (`break_glass_enabled()`, the bypass branch in `gate_reason`
+  after the Host checks, one `emit_gate_bypass` per admitted request while on, decision tree
+  updated); tests in `tests/unit/test_gate_reason.py` (strict parse: `1` on; `0`, empty,
+  `true`, `yes`, `TRUE`, `" 1 "`, `"1 "`, `01`, unset off; the flag skips all three origin
+  checks and no Host check) and `tests/integration/auth/test_host_gate.py` (admitted and logged
+  `bypassed`; every admitted request logged, `/healthz` not; wrong Host still 421; loose values
+  stay off). Both fixtures now clear `GATE_BREAK_GLASS` so a stray container env cannot open
+  the gate under test.
+- Decision: the flag is read per request, like `PUBLIC_API_HOST` and `ORIGIN_VERIFY_SECRET`,
+  so tests and the local rehearsal flip it with the environment alone.
+- Verification: 55 passed. Mutation: a loose parse (`strip().lower() in ("1", "true", "yes")`)
+  turned 8 tests red; `main.py` restored `cmp`-identical.
+
+### Step 12 — PR1b: `/healthz` version, break-glass flag, `no-store` (item 14)
+- Files: `backend/Dockerfile` (`ARG GIT_COMMIT` + `ENV GIT_COMMIT` in the **prod** stage,
+  last before `USER`, with the why); `backend/app/main.py` (`deployed_version()`; `/healthz`
+  returns `status`, `version`, `gate_break_glass` and sets `Cache-Control: no-store`);
+  `backend/tests/unit/test_healthz.py` rewritten (its docstring and exact-body assertion forbade
+  this change, Eng review 2.6): version from the env, `unknown` when unset/empty/blank,
+  `no-store`, the flag's strict parse as reported, and the exact key set.
+- Verification: `pytest tests/unit/test_healthz.py tests/integration/auth/test_host_gate.py` →
+  37 passed; the three other files that mention `/healthz` → 16 passed. The running local api
+  answers `{"status":"ok","version":"unknown","gate_break_glass":false}` with
+  `cache-control: no-store`. A real `docker build --target prod --build-arg GIT_COMMIT=deadbeef`
+  image carries `GIT_COMMIT='deadbeef'`; without the arg it is `''`, which the handler reports as
+  `unknown` (test images removed afterwards). Trap confirmed while checking: the prod image's
+  relative `PATH` entry means a bare `python` does not resolve; `/app/.venv/bin/python` does,
+  as item 6 already requires for the rotation CLI.
+
+### Step 13 — PR1b: `JobHeartbeat` model and the `job_heartbeats` revision (open question 6)
+- Files: `backend/app/models.py` (`JobHeartbeat`, with the row-lifecycle diagram the plan's
+  inline-diagram table asks for); `backend/alembic/versions/1b6b462491fa_add_job_heartbeats_table.py`
+  (generated with `docker-compose exec api alembic revision -m`, written by hand: `task_name`
+  Text PK, `last_success_at` / `last_error_at` timestamptz, `last_error` Text, `error_count` int
+  default 0; `downgrade()` drops the table).
+- Decisions: autogenerate was not used, because the dev database still holds the M-era
+  `recipes_archived` / `food_items_archived` tables no model declares, so it would have
+  proposed dropping them. `last_error` will hold the exception class name only (step 15),
+  per the test artifact's log hygiene. No index beyond the PK: the refresher reads all rows
+  (four) every 30 s.
+- Verification: `alembic heads` → one head `1b6b462491fa`; `upgrade head` on the dev database,
+  `\d job_heartbeats` shows the columns and types above; `downgrade -1` → `to_regclass` empty;
+  `upgrade head` again → present. A one-off `alembic.autogenerate.compare_metadata` run (with
+  `compare_type` and `compare_server_default`) filtered to `job_heartbeats` → `[]`, so the model
+  and the migrated schema agree. The repository has no standing models-vs-migrations test
+  (REVIEW_CHECKLIST → Alembic → Testing); not added here, noted as a gap.
+
+### Step 14 — PR1b: `job_health.py` and `/healthz.jobs` (item 15; Eng reviews 1.2, 4, 5)
+- Files: `backend/app/job_health.py` (new: `JOB_LABELS`, `humanize`, `beat_intervals()`
+  (raises on a non-number / non-`timedelta` / non-positive / duplicate schedule),
+  `scheduled_intervals()` (derived once), the frozen `Reading` / `HeartbeatRow` the refresher
+  replaces wholesale, the pure `build_jobs_payload(reading, now, started_at, intervals)`, the
+  `JobRow` / `JobsReading` Pydantic contract model, `serve_jobs()` (validates, and returns the
+  unusable reading instead of raising or serving a malformed body), `read_heartbeats(session)`,
+  `refresh_once`, `refresh_forever`; the module docstring carries the data-flow diagram the
+  plan's inline-diagram table asks for); `backend/app/main.py` (lifespan: `mark_started()`,
+  starts the refresher, cancels and awaits it on shutdown; `/healthz` adds `jobs`);
+  `backend/tests/unit/test_job_health.py` (new, 44), `backend/tests/unit/test_healthz.py`
+  (the contract key set, the served reading, zero database calls with a negative control, and a
+  real-lifespan run with the store stubbed to hang), `backend/tests/integration/test_job_health_read.py` (new).
+- Decisions: timestamps serialize at second precision with a `Z`; `interval_s` is an int when
+  integral. `refresh_forever`'s defaults resolve per cycle so the lifespan-run test can swap the
+  reader and timeout. The contract model validates before serving: a naive timestamp, an empty
+  schedule, or an uncomputable schedule all serve `read: "unavailable"`, never a 500 on the probe.
+- Bug found and fixed during the step: Pydantic compiles `Field(pattern=...)` with Rust's regex
+  engine, which rejects `\Z`; the dev api's hot reload died at import. `\z` is the Rust anchor;
+  LESSONS.md → "Anchor Python key/path regexes" gained the rule.
+- Verification: 57 passed (`test_job_health.py`, `test_healthz.py`, `test_job_health_read.py`).
+  The live dev api (hot reload) serves the contract: `read: "ok"`, four rows in
+  `beat_schedule` order with the server's labels, `interval_s` 600/600/3600/3600, all NULL and
+  not stale inside the post-start grace. Mutations, each turning `test_job_health.py` red:
+  `>` → `>=` on staleness (4 failed), `<=` → `<` on the `write_error` window (1 failed), a NULL
+  row never stale (3 failed); file restored `cmp`-identical.
+
+### Step 15 — PR1b: `task_postrun` heartbeat writer (item 15; Eng review 3, Adversarial review)
+- Files: `backend/app/tasks.py` (`record_job_heartbeat` on `task_postrun`, `_write_heartbeat`,
+  `_in_app_session`, and the flow diagram the plan's inline-diagram table asks for);
+  `backend/app/job_health.py` (`upsert_heartbeat_success` and `record_heartbeat_error`, the two
+  `INSERT … ON CONFLICT (task_name)` writes, next to the one read); tests:
+  `backend/tests/unit/test_job_heartbeat_writer.py` (13: SUCCESS-only, `beat_schedule` names
+  only including `health_check` and `extract_recipe_from_url`, the error write with the class
+  name, the second failure's one extra WARNING and no raise, an uncomputable schedule, and the
+  receiver really connected to Celery's `task_postrun`), and
+  `backend/tests/integration/test_job_heartbeat_store.py` (5: clean insert, idempotent
+  redelivery, error keeps `last_success_at` and counts, error before any success creates the
+  row, a later success clears the error).
+- Decisions: `last_error` stores the exception class name only, bounded to 200 characters (the
+  message can quote a connection string; the unit test asserts `hunter2` never reaches a log).
+  The filter uses `job_health.scheduled_intervals()`, the same definition the payload uses.
+  The handler catches everything, including a failing filter, so a heartbeat never taints a task.
+- Verification: 18 passed. Live on the local Compose stack (never production): restarted the
+  local `celery_worker`, enqueued `hard_delete_expired_soft_deletes` and `health_check` with
+  `celery call`; the worker log shows both `succeeded`, `job_heartbeats` gained exactly one row
+  (`hard_delete_expired_soft_deletes`, `error_count` 0), and within one refresher cycle
+  `/healthz.jobs` showed "Deleted item cleanup" `last_success_at 2026-09-23T18:26:16Z`,
+  `stale: false`, with the other three still NULL inside the grace (test artifact critical
+  paths 4 and 14).
+
+### Step 16 — PR1b: password rotation (item 6; Eng review 2.1, CEO 2D, Adversarial review)
+- Files: `backend/app/auth/service.py` (`RotationRejected`, `RotationSummary`,
+  `rotate_password()`: refuses empty and >128 before any lookup or hashing, CITEXT lookup like
+  login, sets the hash on the session, counts live rows, `logout()` is the only commit, re-reads
+  the version; the module diagram names it and states why the order is fail-closed; `logout`'s
+  docstring gains the one-line CLI exception); `backend/app/cli/__init__.py`,
+  `backend/app/cli/rotate_password.py` (argparse email only, `getpass` twice, exit 0 / 1 / 2,
+  engine disposed before the loop closes, the operator sequence and both SSH traps in the
+  docstring); tests `backend/tests/integration/auth/test_rotate_password.py` (7) and
+  `backend/tests/unit/test_rotate_password_cli.py` (10).
+- Decisions: exit 2 covers any database-layer failure (`DBAPIError`, `OSError`, a timeout), not
+  only "unreachable": a missing table is `ProgrammingError`, which would otherwise surface as a
+  traceback and exit 1, the code for "refused, nothing written". Its message says "the rotation
+  did not complete" rather than "nothing was changed", which cannot be promised if the
+  connection drops during the commit.
+- Verification: 17 passed plus `test_logout.py`'s 8. Mutation: a second commit after setting
+  the hash turned the crash test red; `service.py` restored `cmp`-identical. End to end in a
+  scratch database on the local Postgres (`rotation_scratch`, created, migrated, dropped): the
+  real `python -m app.cli.rotate_password HOUSEHOLD@example.com` with both passwords on stdin
+  printed the summary and the household line and exited 0; the new password verifies, the
+  session version went 0 → 1, 0 live refresh rows remain; a mismatch and an unknown email each
+  exited 1. The `fly ssh console --select` run on production is the operator's criterion 6
+  (Between the PRs step 9).
+
+### Step 17 — PR1b: smoke script: the pause declaration and `[1] version-reported`
+- Files: `infra/paused.json` (new: worker and beat, since 2026-09-23, review_by 2026-10-23,
+  reason "Upstash request cap (500,000 requests/month); TODOS.md P1"); `infra/release-smoke.py`
+  (the docstring states the pause rules next to the check matrix; `PAUSE_FILE`,
+  `PAUSABLE_GROUPS`, `Paused`, `Pause`, `read_pauses`, `pause_verdict`, `Context.pauses()`;
+  check 2 requires a declared group to be stopped and never suggests starting it; check 4 and
+  jobs-fresh go through `pause_verdict`, and jobs-fresh applies the unusable-reading rule
+  first; a `PAUSE` outcome and a summary that counts it; the self-test ignores the file; a new
+  liveness check `[1] version-reported` under the existing `healthz_version` key);
+  `infra/tests/conftest.py` (autouse `no_declared_pause`: every test starts from `{}`);
+  `infra/tests/test_release_smoke.py` (22 new tests; two summary counts updated for the new
+  check; the skip-key test now pins the exact key-to-check map, since `healthz_version`
+  legitimately covers check 8's backend comparison and `version-reported`).
+- The user-approved spec, point by point: a paused group must be stopped (check 2 fails if it
+  runs) — done; check 4 and jobs-fresh print PAUSED, never pass — done; the summary counts
+  paused — `exit 0: 11 passed, 0 skipped, 2 paused (beat, worker declared in infra/paused.json)`;
+  past review_by fails — on every run, not once (assumption 2, approved); `ops-check.yml` needs
+  no pause logic (step 18 runs the same script); worker and beat declared since 2026-09-23,
+  review_by 2026-10-23; the Settings card unchanged. Docs: step 23 and `/update-docs`.
+- Decisions: a missing file declares nothing (the strict reading); only worker and beat can be
+  declared (web is the app); a malformed file or entry is exit 2 on the three checks that read
+  it. Paused jobs-fresh still fails an unusable reading, because it is the cron's only sign that
+  the web cannot reach the database.
+- Verification: `python3 -m pytest infra/tests -q` → 155 passed. Both self-tests still exit 1
+  (check 3; jobs-fresh), with the real pause file present. Mutations, each turning one test red:
+  the review-date boundary `>` → `>=`, the self-test honouring the pause, check 2 ignoring a
+  running paused group; script restored `cmp`-identical.
+
+### Step 18 — PR1b: `.github/workflows/ops-check.yml` (item 13; CEO 8A, 2F; Adversarial review)
+- Files: `.github/workflows/ops-check.yml` (new): daily at 14:17 UTC and `workflow_dispatch`
+  with a boolean `self_test`; runs `python3 infra/release-smoke.py
+  --only=liveness,recoverability,edge` (plus `--self-test` when asked); `permissions: contents:
+  read`, a `concurrency` group, `timeout-minutes: 10`; `actions/checkout@v4`,
+  `actions/setup-python@v5` (3.12), `superfly/flyctl-actions/setup-flyctl@1.6` pinned to flyctl
+  `0.4.102`; retry once as two steps (the first `continue-on-error`, the second only when it
+  failed, after 60 s); the script's output goes to the job summary. `FLY_API_TOKEN` comes from
+  `secrets`, is never echoed, and no pull-request trigger exists, so forks never receive it.
+- Decisions: no pause logic in the workflow (the script reads `infra/paused.json`); retry on
+  any failure class, because a Postgres primary waking (open question 4) or a network blip can
+  fail either; the self-test fails both attempts, so its email proves the alert (criterion 17).
+- Verification: the YAML parses (triggers `schedule`, `workflow_dispatch`; six steps). The
+  run blocks' shell logic under `bash -e` with the self-test args: the script's lines are
+  printed and the step exits 1. `actionlint` is not installed on the host; GitHub validates the
+  file on push. Operator steps after merge (Between the PRs 10): create the read-only token,
+  `gh secret set FLY_API_TOKEN`, confirm it can run `fly volumes snapshots list`,
+  `fly pg backup list` and `fly ips list`, then `gh workflow run ops-check.yml` and the
+  `self_test=true` run (step 23 writes them into the RUNBOOK).
+
+### Step 19 — PR1b: shared `serverTime.js` and `FreshnessDot.jsx` (item 15; CEO 4B-A, Design 5A, 6A)
+- Files: `frontend/src/lib/serverTime.js` (new: `parseServerTime` and `relativeTime` moved from
+  `ICloudSettings.jsx`, `relativeTime` now takes an optional `now`; new `durationSince` → "45
+  min" / "3 hr" / "2 days"); `frontend/src/components/shared/FreshnessDot.jsx` (new: one `tone`
+  prop, `ok` sage / `bad` red / `unknown` muted, `aria-hidden`, no text, caller placement
+  classes); `frontend/src/components/settings/ICloudSettings.jsx` (imports both; the fresh dot is
+  `sage-500` and the fresh text `text-text-secondary`; `syncIsOverdue` and
+  `SYNC_STALE_AFTER_MS` stay, per 15a's file table and the P3 TODO); tests
+  `frontend/src/lib/serverTime.test.js` (new, `TZ=America/Los_Angeles`: naive parsed as UTC,
+  `Z` and offsets kept, words against a passed-in `now`), `frontend/tests/components/shared/FreshnessDot.test.jsx`
+  (new), and two new cases in `ICloudSettings.test.jsx` (sage dot and secondary gray when fresh;
+  red when overdue).
+- Decision: `relativeTime`'s `now` defaults to the browser clock, so the iCloud line behaves
+  exactly as before; only the Background jobs card passes the server-aligned one (Eng review 4).
+- Verification: `docker-compose exec frontend npx vitest run` on the three files → 37 passed
+  (the existing freshness tests, including the no-`Z` fixture under Los Angeles time, unchanged).
+
+### Step 20 — PR1b: `useBackgroundJobs.js` and `deriveJobsState` (item 15a; Eng reviews 4, 5)
+- Files: `frontend/src/hooks/useBackgroundJobs.js` (new: `HEALTHZ_QUERY_KEY`, `POLL_MS`,
+  `cadence`, `deriveJobsState(jobs, now)` with the first-match ladder 1 → 6 and state 2's
+  evidence predicate commented as the plan's inline-diagram table asks, `announcementFor`,
+  `jobsViewFromQuery(query, browserNow)` for the server-aligned clock and the footnote, and the
+  hook itself: raw `fetch(apiUrl('/healthz'), { cache: 'no-store' })` throwing a plain `Error`,
+  `queryKey ['healthz']`, `refetchInterval 30_000`, `staleTime 0`, `retry: false`, derived on
+  every render, never in `select`); `frontend/tests/hooks/useBackgroundJobs.test.js` (new, 41).
+- Decisions: the "What this means" lines are keyed by task name here, labels come from the
+  server (Eng review 4, 3A). The footnote's age uses `durationSince`, so it reads "1 min ago"
+  rather than "just now". The announcement lowercases the headline's first letter, per the plan's
+  text ("Background jobs: all running on schedule."); the mockup kept the capital, and the plan
+  wins where they differ. A row whose `last_success_at` is present but unparseable is part of an
+  unusable reading.
+- Verification: 41 passed under `TZ=America/Los_Angeles`: all six states and loading; every
+  unusable form outranking every-row-stale; state 2's three fixtures plus the null-success body;
+  row text by the row's own values (a fresh flagged row reads "ran 1 hr ago", not red); the
+  Waiting split; skewed browser clocks (±10 min) giving the same view; failed polls aging the
+  same data into state 1; the footnote; a `/healthz` without `jobs`; and the real hook against
+  MSW (no `Authorization`, every 30 s, still polling after a 500, silent after unmount).
+  Mutations, each turning tests red: state 2's predicate without the unflagged-row clause (2),
+  Stopped checked before Can't record (3), the 2-minute cap `>` → `>=` (1); file restored `cmp`-identical.
+
+### Step 21 — PR1b: `BackgroundJobsSection`, `BackgroundJobsAlert`, Settings wiring (item 15a)
+- Files: `frontend/src/components/settings/BackgroundJobsSection.jsx` (new: the card shell,
+  `h2#background-jobs` with `tabIndex={-1}` and `scroll-mt`, the description, one visually
+  hidden `role="status"`, headline with the dot at `mt-[7px]`, consequence lines, the `<dl>`
+  rows with `<time dateTime title>`, the footnote, the 200 ms "Checking…"); `…/BackgroundJobsAlert.jsx`
+  (new: states 2–4 only, inline text `red-700`, the underlined `terracotta-700` link with
+  `whitespace-nowrap` and a 44 px hit area on phones, `preventDefault` + scroll + focus the
+  `h2`, `auto` under reduced motion; no role, no dismiss, no banner); `frontend/src/pages/FamilyMembersPage.jsx`
+  (`<header>` around the `h1` and the alert, the `h1` drops its margin, the card directly above
+  Account); `frontend/src/hooks/useBackgroundJobs.js` (see decisions); `frontend/tests/mocks/handlers.js`
+  (`HEALTHZ_HEALTHY`, the contract's healthy example, as the default `/healthz` handler);
+  `frontend/tests/components/settings/BackgroundJobsSection.test.jsx` (new, 12, in `StrictMode`).
+- Decisions: the status region's text is written to its empty node from an effect, with the
+  previous state in a ref, because the repo's lint forbids `setState` in an effect and the test
+  artifact forbids render-time ref mutation. ESLint's `react-hooks/purity` forbids `Date.now()`
+  in render, so the hook reads the browser clock as TanStack's timestamp of the latest fetch
+  outcome (`max(dataUpdatedAt, errorUpdatedAt)`) — a poll, success or failure, is what re-renders
+  the card anyway, so failed polls still age the reading into state 1. That exposed a gap the
+  plan did not name: a `/healthz` request that hangs never fails, so it would freeze the card on
+  its last reading; the fetch now carries `AbortSignal.timeout(10_000)`. A hook test pins "three
+  minutes of failed polls → state 1".
+- Verification: `vitest run` on the hook and component files → 54 passed; `eslint` on every new
+  and edited frontend file → 0 problems. In a real browser (the visual-test stack's preview build,
+  signed in by its synthetic user; `/healthz` served per state by route interception; a
+  temporary, uncommitted spec, deleted afterwards): six states × 1440 and 375 px × light and dark,
+  24 passed; nothing in the Settings header or the card crosses the viewport; the link focuses the
+  `h2` and leaves the URL unchanged. Screenshots reviewed: state 6 desktop (two-column rows, sage
+  dot), state 4 at 375 px (the alert wraps as a sentence, "See background jobs" whole, rows
+  stacked, only stale rows red), state 2 fixture (c) and state 3 in dark mode, state 1.
+- Found, pre-existing, not changed (scope): at 375 px `FamilyMemberManager`'s terracotta "Add"
+  button extends 33 px past the viewport, so the Settings page scrolls sideways on a phone. The
+  branch does not touch that component. Candidate TODO, raised at completion.
+
+### Step 22 — PR1b: the sign-in bounce banner says why (item 6, Design review 10)
+- Files: `frontend/src/pages/AuthPortalPage.jsx` (`COPY.bounce` → "Your session ended. Someone
+  may have signed out on another device, or the household password changed. Sign in to pick up
+  where you left off.", with the reason the specific message is not derivable); its test gains
+  an assertion on the full sentence. No backend, auth or schema change.
+- Verification: `vitest run src/pages/AuthPortalPage.test.jsx` → 17 passed (the two existing
+  `/your session ended/i` tests unchanged); eslint clean.
+
+### Step 23 — PR1b: the runbooks for the PR1b surfaces (items 1, 2, 13; the pause)
+- Files: `infra/RUNBOOK.md`: the `FLY_API_TOKEN` header bullet now says how to create it
+  (`fly tokens create readonly -o personal -n ops-check -x 8760h | gh secret set …`, piped so
+  it never prints), how to prove its reads (the first `gh workflow run ops-check.yml` green,
+  the `self_test=true` run failing with the right email), and what to do if a read is refused;
+  §2 step 5 explains a declared pause's `PAUSE` lines and its failures; §5.2 step 4 adds
+  `healthz_version` to the skip list when rolling back to a pre-PR1b image (the new
+  `[1] version-reported` check); a new **§6 Rotate the household password** (the sequence
+  deferred from PR1a, deviation 7: tell the household first unless the password leaked,
+  `fly ssh console --select`, the absolute interpreter, the expected output and exit codes, and
+  the sign-in banner the household will see). `infra/incident-diagnostics.md`: a new entry
+  **A deliberate pause (worker or beat)** (the file's format, the check table, declare /
+  extend / resume, the Settings card not being pause-aware), a pointer to it at the top of the
+  Background jobs entry, the index table (`[1] version-reported`; `PAUSE` lines), the deployed
+  commit entry (`[1] version-reported` between releases), and the tooling entry (a malformed
+  pause file). `.agents/docs/TODOS.md` → P1: the resume steps gain "empty `infra/paused.json`".
+- Not changed, deliberately: the diagnostics' "(from PR1b)" and "not available until PR1b is
+  deployed" sentences describe what is deployed, so they stay true until the PR1b release; PR2
+  corrects them against the executed release, like the other runbook corrections.
+- Verification: `python3 -m pytest infra/tests -q` → 155 passed, including
+  `test_runbook_links.py` (every new anchor link resolves). `fly tokens create readonly --help`
+  confirmed `-o`, `-n` and `-x` (flyctl v0.4.102); no token was created.
+
 ## Doc impact
 
 - Step 1: TECH_STACK → Infrastructure / Production Deployment: state the counts
@@ -335,6 +659,32 @@ during implementation (assumption 5).
   `infra/RUNBOOK.md` (the release procedure) and `infra/incident-diagnostics.md`, and its
   "git-integration auto-deploys" line becomes "builds on merge, staged; the runbook promotes"
   (item 8). The file-structure tree's `infra/` line lists the new files.
+
+- Step 10 (PR1b): BACKEND_STRUCTURE → Code Organization (`gate_logging.py`, already routed by PR1a) and the middleware / error-handling description of the gate (six logged reasons, body unchanged); incident-diagnostics → 421 entry (first step: read the `reason`) — step 23.
+
+- Step 11 (PR1b): TECH_STACK → Infrastructure / env vars (`GATE_BREAK_GLASS`, `fly.toml [env]`); incident-diagnostics → Break-glass Mode A is now live (step 23).
+
+- Step 12 (PR1b): BACKEND_STRUCTURE → the `/healthz` endpoint row (`:781`, stale audit) now reports `version`, `gate_break_glass` and (step 14) `jobs`, `no-store`; TECH_STACK → env vars (`GIT_COMMIT`, build arg). RUNBOOK §2 step 2 already passes `--build-arg GIT_COMMIT`.
+
+- Step 13 (PR1b): BACKEND_STRUCTURE → Database Schema (`job_heartbeats` definition) and the ER diagram (`:45`, stale audit); RUNBOOK's migration-listing row for the PR1b release names `1b6b462491fa` as additive and reversible (step 23 notes it; the release row is PR2's).
+
+- Step 14 (PR1b): BACKEND_STRUCTURE → Code Organization (`job_health.py`, routed in PR1a), the `/healthz` row (the `jobs` contract), Background Job Pattern (the web-side refresher); TECH_STACK — none. LESSONS: Pydantic pattern anchor (done in this step).
+
+- Step 15 (PR1b): BACKEND_STRUCTURE → Background Job Pattern (the `task_postrun` heartbeat, beat tasks only, the error write) and REVIEW_CHECKLIST → Celery "sync intervals … documented in BACKEND_STRUCTURE"; incident-diagnostics → Background jobs (the WARNING lines as the tiebreaker) — step 23.
+
+- Step 16 (PR1b): BACKEND_STRUCTURE → Code Organization (`app/cli/`, routed in PR1a) and the auth service description; RUNBOOK → a password-rotation section (step 23; deferred from PR1a, deviation 7).
+
+- Step 17 (PR1b): TECH_STACK → Operator tooling (`paused.json` row; `release-smoke.py`'s PAUSE outcome and the new liveness check); RUNBOOK (a declared pause in the smoke expectations; the rollback skip list gains `healthz_version` for a pre-PR1b image), incident-diagnostics (a deliberate pause; the overdue review date), TODOS P1 ("empty infra/paused.json" in the resume steps) — step 23.
+
+- Step 18 (PR1b): TECH_STACK → CI/CD Pipeline (a second workflow, `ops-check.yml`: schedule, groups, retry, `FLY_API_TOKEN`) and Environment Variables / secrets (`FLY_API_TOKEN` GitHub secret); development-commands → CI parity (the cron runs the documented operator command); RUNBOOK → token creation and rotation, the first dispatch (step 23).
+
+- Step 19 (PR1b): FRONTEND_STRUCTURE → the shared `lib/serverTime.js` and `components/shared/FreshnessDot.jsx`, Settings; FRONTEND_GUIDELINES → §1 status colors (sage success, stock red error) and §5 the freshness-dot pattern (design-watched; expect design-sync drift).
+
+- Step 20 (PR1b): FRONTEND_STRUCTURE → hooks (`useBackgroundJobs.js`, the first non-auth `useQuery`); REVIEW_CHECKLIST's TanStack polling exception is recorded in the hook's docstring (the plan's recorded exception).
+
+- Step 21 (PR1b): APP_FLOW → Settings (the Background jobs card and the top alert, their states and copy) and the screen inventory; FRONTEND_STRUCTURE → Settings (`BackgroundJobsSection`, `BackgroundJobsAlert`, the page header); FRONTEND_GUIDELINES → §5 patterns (the freshness dot, the inline status alert).
+
+- Step 22 (PR1b): APP_FLOW → §4 Error Handling (the redirect is not silent: the bounce banner, now with its likely causes; the "silent one-shot redirect" note is stale — stale audit).
 
 ## Update-docs conclusion
 
@@ -367,6 +717,71 @@ DOC IMPACT: updated 5 docs
 
 The index is staged (update-docs step 8) and nothing is committed; `/ship` commits.
 `doc-guard --worktree` also passes.
+
+### PR1b
+
+```
+DOC SYNC REPORT — default — prod-launch-release vs origin/master — 2026-09-23
+
+| Doc | Section | Action | Summary |
+|---|---|---|---|
+| BACKEND_STRUCTURE.md | Database Schema; ER diagram | updated | JobHeartbeat entity and ERD box; `job_heartbeats` table definition (revision 1b6b462491fa) |
+| BACKEND_STRUCTURE.md | API endpoints (/healthz row); host gate paragraph | updated | /healthz reports version, gate_break_glass, jobs (memory-only, no-store); six logged gate reasons, 421 body unchanged, GATE_BREAK_GLASS bypass |
+| BACKEND_STRUCTURE.md | Code Organization (tree) | updated | app/cli/, gate_logging.py, job_health.py |
+| APP_FLOW.md | Settings; "Checking background jobs (M8)"; §4 Error Handling | updated | the card and top alert, their six states and copy; the bounce banner now names its likely causes (the "silent redirect" note was stale) |
+| FRONTEND_STRUCTURE.md | lib, hooks, pages/settings, shared inventories; behavioral notes | updated | serverTime.js, useBackgroundJobs.js, BackgroundJobsSection/Alert, FreshnessDot; counts 11/11 |
+| FRONTEND_GUIDELINES.md | Status colors; patterns | updated | fresh/overdue status colors; the freshness line (dot + words); the inline status alert (not a banner) |
+| TECH_STACK.md | Environment Variables; CI/CD Pipeline; Operator tooling; §8 tree | updated | GATE_BREAK_GLASS, GIT_COMMIT, FLY_API_TOKEN; ops-check.yml row; release-smoke PAUSE outcome and check 1 version-reported; infra/paused.json |
+| development-commands.md | Multi-target Dockerfile; CI paragraph | updated | prod stage takes GIT_COMMIT; ops-check.yml runs the operator command daily |
+| PRD.md | 5.7 User Authentication (Password Recovery) | updated | pointer: the CLI shipped in M8 as app.cli.rotate_password, procedure in RUNBOOK §6 (behavior text already matched) |
+| TODOS.md | P1 Resume the Celery worker and beat | updated | resume step 3: empty infra/paused.json in a pull request |
+| LESSONS.md | Pydantic pitfalls; Verify current state; Corrections Log | updated | Rust-regex `\z` bullet; the blocker-vs-signal rule; two 2026-09-23 rows (one user, one self) |
+| IMPLEMENTATION_PLAN.md | Phase 2 → M8 row | no change | stays `implementing` with PR1a's link until /ship records PR1b |
+| REVIEW_CHECKLIST.md | Pydantic | no change | the `\z` rule lives in LESSONS; the checklist is not doc-map-owned by this diff |
+| AGENTS.md | — | no change | no new command, service or host-side exception (infra/ was added in PR1a) |
+| infra/RUNBOOK.md, infra/incident-diagnostics.md | (exempt from the map) | updated | step 23: token creation, the pause, §6 rotation, break-glass, gate reasons, the jobs card and cron |
+
+Guard: doc-guard --staged --dry-run -> would pass (docs staged: APP_FLOW, BACKEND_STRUCTURE, FRONTEND_GUIDELINES, FRONTEND_STRUCTURE, PRD, TECH_STACK, development-commands)
+Questions: 0 asked
+Unmapped: none
+
+DOC IMPACT: updated 9 docs
+```
+
+The index is staged and nothing is committed; `/ship` commits.
+
+### PR1b, at `/ship` (2026-09-24)
+
+Re-run after `/review-implementation` and `/final-review` changed code. Every owning section
+already described their fixes; this run made no edits. The count differs from the report
+above because the reviews also updated REVIEW_CHECKLIST.md.
+
+```
+DOC SYNC REPORT — default — prod-launch-release vs master — 2026-09-24
+
+| Doc | Section | Action | Summary |
+|---|---|---|---|
+| BACKEND_STRUCTURE.md | Database Schema; ER diagram | updated | JobHeartbeat entity and `job_heartbeats` table (revision 1b6b462491fa) |
+| BACKEND_STRUCTURE.md | API endpoints (/auth/login, /auth/refresh, /auth/logout, /healthz); host gate paragraph | updated | `auth_session_issue` advisory lock (login/refresh shared; logout and rotation exclusive); /healthz version, gate_break_glass, jobs, no-store; six logged gate reasons as one JSON message, ip = last X-Forwarded-For hop; GATE_BREAK_GLASS |
+| BACKEND_STRUCTURE.md | Code Organization | updated | app/cli/rotate_password.py, gate_logging.py, job_health.py, the task_postrun heartbeat writer in tasks.py |
+| APP_FLOW.md | Settings; Checking background jobs; §4 Error Handling | updated | the Background jobs card and top alert, six states and copy; bounce banner names its likely causes |
+| FRONTEND_STRUCTURE.md | lib, hooks, settings, shared inventories; behavioral notes | updated | serverTime.js, useBackgroundJobs.js, BackgroundJobsSection/Alert, FreshnessDot |
+| FRONTEND_GUIDELINES.md | Status colors; patterns | updated | fresh/overdue colors; freshness line; inline status alert |
+| TECH_STACK.md | Environment Variables; CI/CD Pipeline; Operator tooling; §8 tree | updated | GATE_BREAK_GLASS, GIT_COMMIT, FLY_API_TOKEN; ops-check.yml (failure lines become error annotations); release-smoke PAUSE, [1] version-reported, jobs-fresh after-pause rule; paused.json (review_by ≤ 31 days out) |
+| development-commands.md | Multi-target Dockerfile; CI paragraph | updated | prod stage takes GIT_COMMIT; ops-check.yml runs the operator command daily |
+| PRD.md | 5.7 User Authentication | updated | pointer to the shipped CLI (app.cli.rotate_password, RUNBOOK §6) |
+| REVIEW_CHECKLIST.md | FastAPI, PostgreSQL, Operator scripts | updated | checks added by the implementation/final reviews (log message shape, proxy-header ip, advisory-lock revoke paths) |
+| LESSONS.md | Pydantic pitfalls; Verify current state; Corrections Log; Bug Log | updated | `\z` rule, blocker-vs-signal rule, 2026-09-23/24 rows |
+| TODOS.md | P1 Resume worker and beat; P2/P3 items | updated | resume steps include emptying paused.json; review-added items |
+| IMPLEMENTATION_PLAN.md | Phase 2 → M8 row | no change | stays `implementing` with PR1a's link; ship's second run adds PR1b's |
+| AGENTS.md | Development Commands | no change | no new command, service, or host-side exception |
+
+Guard: doc-guard --staged --dry-run -> would pass
+Questions: 0 asked
+Unmapped: none
+
+DOC IMPACT: updated 10 docs
+```
 
 ## Completion
 
@@ -440,3 +855,115 @@ The index is staged (update-docs step 8) and nothing is committed; `/ship` commi
        off (item 12 was due "today" on 2026-09-12, and nothing here verified it);
      - `fly scale count web=1 -a mealy-app-prod`, without which smoke check 3 fails on the
        first run.
+
+### PR1b
+
+- Completed: 2026-09-23T19:14:44Z. Scope: **PR1b** of M8 (steps 10–23). PR2 (the operator
+  release, the drills, the epic-text reconciliation) is still to come under this plan.
+- **What was built.**
+  - The host gate logs which of six checks rejected a request (`app.gate`, never the secret,
+    421 body byte-identical, emitter failures swallowed), and `GATE_BREAK_GLASS=1` in
+    `fly.toml [env]` skips only origin-verify, logging every admitted bypass.
+  - `/healthz` reports the deployed commit (`GIT_COMMIT` build arg), the break-glass flag and
+    a `jobs` reading, served from memory with `Cache-Control: no-store`. A lifespan task
+    refreshes the reading every 30 s from the new `job_heartbeats` table (revision
+    `1b6b462491fa`, additive, reversible), and a Celery `task_postrun` hook upserts a
+    heartbeat for each successful `beat_schedule` task, or records the error.
+  - `python -m app.cli.rotate_password <email>` rotates the household password and revokes
+    every session in one commit (exit 0/1/2).
+  - `infra/release-smoke.py` gains check 1 `version-reported` and a checked-in pause
+    declaration (`infra/paused.json`, worker and beat since 2026-09-23, review by
+    2026-10-23): a paused group must be stopped, check 4 and jobs-fresh print `PAUSE`
+    (never pass), the summary counts paused groups, and a past review date fails.
+  - `.github/workflows/ops-check.yml` runs the liveness, recoverability and edge groups daily
+    with a read-only Fly token, retrying once.
+  - Settings gains a Background jobs card and a one-line top alert (six states, one live
+    region). The iCloud line shares the new `FreshnessDot` and `serverTime.js`. The sign-in
+    bounce banner names its likely causes.
+- **Test results** (commands from development-commands.md, 2026-09-23):
+  - backend `docker-compose exec api uv run pytest` → **1044 passed, 3 skipped** (the first
+    run collapsed to 91 failed / 264 errors on the visual seed left in `todo_app_test`, the
+    documented one-time collapse; the re-run is the result);
+  - frontend `npm run test:run` → **630 passed (61 files)**; `npm run lint` → 0 errors,
+    7 warnings, all in files this branch does not touch; `npm run hygiene` → the 12
+    pre-existing unused exports (a 13th, `HEALTHZ_QUERY_KEY`, was mine: the tests now import
+    it instead of hardcoding `['healthz']`);
+  - stamped build (`VITE_GIT_COMMIT`, production `VITE_API_BASE_URL`) → exit 0, and
+    `dist/index.html` carries `37334a5…`;
+  - migrations: `upgrade head` → `downgrade -1` (1b6b462491fa → b7e2c9a4f1d8) →
+    `upgrade head`, current `1b6b462491fa (head)`;
+  - visual regression (`todo_app_test` reset, api-test, frontend-preview and frontend-visual
+    rebuilt, `--reporter=list`) → **7 passed**; visual containers removed with `rm -sf`;
+  - `python3 -m pytest infra/tests -q` → **155 passed**; `python3 -m pytest .agents/tests -q`
+    → **636 passed**; `release-smoke.py --self-test` → the expected
+    `exit 1 production: [3] scale-reconciled`;
+  - `doc-guard --staged --dry-run` → would pass.
+  - Mutation checks on every key rule (gate reasons, the emitter wrapper, stale thresholds,
+    the unusable reading, the SUCCESS/beat filter, the rotation's single commit, each pause
+    rule, the state ladder and the status region): each turned its suite red and was restored.
+- **Test-artifact gaps.**
+  - Not exercised against production, by design: the PR1b smoke checks and the PAUSE outcome
+    run at Between the PRs steps 7–10, after PR1b merges and deploys; `ops-check.yml` needs
+    the `FLY_API_TOKEN` secret (RUNBOOK) and the merge before its first dispatch.
+  - The rotation CLI was run against the local stack only; the `fly ssh console --select`
+    TTY path is the operator's first run.
+  - The 375 px page overflow on Settings comes from the pre-existing FamilyMemberManager "Add"
+    button (33 px), outside PR1b; the 375 px check was scoped to the PR1b elements.
+- **Deviations from the plan:**
+  1. The server-aligned clock uses the fetch outcome time (`max(dataUpdatedAt,
+     errorUpdatedAt)`), not `Date.now()` in render, which `react-hooks/purity` forbids; the
+     fetch gets a 10 s `AbortSignal.timeout` so a hung request still settles.
+  2. `version-reported` is a new check in the liveness group (`[1]`, skip key
+     `healthz_version`) rather than a field inside an existing check.
+  3. The CLI's exit 2 covers any database-layer failure (`DBAPIError`, `OSError`, a
+     timeout), not only a connection error, so a schema fault is not a traceback.
+  4. The pause declaration is the user's approved addition of 2026-09-23 (`infra/paused.json`).
+  5. A past `review_by` fails **every** run, not once (approved assumption 2); the user was
+     told.
+  6. PRD 5.7 gains a pointer to the shipped CLI; its behavior text already matched.
+- **Status: DONE_WITH_CONCERNS.**
+  1. Between the PRs steps 2–6 have not run: PR1a is merged but not deployed, and production
+     still runs v33 (before #49). If PR1b merges first, the first deploy carries both, and
+     step 3's PR1a skip list no longer applies; step 8's full smoke does.
+  2. Step 8 says "every group must pass". While `infra/paused.json` declares the worker and
+     beat, check 4 and jobs-fresh print PAUSE, never pass, and the Settings card reads the
+     jobs overdue (the truth). At that step the operator either records PAUSE as the outcome
+     or resumes the worker first (TODOS P1).
+  3. `FLY_API_TOKEN` must be created and set before `ops-check.yml`'s first run (RUNBOOK),
+     or the daily run fails as tooling.
+  4. A TODOS candidate, not added: the pre-existing 375 px overflow from the
+     FamilyMemberManager "Add" button on Settings.
+- State synced 2026-09-23T19:16:24Z: plan and registry `implementation_status=ready-for-review`, `reason_by=execute-plan` (the concerns above).
+
+### Concerns addressed, and Between the PRs executed (2026-09-23, after PR1b's implementation)
+
+- **Concern 1 (PR1a undeployed):** the operator chose to keep the reviewed order and deploy PR1a
+  before PR1b merges.
+  - Step 2: released as `v1-20260923-f0a8d81`. Fly v34; Vercel `dpl_Gzqsu1SKbRJnVCKGWQKMLUj3uZUD`,
+    promoted by SHA; no migrations; ~4 s downtime.
+  - Step 3: the smoke ran from this branch's script, for the pause. Exit 0: 8 passed, 4 skipped,
+    1 paused.
+  - Step 4: the rollback dry-run went to `1087f30` / v33's image as v35, then forward as v36,
+    with smoke exit 0 on both sides.
+  - Step 6: drift `exit 0: no drift`.
+  - The Cloudflare dashboard checks (3/3) and the manual checks (4/4) passed. The R2 upload with
+    boto3 1.43.90 closed that TODOS item.
+  - Step 5 (restore drill): both paths passed; the operator granted four narrow permission
+    rules for the production reads, and removed them after.
+    - Path 1, the 22 h-old snapshot: restored in 68 s.
+    - Path 2, point-in-time to 19:55Z: restored in 50 s. Replay was proven by a refresh token
+      issued at 19:42Z. The first attempt, at 22:13Z, failed because the archived WAL ended
+      near 20:37Z; that is a new TODOS P2 on the recovery-point lag.
+    - Neither scratch cluster archives into production's bucket.
+    - The operator destroyed all three scratch apps; `fly apps list` showed none at 22:53Z.
+  - The CI gate used the operator-approved equivalence with `91edffa`: `visual-tests` hit its
+    25-minute timeout on a pre-existing report-server hang, which a separate task is fixing.
+  - Procedure fixes: RUNBOOK §2 step 4 (CLI promote), §5.1 and §5.2 (Promote, not Instant
+    Rollback; a tag names the previous release), and the plan's Assignment note, which carries
+    the observed correction. LESSONS gained the rule. Everything is logged in
+    `infra/RUNBOOK.md` and `infra/backup-restore-drill.md`.
+- **Concern 2 (step 8 vs PAUSE):** the plan's step 8 now states the pause exception. The run
+  exits 0 with the paused groups counted, and a PAUSE is never written up as a pass.
+- **Concern 3 (`FLY_API_TOKEN`):** the operator created it (19:44:07Z). RUNBOOK: created
+  2026-09-23; rotate by 2027-09-23. The first dispatch waits for PR1b's merge.
+- **Concern 4 (375 px overflow):** added to TODOS.md as a P3.

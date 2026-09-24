@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
 import jwt
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.auth import config as auth_config
+from app.auth import service
 from app.auth import tokens
 from app.auth.models import RefreshToken, User
 
@@ -191,3 +193,28 @@ async def test_logout_revokes_refresh_tokens_on_other_devices(
         await db_session.execute(select(RefreshToken).where(RefreshToken.token_hash == b_hash))
     ).scalar_one()
     assert b_row.revoked_at is not None
+
+
+@pytest.mark.asyncio
+async def test_logout_waits_for_a_sign_in_in_flight(register_user, db_session, test_engine):
+    """Sign out revokes every device, so it serializes on the session-issue lock like a
+    password rotation (service.py → "Concurrency invariants"; final review, M8 PR1b). A
+    login or refresh on another device holds the lock shared until it commits; logout must
+    wait for that commit, or its revoke's snapshot misses the new row and that device stays
+    signed in. The other connection holds the lock the way that sign-in would."""
+    await register_user("alice@example.com", "pwd-1234567890")
+    user_id = (await db_session.execute(select(User.id))).scalar_one()
+    async with test_engine.connect() as sign_in:
+        await sign_in.execute(
+            text("SELECT pg_advisory_xact_lock_shared(hashtext('auth_session_issue'))")
+        )
+        signing_out = asyncio.create_task(service.logout(db_session, user_id))
+        try:
+            await asyncio.sleep(0.5)
+            waiting = not signing_out.done()
+        finally:
+            await sign_in.rollback()
+            await asyncio.wait_for(signing_out, 5)
+    assert waiting, "logout did not wait for the sign-in in flight"
+    rows = (await db_session.execute(select(RefreshToken))).scalars().all()
+    assert rows and all(row.revoked_at is not None for row in rows)

@@ -116,7 +116,7 @@ def line_for(output, label):
 def test_all_groups_green_exits_0(smoke):
     code, out, _ = run(smoke, healthy_routes(smoke), f"--release-commit={RELEASE}")
     assert code == 0, out
-    assert out.splitlines()[-1] == "exit 0: 12 passed, 0 skipped"
+    assert out.splitlines()[-1] == "exit 0: 13 passed, 0 skipped"
     assert "FAIL" not in out and "ERROR" not in out and "SKIP" not in out
 
 
@@ -130,10 +130,10 @@ def test_pr1a_skip_list_prints_skipped_and_check_1_still_runs(smoke):
     )
     assert code == 0, out
     assert line_for(out, "[1] healthz").startswith("PASS")
-    for label in ("[jobs] jobs-fresh", "[8] commit-backend", "[glass] break-glass-off"):
+    for label in ("[jobs] jobs-fresh", "[8] commit-backend", "[1] version-reported", "[glass] break-glass-off"):
         line = line_for(out, label)
         assert line.startswith("SKIP") and "skipped" in line and "PASS" not in line
-    assert out.splitlines()[-1] == "exit 0: 9 passed, 3 skipped"
+    assert out.splitlines()[-1] == "exit 0: 9 passed, 4 skipped"
 
 
 @pytest.mark.parametrize(
@@ -854,12 +854,240 @@ def test_malformed_body_through_the_whole_script(smoke):
 # --- structure ----------------------------------------------------------------
 
 
-def test_every_skip_key_belongs_to_exactly_one_check(smoke):
-    keys = [c.skip_key for c in smoke.CHECKS if c.skip_key]
-    assert sorted(keys) == sorted(smoke.SKIP_KEYS)
+def test_every_skip_key_skips_exactly_the_checks_that_read_its_field(smoke):
+    """Every key skips something, no check names an unknown key, and each key covers only the
+    assertions that read its PR1b field: `version` feeds check 8's backend comparison and the
+    cron's version-reported check (item 13)."""
+    by_key = {}
+    for c in smoke.CHECKS:
+        if c.skip_key:
+            by_key.setdefault(c.skip_key, []).append(c.name)
+    assert set(by_key) == set(smoke.SKIP_KEYS)
+    assert by_key == {
+        "healthz_version": ["commit-backend", "version-reported"],
+        "healthz_jobs": ["jobs-fresh"],
+        "healthz_gate_break_glass": ["break-glass-off"],
+    }
 
 
 def test_every_check_is_in_a_known_group_and_the_release_group_is_release_relative(smoke):
     assert {c.group for c in smoke.CHECKS} == set(smoke.GROUPS)
     release = {c.number for c in smoke.CHECKS if c.group == "release"}
     assert release == {"2", "3", "4", "8"}  # never on the cron: release-relative, noise on a schedule
+
+
+# --- the pause declaration (infra/paused.json; the user-approved PR1b addition) ---------
+
+# Dated around the fixtures (NOW is 2026-09-21), so check 9's 48-hour window still holds at INSIDE.
+# `since` is the day healthz_healthy.json's jobs last ran: a pause declared the day the worker
+# stopped. A job on a LATER day means the worker ran after the pause (see the tests below).
+PAUSE = {"since": "2026-09-21", "review_by": "2026-09-28", "reason": "Upstash request cap; TODOS.md P1"}
+INSIDE = NOW
+LAST_DAY = datetime(2026, 9, 28, 23, 59, tzinfo=timezone.utc)
+OVERDUE = datetime(2026, 9, 29, 0, 0, tzinfo=timezone.utc)
+
+
+def declare(smoke, tmp_path, monkeypatch, data):
+    path = tmp_path / "paused.json"
+    path.write_text(data if isinstance(data, str) else json.dumps(data))
+    monkeypatch.setattr(smoke, "PAUSE_FILE", path)
+
+
+def with_states(smoke, routes, **states):
+    machines = fixture_json("fly_machines_list.json")
+    for m in machines:
+        group = m["config"]["metadata"].get("fly_process_group")
+        if group in states:
+            m["state"] = states[group]
+    return {**routes, "fly machines list": done(smoke, json.dumps(machines))}
+
+
+def run_at(smoke, routes, now, *args):
+    out = io.StringIO()
+    runner = FakeRunner(smoke, routes)
+    code = smoke.main(list(args), runner=runner, now=now, out=out)
+    return code, out.getvalue(), runner
+
+
+def test_a_declared_pause_is_verified_paused_and_never_pass(smoke, tmp_path, monkeypatch):
+    declare(smoke, tmp_path, monkeypatch, {"worker": PAUSE, "beat": PAUSE})
+    routes = with_states(smoke, healthy_routes(smoke), worker="stopped", beat="stopped")
+    del routes["fly ssh console"]  # check 4 must not reach production while the worker is paused
+    code, out, runner = run_at(smoke, routes, INSIDE, f"--release-commit={RELEASE}")
+    assert code == 0, out
+    groups = line_for(out, "[2] groups-started")
+    assert groups.startswith("PASS") and "as declared" in groups and "worker=1 paused" in groups
+    for label in ("[4] worker-roundtrip", "[jobs] jobs-fresh"):
+        line = line_for(out, label)
+        assert line.startswith("PAUSE") and "paused since 2026-09-21" in line and "PASS" not in line
+    assert "fly ssh console" not in runner.calls
+    assert out.splitlines()[-1] == "exit 0: 11 passed, 0 skipped, 2 paused (beat, worker declared in infra/paused.json)"
+
+
+def test_a_paused_group_that_is_running_fails_check_2(smoke, tmp_path, monkeypatch):
+    """Running is the failure: it spends the allowance the pause protects, or someone
+    resumed it and forgot the file."""
+    declare(smoke, tmp_path, monkeypatch, {"worker": PAUSE})
+    code, out, _ = run_at(smoke, healthy_routes(smoke), INSIDE, "--only=release", f"--release-commit={RELEASE}")
+    assert code == 1
+    line = line_for(out, "[2] groups-started")
+    assert line.startswith("FAIL") and "declared paused in infra/paused.json but running: worker d8d2e06fed20d8" in line
+    assert "fly machine start" not in line  # never tell the operator to start a paused group
+
+
+def test_a_pause_does_not_excuse_a_group_it_does_not_name(smoke, tmp_path, monkeypatch):
+    declare(smoke, tmp_path, monkeypatch, {"beat": PAUSE})
+    routes = with_states(smoke, healthy_routes(smoke), worker="stopped", beat="stopped")
+    code, out, _ = run_at(smoke, routes, INSIDE, "--only=release", f"--release-commit={RELEASE}")
+    assert code == 1
+    assert "worker d8d2e06fed20d8 is stopped" in line_for(out, "[2] groups-started")
+
+
+def test_a_pause_is_fine_on_its_review_date_and_fails_every_run_after_it(smoke, tmp_path, monkeypatch):
+    declare(smoke, tmp_path, monkeypatch, {"worker": PAUSE, "beat": PAUSE})
+    routes = with_states(smoke, healthy_routes(smoke), worker="stopped", beat="stopped")
+    only = ("--only=release,liveness", f"--release-commit={RELEASE}")  # check 9 would age out too
+    code, out, _ = run_at(smoke, routes, LAST_DAY, *only)
+    assert code == 0, out
+    for _ in range(2):  # "every run", not once
+        code, out, _ = run_at(smoke, routes, OVERDUE, *only)
+        assert code == 1
+        for label in ("[2] groups-started", "[4] worker-roundtrip", "[jobs] jobs-fresh"):
+            line = line_for(out, label)
+            assert line.startswith("FAIL") and "past its review date (2026-09-28)" in line
+
+
+def test_the_cron_groups_report_the_pause_and_still_catch_an_unreadable_database(smoke, tmp_path, monkeypatch):
+    """jobs-fresh keeps the unusable-reading rule while paused: it is the cron's only sign
+    that the web cannot reach the database."""
+    declare(smoke, tmp_path, monkeypatch, {"worker": PAUSE, "beat": PAUSE})
+    code, out, _ = run_at(smoke, healthy_routes(smoke), INSIDE, "--only=liveness,recoverability,edge")
+    assert code == 0 and line_for(out, "[jobs] jobs-fresh").startswith("PAUSE")
+    assert out.splitlines()[-1].endswith("1 paused (beat, worker declared in infra/paused.json)")
+
+    body = fixture_json("healthz_healthy.json")
+    body["jobs"] = {"read": "unavailable", "read_at": None, "now": body["jobs"]["now"], "rows": []}
+    code, out, _ = run_at(smoke, healthy_routes(smoke, healthz=body), INSIDE, "--only=liveness")
+    assert code == 1
+    assert "web cannot read job_heartbeats" in line_for(out, "[jobs] jobs-fresh")
+
+
+def test_the_self_test_ignores_a_declared_pause(smoke, tmp_path, monkeypatch):
+    declare(smoke, tmp_path, monkeypatch, {"worker": PAUSE, "beat": PAUSE})
+    code, out, runner = run(smoke, {}, "--only=liveness,recoverability,edge", "--self-test")
+    assert (code, runner.calls) == (1, [])
+    assert out.splitlines()[-1].startswith("exit 1 production: [jobs] jobs-fresh")
+
+
+@pytest.mark.parametrize(
+    "data,message",
+    [
+        ("not json", "does not parse"),
+        ([], "must be a JSON object"),
+        ({"web": PAUSE}, "only worker, beat can be paused"),
+        ({"worker": {"since": "2026-09-23", "review_by": "2026-10-23"}}, "needs exactly since, review_by and reason"),
+        ({"worker": {**PAUSE, "until": "2026-10-01"}}, "needs exactly since, review_by and reason"),
+        ({"worker": {**PAUSE, "reason": "  "}}, "reason must say why"),
+        ({"worker": {**PAUSE, "since": "23/09/2026"}}, "since must be a YYYY-MM-DD date"),
+        ({"worker": {**PAUSE, "review_by": "2026-02-30"}}, "review_by is not a real date"),
+        ({"worker": {**PAUSE, "review_by": "2026-09-01"}}, "review_by is before since"),
+    ],
+)
+def test_a_malformed_pause_file_is_tooling(smoke, tmp_path, monkeypatch, data, message):
+    declare(smoke, tmp_path, monkeypatch, data)
+    code, out, _ = run_at(smoke, healthy_routes(smoke), INSIDE, f"--release-commit={RELEASE}")
+    assert code == 2
+    for label in ("[2] groups-started", "[4] worker-roundtrip", "[jobs] jobs-fresh"):
+        line = line_for(out, label)
+        assert line.startswith("ERROR") and message in line
+
+
+def test_a_missing_pause_file_declares_nothing(smoke, tmp_path, monkeypatch):
+    """The strict reading: every check then expects every group running."""
+    monkeypatch.setattr(smoke, "PAUSE_FILE", tmp_path / "absent.json")
+    routes = with_states(smoke, healthy_routes(smoke), worker="stopped")
+    code, out, _ = run_at(smoke, routes, INSIDE, "--only=release", f"--release-commit={RELEASE}")
+    assert code == 1 and "worker d8d2e06fed20d8 is stopped" in out
+
+
+def test_the_committed_pause_file_parses(smoke):
+    """Structural: the file ops-check.yml reads from the default branch is valid, and names
+    only groups that can be paused."""
+    pauses = smoke.read_pauses(smoke.REPO_ROOT / "infra" / "paused.json")
+    assert set(pauses) <= set(smoke.PAUSABLE_GROUPS)
+    assert all(p.reason and p.review_by >= p.since for p in pauses.values())
+
+
+# --- [1] version-reported (item 13: the cron asserts /healthz reports a version) --------
+
+
+@pytest.mark.parametrize(
+    "version,message",
+    [("unknown", "built without `--build-arg GIT_COMMIT`"), ("", "is not a commit SHA"),
+     ("v1.2.3", "is not a commit SHA"), (None, "is not a commit SHA")],
+)
+def test_version_reported_fails_without_a_real_commit(smoke, version, message):
+    body = fixture_json("healthz_healthy.json")
+    body["version"] = version
+    code, out, _ = run(smoke, healthy_routes(smoke, healthz=body), "--only=liveness")
+    assert code == 1
+    line = line_for(out, "[1] version-reported")
+    assert line.startswith("FAIL") and message in line
+
+
+def test_version_reported_passes_on_a_sha(smoke):
+    code, out, _ = run(smoke, healthy_routes(smoke), "--only=liveness")
+    assert code == 0
+    assert line_for(out, "[1] version-reported") == "PASS  [1] version-reported: /healthz reports version a1b2c3d4e5f6"
+
+
+def test_the_cron_fails_a_worker_that_ran_after_its_declared_pause(smoke, tmp_path, monkeypatch):
+    """Resumed, and the file not emptied: check 2 would say so, but it is not in the cron's
+    groups. Without this the cron prints PAUSE until review_by and cannot see the worker die
+    again (M8 PR1b review)."""
+    declare(smoke, tmp_path, monkeypatch, {"worker": {**PAUSE, "since": "2026-09-20"}, "beat": PAUSE})
+    code, out, _ = run_at(smoke, healthy_routes(smoke), INSIDE, "--only=liveness,recoverability,edge")
+    assert code == 1
+    line = line_for(out, "[jobs] jobs-fresh")
+    assert line.startswith("FAIL") and "the worker ran after it was declared paused on 2026-09-20" in line
+    assert "iCloud calendar sync (2026-09-21)" in line and "empty infra/paused.json" in line
+
+
+def test_a_job_on_the_pause_day_itself_is_not_a_resume(smoke, tmp_path, monkeypatch):
+    """The jobs ran that day before the stop."""
+    declare(smoke, tmp_path, monkeypatch, {"worker": PAUSE})  # since 2026-09-21, the jobs' day
+    code, out, _ = run_at(smoke, healthy_routes(smoke), INSIDE, "--only=liveness")
+    assert code == 0 and line_for(out, "[jobs] jobs-fresh").startswith("PAUSE")
+
+
+def test_the_cron_fails_a_beat_that_ran_after_its_declared_pause(smoke, tmp_path, monkeypatch):
+    """Only beat enqueues the four scheduled jobs, so with only beat declared (the worker
+    running, its queue drained on the pause day) a later success means beat was resumed and
+    the file not emptied (final review, M8 PR1b; this test used to assert the opposite)."""
+    declare(smoke, tmp_path, monkeypatch, {"beat": {**PAUSE, "since": "2026-09-20"}})
+    code, out, _ = run_at(smoke, healthy_routes(smoke), INSIDE, "--only=liveness")
+    assert code == 1
+    line = line_for(out, "[jobs] jobs-fresh")
+    assert line.startswith("FAIL") and "the beat ran after it was declared paused on 2026-09-20" in line
+    assert "stop the beat" in line
+
+
+def test_with_both_declared_a_later_run_speaks_for_the_worker_only(smoke, tmp_path, monkeypatch):
+    """A resumed worker also drains jobs queued before the pause, so a later success says
+    nothing about beat: judged by the worker's `since` alone."""
+    declare(smoke, tmp_path, monkeypatch, {"worker": PAUSE, "beat": {**PAUSE, "since": "2026-09-20"}})
+    code, out, _ = run_at(smoke, healthy_routes(smoke), INSIDE, "--only=liveness")
+    assert code == 0 and line_for(out, "[jobs] jobs-fresh").startswith("PAUSE")
+
+
+@pytest.mark.parametrize(("review_by", "code"), [("2026-10-22", 0), ("2026-10-23", 2)])
+def test_a_review_date_more_than_31_days_out_is_tooling(smoke, tmp_path, monkeypatch, review_by, code):
+    """A pause is reviewed at least monthly, measured from the run (INSIDE is 2026-09-21), so
+    one far date cannot keep the daily check on PAUSE for years (final review, M8 PR1b)."""
+    declare(smoke, tmp_path, monkeypatch, {"worker": {**PAUSE, "review_by": review_by}, "beat": PAUSE})
+    routes = with_states(smoke, healthy_routes(smoke), worker="stopped", beat="stopped")
+    got, out, _ = run_at(smoke, routes, INSIDE, "--only=release,liveness", f"--release-commit={RELEASE}")
+    assert got == code, out
+    if code == 2:
+        line = line_for(out, "[jobs] jobs-fresh")
+        assert line.startswith("ERROR") and f"worker.review_by {review_by} is more than 31 days out" in line

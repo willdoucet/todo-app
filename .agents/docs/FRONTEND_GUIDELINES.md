@@ -60,6 +60,24 @@ All colors are defined in `frontend/src/index.css` using Tailwind v4's `@theme` 
 | `sage-600` | #588D5E | Success text |
 | `sage-700` | #4A7A50 | Dark success emphasis |
 
+### Status Colors (fresh / overdue)
+
+A status reads as a word first and a color second: the dot is `aria-hidden` and the text says
+"overdue", "can't record runs" or "Can't check" too (WCAG 1.4.1). Documented in M8 (Design
+review 5A); no new `index.css` token.
+
+| State | Light | Dark | Where |
+|-------|-------|------|-------|
+| Fresh / success dot | `bg-sage-500` | `dark:bg-green-400` | `FreshnessDot` `tone="ok"` (was stock `green-500` on the iCloud line) |
+| Overdue / error dot | `bg-red-500` | `dark:bg-red-400` | `FreshnessDot` `tone="bad"` |
+| Unknown / waiting dot | `bg-text-muted` | `dark:bg-gray-500` | `FreshnessDot` `tone="unknown"` |
+| Error text on a card | `text-red-600` | `dark:text-red-400` | stale rows, the red headline, "sync overdue" (4.8:1 on `card-bg`) |
+| Error text on the page gradient | `text-red-700` | `dark:text-red-400` | the Settings top alert: `red-600` is only 4.3:1 at the `warm-beige` end |
+
+Stock red (`red-500`/`600`/`700`) is the app's error color: about 237 uses, never a theme token.
+Secondary text in a status card uses `text-text-secondary` (5.8:1 on `card-bg`), not
+`text-text-muted` (3.0:1) (Design review 6A).
+
 ### Text Colors
 
 | Token | Hex | Usage |
@@ -271,6 +289,41 @@ className={`... ${isCompleted ? 'bg-sage-50 dark:bg-green-900/20 border-sage-200
 `color` (hex, chosen in Settings), and the swimlane header / badge reads it from the row. The
 only static colour map left is the food-category stripe on catalog cards
 (`CATEGORY_COLORS` in `components/mealboard/ItemCard.jsx`, keyed by food category).
+
+### Freshness line (dot + words)
+
+`components/shared/FreshnessDot.jsx` — a 6 px dot with one prop, `tone`, and no text; the caller
+puts the words beside it. Used by the iCloud "Last synced" line and the Background jobs headline
+and alert (M8).
+
+```jsx
+<p className="flex items-start gap-1.5 text-sm font-medium text-red-600 dark:text-red-400">
+  <FreshnessDot tone="bad" className="mt-[7px]" />   {/* stays on line one when the text wraps */}
+  <span>1 job is behind schedule</span>
+</p>
+```
+
+One dot per card (on the headline), never one per row; no pulse, no pills, no icons.
+
+### Inline status alert (not a banner)
+
+A one-line status under a page `h1` — the Settings Background jobs alert — is inline text, not a
+container: no background tint, colored border, icon, close button or `role="alert"`. It wraps
+like a sentence at 375 px; its link names the destination and does not split.
+
+```jsx
+<p className="mt-2 text-sm text-red-700 dark:text-red-400">
+  <FreshnessDot tone="bad" className="align-middle mr-1.5 mb-0.5" />
+  Unused photo cleanup is behind schedule <span aria-hidden="true">·</span>{' '}
+  <a href="#background-jobs" className="py-3 sm:py-0 whitespace-nowrap font-medium text-terracotta-700 dark:text-blue-400 underline underline-offset-2 …">
+    See background jobs
+  </a>
+</p>
+```
+
+The link is underlined because terracotta beside red is too close in hue to tell apart by color
+alone, and `terracotta-700` (5.0:1) because `terracotta-600` is 3.6:1 on the gradient. `py-3`
+on an inline link gives a 44 px hit area on phones without changing the line height.
 
 ### Sidebar Navigation Item
 

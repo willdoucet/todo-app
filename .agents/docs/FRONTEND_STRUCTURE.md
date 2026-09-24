@@ -33,7 +33,9 @@ frontend/src/
 │   ├── api.js            # Shared axios instance + request/response interceptors (Bearer + 401 refresh)
 │   ├── queryClient.js    # createQueryClient() — QueryCache/MutationCache route 401s to redirect helper
 │   ├── router.jsx        # createBrowserRouter + ProtectedOutlet + rootAuthLoader
-│   ├── *.test.js         # Co-located tests for api, apiBase, queryClient
+│   ├── serverTime.js     # M8: parseServerTime (naive → UTC), relativeTime(iso, now), durationSince —
+│   │                     #   shared by the iCloud "Last synced" line and the Background jobs card
+│   ├── *.test.js         # Co-located tests for api, apiBase, queryClient, serverTime
 │   └── auth/
 │       ├── tokenStore.js       # Module-scope in-memory token + pub/sub
 │       ├── useAuth.js          # useSyncExternalStore wrapper over tokenStore
@@ -48,7 +50,7 @@ frontend/src/
 ├── pages/
 │   ├── AuthPortalPage.jsx      # /auth — login + setup forms, discriminated by /auth/status
 │   ├── AuthPortalPage.test.jsx # Portal tests
-│   ├── FamilyMembersPage.jsx   # Settings page shell (now also mounts AccountSection logout)
+│   ├── FamilyMembersPage.jsx   # Settings page shell: header (h1 + Background jobs alert), cards, AccountSection logout
 │   ├── ListsPage.jsx           # Lists page shell
 │   ├── MealboardPage.jsx       # Mealboard shell + nested routes
 │   └── ResponsibilitiesPage.jsx # Responsibilities page shell
@@ -60,8 +62,8 @@ frontend/src/
 │   ├── lists/              # Task list UI (11 files — see Section 6)
 │   ├── mealboard/          # Mealboard UI + helpers (27 files — see Section 3)
 │   ├── responsibilities/   # Responsibilities UI (5 files — see Section 5)
-│   ├── settings/           # Settings surfaces (9 files — see Section 4)
-│   └── shared/             # Cross-cutting UI + providers (10 files — see Section 9)
+│   ├── settings/           # Settings surfaces (11 files — see Section 4)
+│   └── shared/             # Cross-cutting UI + providers (11 files — see Section 9)
 │
 ├── contexts/
 │   ├── DarkModeContext.jsx       # Dark mode provider + hook
@@ -69,6 +71,7 @@ frontend/src/
 │
 ├── hooks/
 │   ├── useDebounce.js       # Debounce callback invocation
+│   ├── useBackgroundJobs.js # M8: the unauthenticated /healthz poll + deriveJobsState (the card's state ladder)
 │   ├── useDelayedFlag.js    # Delay loading indicators to avoid spinner flash
 │   ├── useFormShortcut.js   # Cmd/Ctrl+S form submit helper
 │   ├── useItems.js          # Unified Item-model CRUD hook for mealboard
@@ -248,9 +251,9 @@ Unlike the Recipes tab, the food-items grid is **not breakpoint-driven**. It use
 
 **Route:** `/settings`
 
-The `/settings` route is implemented by `pages/FamilyMembersPage.jsx`, which renders a full settings page with multiple cards: family members, timezone, calendar integrations, and mealboard settings.
+The `/settings` route is implemented by `pages/FamilyMembersPage.jsx`, which renders a full settings page with multiple cards: family members, timezone, calendar integrations, mealboard settings, and (M8) background jobs, above the account card.
 
-### Settings Components (9)
+### Settings Components (11)
 
 | File | Purpose |
 |------|---------|
@@ -262,13 +265,17 @@ The `/settings` route is implemented by `pages/FamilyMembersPage.jsx`, which ren
 | `MealSlotCard.jsx` | Editable card for one meal slot type |
 | `DayPreview.jsx` | Live one-day preview of active/hidden meal slots |
 | `AccountSection.jsx` | Settings account card with logout action |
+| `BackgroundJobsSection.jsx` | M8: the Background jobs card — headline, "what this means" line, one row per scheduled job, footnote, and the card's one `role="status"` announcement |
+| `BackgroundJobsAlert.jsx` | M8: the one-line alert under the Settings title in states 2–4, with the "See background jobs" link |
 | `ReminderListSelector.test.jsx` | Reminder-list selector tests |
 
 ### Behavioral Notes
 
 - `FamilyMembersPage.jsx` sets the page title to `Settings` and renders all settings surfaces in one page shell.
 - `ICloudSettings.jsx` supports both calendar syncing and reminders syncing.
-- `ICloudSettings.jsx` shows a freshness dot beside each "Last synced" line: green while the last sync is under 30 minutes old (three 10-minute beat cycles), red plus the words "sync overdue" after that, so a stopped Celery worker surfaces instead of failing silently. Sync timestamps arrive without a timezone (`timestamp without time zone`, UTC), so the component parses them as UTC — `new Date()` alone reads them as local time and skews every relative time by the viewer's offset.
+- `ICloudSettings.jsx` shows a freshness dot beside each "Last synced" line: sage while the last sync is under 30 minutes old (three 10-minute beat cycles), red plus the words "sync overdue" after that, so a stopped Celery worker surfaces instead of failing silently. Sync timestamps arrive without a timezone (`timestamp without time zone`, UTC), so they are parsed as UTC by `lib/serverTime.js` — `new Date()` alone reads them as local time and skews every relative time by the viewer's offset.
+- The Background jobs card and its alert read one TanStack query, `['healthz']` (`hooks/useBackgroundJobs.js`), a raw `fetch(apiUrl('/healthz'))` that never goes through `lib/api.js`, so a `/healthz` failure can never sign anyone out. It polls every 30 s while Settings is mounted (paused in a hidden tab), times out a hung request after 10 s, and derives its state on every render — never in a `select` — from the server-aligned clock (`jobs.now` plus the time since the response), so a device with a wrong clock sees the same state and failed polls still age a reading into "Can't check". The ladder, copy and rows follow the M8 plan's item 15a; the backend sends each row's label and staleness. Accepted limit (M8 final review): that clock advances only when a poll settles, so a tab returning from hidden, or Settings remounting from TanStack's cache within 5 minutes, shows the last reading as current until the refetch settles, at most the 10 s fetch timeout.
+- `ICloudSettings.jsx`'s "Last synced" dot and time parsing come from the shared `components/shared/FreshnessDot.jsx` and `lib/serverTime.js` (M8): sage while fresh, red plus "sync overdue" after 30 minutes. Its own 30-minute rule stays until it consumes the server's staleness (TODOS P3).
 - `MealboardSettings.jsx` loads meal-slot types, family members, and app settings together.
 - Mealboard settings use a two-column layout at `lg`, with a sticky `DayPreview` sidebar on larger screens.
 
@@ -368,11 +375,12 @@ App shell components used across pages.
 
 Cross-cutting UI components, helpers, and providers used across multiple features.
 
-### Files (10)
+### Files (11)
 
 | File | Purpose |
 |------|---------|
 | `ConfirmDialog.jsx` | Reusable confirmation modal |
+| `FreshnessDot.jsx` | M8: the 6 px status dot (`tone` `ok` / `bad` / `unknown`), `aria-hidden`, no text — every caller puts the words beside it |
 | `ToastProvider.jsx` | General toast provider + `useToast` hook |
 | `UndoToast.jsx` | Global undo-toast provider + hook for soft-delete flows |
 | `EmptyState.jsx` | Shared empty-state components |

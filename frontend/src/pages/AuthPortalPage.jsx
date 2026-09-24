@@ -34,7 +34,11 @@ const COPY = {
     submit: 'Create household',
     submitting: 'Creating…',
   },
-  bounce: 'Your session ended. Sign in to pick up where you left off.',
+  // M8 Design review 10: the honest generic why. Sign out on another device and the operator's
+  // password rotation both revoke every household session, and a refresh failure has one body by
+  // design, so "the password was changed" is not derivable here.
+  bounce:
+    'Your session ended. Someone may have signed out on another device, or the household password changed. Sign in to pick up where you left off.',
   status5xx: {
     headline: "Can't reach the server",
     body: 'Try again, or contact your operator if it persists.',

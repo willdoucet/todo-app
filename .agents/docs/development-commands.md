@@ -40,7 +40,7 @@ Without `JWT_SECRET_KEY` and `HOUSEHOLD_ACCESS_KEY`, every protected route retur
 **Multi-target Dockerfile** (`backend/Dockerfile`):
 - `builder` — python:3.12-slim + uv 0.5.24, installs prod deps only, copies app code
 - `dev` (extends builder) — adds test extras (`uv sync --extra test`), keeps uv available, runs with `--reload`
-- `prod` — slim image from builder, non-root `appuser`, no test deps, bundled stock icons at `/app/stock_icons_src` (served by the M7 media read route)
+- `prod` — slim image from builder, non-root `appuser`, no test deps, bundled stock icons at `/app/stock_icons_src` (served by the M7 media read route). Takes a `GIT_COMMIT` build arg (M8), which `/healthz` reports as `version`; without it the image reports `"unknown"`. The release runbook passes it (`fly deploy --build-arg GIT_COMMIT=<sha>`); local builds need nothing
 
 **Docker Compose** (`backend/docker-compose.yml`):
 - `db` — postgres:16, healthcheck, `init-test-db.sh` creates `todo_app_test` DB on first run
@@ -136,7 +136,7 @@ docker-compose exec api uv run alembic upgrade head          # full chain from b
 docker-compose exec api uv run alembic downgrade -1 && docker-compose exec api uv run alembic upgrade head   # newest revision is reversible
 ```
 
-`.github/workflows/doc-guard.yml` runs `python3 .agents/bin/doc-guard --range origin/master..HEAD` on every pull request. Job inventory and CI secrets: TECH_STACK.md → CI/CD Pipeline.
+`.github/workflows/doc-guard.yml` runs `python3 .agents/bin/doc-guard --range origin/master..HEAD` on every pull request. `.github/workflows/ops-check.yml` (M8) runs the operator command `python3 infra/release-smoke.py --only=liveness,recoverability,edge` daily against production (see Operator Scripts below). Job inventory and CI secrets: TECH_STACK.md → CI/CD Pipeline.
 
 ## Operator Scripts (host-side)
 

@@ -79,6 +79,15 @@ RUN mkdir -p /app/uploads && chown appuser:appuser /app/uploads
 # `dev` has it too). Chowned to appuser since prod runs as non-root.
 COPY --from=builder --chown=appuser:appuser /app/stock_icons_src /app/stock_icons_src
 
+# M8 item 14: the deployed commit, reported by /healthz as `version`. The
+# release runbook passes it (`fly deploy --build-arg GIT_COMMIT="$RELEASE"`);
+# without it /healthz reports "unknown", which smoke check 8 fails loudly.
+# It must live in THIS stage: an ARG declared in `builder` never reaches the
+# prod image, which would then report "unknown" on every deploy. Last, so a
+# new commit does not invalidate the cached layers above it.
+ARG GIT_COMMIT
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 USER appuser
 
 # Default command - run migrations + start server

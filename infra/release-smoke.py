@@ -31,6 +31,8 @@ written; RUNBOOK.md and ops-check.yml name groups, never individual checks.
                     8 commit-backend         /healthz version's backend/ is not        healthz_version
                                              the release's backend/
     liveness        1 healthz                /healthz not 200 by both paths
+                    1 version-reported       /healthz `version` missing, empty,        healthz_version
+                                             "unknown", or not a commit SHA
                       jobs-fresh             a /healthz.jobs row stale, or the         healthz_jobs
                                              reading unusable (the contract, item 15)
     recoverability  9 restore-point          no snapshot or WAL point under 48 h
@@ -45,6 +47,27 @@ script did not anticipate (Python's own crash exit is 1). A skipped assertion
 prints `skipped`, never `pass`; without --skip a missing /healthz key is exit 1,
 because a PR1b field that has gone missing after PR1b shipped is a broken deploy.
 
+A deliberate pause (infra/paused.json; `{}` means nothing is paused) is declared, not
+skipped. Only `worker` and `beat` can be declared, each with `since`, `review_by` and
+`reason`; both dates are UTC dates, compared with the UTC date of the run and of each job's
+last success. While one is:
+
+    2 groups-started    the paused group must be STOPPED; one that is running fails
+    4 worker-roundtrip  PAUSED when the worker is declared (never run, never `pass`)
+      jobs-fresh        PAUSED when worker or beat is declared, after the reading itself
+                        passed the unusable-reading rule (the cron's only sign that the
+                        web cannot read the database stays live). FAILS when a job
+                        succeeded on a later day than the worker's `since` (or beat's,
+                        when only beat is declared): the group was resumed and the file
+                        was not emptied (check 2 is not in the cron's groups, so this is
+                        the daily check's only sign of it)
+    after review_by     those three FAIL (exit 1) on every run, until the pause is
+                        extended or removed in a pull request
+
+The summary line counts paused checks and names the declared groups. A malformed file, a
+declared group other than worker or beat, or a `review_by` more than 31 days after the run
+(a pause is reviewed at least monthly) is exit 2. --self-test ignores the file.
+
 The script prints no secret and passes none as an argument. Remote error text is
 reduced to one line with any `scheme://user:pass@` credential masked.
 """
@@ -58,7 +81,7 @@ import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -69,6 +92,7 @@ except ModuleNotFoundError:  # Python < 3.11; reported as exit 2 in main()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCALE_FILE = REPO_ROOT / "infra" / "fly-scale.json"
+PAUSE_FILE = REPO_ROOT / "infra" / "paused.json"
 FLY_TOML = REPO_ROOT / "backend" / "fly.toml"
 DIAGNOSTICS = "infra/incident-diagnostics.md"
 
@@ -91,6 +115,9 @@ JOBS_READ_MAX_AGE = timedelta(seconds=120)
 WORKER_TIMEOUT_S = 30
 
 GROUPS = ("release", "liveness", "recoverability", "edge")
+# web serves the app and /healthz: pausing it is an outage, not a pause.
+PAUSABLE_GROUPS = ("worker", "beat")
+PAUSE_REVIEW_MAX_DAYS = 31
 SKIP_KEYS = ("healthz_jobs", "healthz_version", "healthz_gate_break_glass")
 
 
@@ -100,6 +127,11 @@ class CheckFailed(Exception):
 
 class Tooling(Exception):
     """Exit 2: the check could not run. Says nothing about production."""
+
+
+class Paused(Exception):
+    """Not verified because infra/paused.json declares the group it needs paused. Never a
+    pass; never exit 1 while the pause is inside its review date."""
 
 
 class Unreachable(Tooling):
@@ -218,6 +250,85 @@ def human_age(delta: timedelta) -> str:
 # --- production reads, memoized per run ------------------------------------
 
 
+@dataclass(frozen=True)
+class Pause:
+    group: str
+    since: date
+    review_by: date
+    reason: str
+
+    def note(self) -> str:
+        return f"{self.group} paused since {self.since.isoformat()} ({self.reason}; infra/paused.json)"
+
+
+def _pause_date(group: str, field: str, value: object) -> date:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise Tooling(f"infra/paused.json: {group}.{field} must be a YYYY-MM-DD date")
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise Tooling(f"infra/paused.json: {group}.{field} is not a real date") from None
+
+
+def read_pauses(path: Path) -> dict[str, Pause]:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise Tooling(f"infra/paused.json does not parse: {type(exc).__name__}") from None
+    if not isinstance(data, dict):
+        raise Tooling("infra/paused.json must be a JSON object ({} when nothing is paused)")
+    pauses = {}
+    for group, entry in data.items():
+        if group not in PAUSABLE_GROUPS:
+            raise Tooling(f"infra/paused.json declares {group!r}; only {', '.join(PAUSABLE_GROUPS)} can be paused")
+        if not isinstance(entry, dict) or set(entry) != {"since", "review_by", "reason"}:
+            raise Tooling(f"infra/paused.json: {group} needs exactly since, review_by and reason")
+        reason = entry["reason"]
+        if not isinstance(reason, str) or not reason.strip():
+            raise Tooling(f"infra/paused.json: {group}.reason must say why")
+        since = _pause_date(group, "since", entry["since"])
+        review_by = _pause_date(group, "review_by", entry["review_by"])
+        if review_by < since:
+            raise Tooling(f"infra/paused.json: {group}.review_by is before since")
+        pauses[group] = Pause(group, since, review_by, reason.strip())
+    return pauses
+
+
+def review_within_limit(pauses: dict[str, Pause], today: date) -> dict[str, Pause]:
+    """A pause is reviewed at least monthly: a `review_by` further out than that is exit 2 on
+    every run, or one far date would let the daily check print PAUSE for years (final review,
+    M8 PR1b). Measured from the run, not from `since`, so an extension is always one more
+    month."""
+    limit = today + timedelta(days=PAUSE_REVIEW_MAX_DAYS)
+    for p in pauses.values():
+        if p.review_by > limit:
+            raise Tooling(
+                f"infra/paused.json: {p.group}.review_by {p.review_by.isoformat()} is more than "
+                f"{PAUSE_REVIEW_MAX_DAYS} days out; a pause is reviewed at least monthly"
+            )
+    return pauses
+
+
+def pause_verdict(ctx: "Context", groups: tuple[str, ...], what: str) -> None:
+    """Raise Paused, or CheckFailed once a declared pause is past its review date, when any
+    of `groups` is declared paused. Return quietly when none is."""
+    declared = [ctx.pauses()[g] for g in groups if g in ctx.pauses()]
+    if not declared:
+        return
+    overdue = [p for p in declared if ctx.now.date() > p.review_by]
+    if overdue:
+        raise CheckFailed(
+            "; ".join(
+                f"{p.group} pause is past its review date ({p.review_by.isoformat()}): resume it "
+                "(TODOS.md P1), or extend review_by in infra/paused.json in a pull request"
+                for p in overdue
+            )
+        )
+    raise Paused(f"{what} not verified: " + "; ".join(p.note() for p in declared))
+
+
 class Context:
     """Every production read, memoized, so checks sharing /healthz or the machine list
     ask once. A failed read is memoized too: every check that needed it reports it."""
@@ -230,12 +341,15 @@ class Context:
         now: datetime | None = None,
         scale_file: Path = SCALE_FILE,
         fly_toml: Path = FLY_TOML,
+        pause_file: Path | None = None,
     ):
         self.runner = runner
         self.release_commit = release_commit
         self.now = now or datetime.now(timezone.utc)
         self.scale_file = scale_file
         self.fly_toml = fly_toml
+        # Looked up at construction so a test can point the module at another file.
+        self.pause_file = pause_file or PAUSE_FILE
         self._memo: dict[str, tuple[bool, object]] = {}
 
     def once(self, key: str, fetch: Callable[[], object]):
@@ -250,6 +364,11 @@ class Context:
         raise value
 
     # local files
+
+    def pauses(self) -> dict[str, "Pause"]:
+        """infra/paused.json, validated. A missing file declares nothing, which is the strict
+        reading: every check then expects every group running."""
+        return self.once("pauses", lambda: review_within_limit(read_pauses(self.pause_file), self.now.date()))
 
     def processes(self) -> dict:
         return tomllib.loads(self.fly_toml.read_text())["processes"]
@@ -483,7 +602,7 @@ def parse_backup_times(text: str) -> list[datetime]:
 # --- the /healthz.jobs contract (plan item 15) ------------------------------
 
 
-def jobs_verdict(jobs: object) -> str:
+def jobs_verdict(jobs: object, paused: Callable[[], None] | None = None) -> str:
     """Apply the /healthz.jobs contract. Returns a pass detail or raises CheckFailed.
 
     The unusable-reading rule is checked first, the same order Settings uses: a
@@ -522,6 +641,8 @@ def jobs_verdict(jobs: object) -> str:
             raise CheckFailed(f"{malformed} (a row lacks task, label, interval_s, or a boolean stale / write_error)")
     if now - read_at > JOBS_READ_MAX_AGE:
         raise CheckFailed(f"{cannot_read} (last good read {human_age(now - read_at)} before serve time)")
+    if paused is not None:
+        paused()  # raises Paused (or CheckFailed past review_by) when worker or beat is declared
     stale = [row for row in rows if row["stale"]]
     if stale:
         names = [
@@ -546,21 +667,45 @@ def _standby_note(machines: list[dict]) -> str:
 
 def check_groups_started(ctx: Context) -> str:
     machines = ctx.machines()
-    problems = []
-    counts = []
+    pauses = ctx.pauses()
+    stopped, running_paused, counts = [], [], []
     for group in sorted(ctx.processes()):
         members = [m for m in machines if machine_group(m) == group and not is_standby(m)]
-        counts.append(f"{group}={len(members)}")
+        counts.append(f"{group}={len(members)}" + (" paused" if group in pauses else ""))
         if not members:
-            problems.append(f"{group}: no machine")
+            stopped.append(f"{group}: no machine")
         for machine in members:
-            if machine.get("state") != "started":
-                problems.append(f"{group} {machine.get('id', '?')} is {machine.get('state', '?')}")
-    if problems:
-        raise CheckFailed(
-            "not every process group is started: " + "; ".join(problems)
-            + ". A deploy leaves a stopped machine stopped: `fly machine start <id> -a mealy-app-prod`"
-            + " (never a standby)" + _standby_note(machines)
+            state = machine.get("state", "?")
+            if group in pauses:
+                # Declared paused: running is the failure. A started worker spends the broker
+                # allowance the pause exists to protect, or means someone resumed it and forgot
+                # the file.
+                if state == "started":
+                    running_paused.append(f"{group} {machine.get('id', '?')}")
+            elif state != "started":
+                stopped.append(f"{group} {machine.get('id', '?')} is {state}")
+    if stopped or running_paused:
+        parts = []
+        if stopped:
+            parts.append(
+                "not every process group is started: " + "; ".join(stopped)
+                + ". A deploy leaves a stopped machine stopped: `fly machine start <id> -a mealy-app-prod`"
+                + " (never a standby)"
+            )
+        if running_paused:
+            parts.append(
+                "declared paused in infra/paused.json but running: " + "; ".join(running_paused)
+                + ". Stop it again (`fly machine stop <id> -a mealy-app-prod`), or remove the pause"
+                + " in a pull request if the resume is deliberate"
+            )
+        raise CheckFailed(". ".join(parts) + _standby_note(machines))
+    overdue = [p for p in pauses.values() if ctx.now.date() > p.review_by]
+    if overdue:
+        pause_verdict(ctx, tuple(p.group for p in overdue), "groups-started")
+    if pauses:
+        return (
+            "every process group as declared: " + ", ".join(counts) + " ("
+            + "; ".join(p.note() for p in pauses.values()) + ")" + _standby_note(machines)
         )
     return "every process group started: " + ", ".join(counts) + _standby_note(machines)
 
@@ -601,6 +746,7 @@ _WORKER_PROBE = (
 
 
 def check_worker(ctx: Context) -> str:
+    pause_verdict(ctx, ("worker",), "worker round-trip")
     completed = ctx.runner.run(
         ["fly", "ssh", "console", "-a", FLY_APP, "-g", "web",
          "-C", f'/app/.venv/bin/python -c "{_WORKER_PROBE}"'],
@@ -744,7 +890,62 @@ def check_jobs_fresh(ctx: Context) -> str:
     body = ctx.healthz_body()
     if "jobs" not in body:
         raise CheckFailed("/healthz has no `jobs` key (a PR1b field: --skip=healthz_jobs only before PR1b is live)")
-    return jobs_verdict(body["jobs"])
+    jobs = body["jobs"]
+
+    def paused() -> None:
+        # Called by jobs_verdict only after the rows passed the contract's shape rules.
+        ran_after_the_pause(ctx, jobs["rows"])
+        stale = sum(1 for row in jobs["rows"] if row["stale"])
+        pause_verdict(ctx, PAUSABLE_GROUPS, f"background jobs ({stale} of {len(jobs['rows'])} stale, expected while paused)")
+
+    return jobs_verdict(jobs, paused=paused)
+
+
+def ran_after_the_pause(ctx: Context, rows: list[dict]) -> None:
+    """A job that succeeded on a later day than a declared pause means that group was resumed
+    and infra/paused.json was not emptied. Without this the daily cron would print PAUSE until
+    review_by while the group runs, and could not notice it dying again: check 2, which catches
+    a running paused group, is in the release group the cron never runs (found by
+    /review-implementation's adversarial pass, M8 PR1b). The pause's own day is excluded,
+    because the jobs ran that day before the stop.
+
+    Whose pause the evidence speaks to: the four scheduled jobs start only when beat enqueues
+    them (nothing else sends them by name) and run only on the worker. With the worker
+    declared, a later success proves the worker ran, but not beat: a resumed worker also
+    drains jobs queued before the pause. With only beat declared, the worker is expected to
+    run and its queue drained on the pause day, so a later success proves beat ran (final
+    review, M8 PR1b)."""
+    pauses = ctx.pauses()
+    pause = pauses.get("worker") or pauses.get("beat")
+    if pause is None:
+        return
+    after = []
+    for row in rows:
+        ran = parse_time(row.get("last_success_at"))
+        if ran is not None and ran.date() > pause.since:
+            after.append(f"{row['label']} ({ran.date().isoformat()})")
+    if after:
+        raise CheckFailed(
+            f"the {pause.group} ran after it was declared paused on {pause.since.isoformat()}: "
+            + ", ".join(after)
+            + f". If the resume is deliberate, empty infra/paused.json in a pull request; if not, stop the {pause.group}"
+        )
+
+
+def check_version_reported(ctx: Context) -> str:
+    """Item 13: the cron asserts /healthz reports the deployed commit. Check 8 compares it with
+    the release; this only needs it to be a real commit, so it runs between releases too."""
+    body = ctx.healthz_body()
+    if "version" not in body:
+        raise CheckFailed("/healthz has no `version` key (a PR1b field: --skip=healthz_version only before PR1b is live)")
+    version = body["version"]
+    if version == "unknown":
+        raise CheckFailed(
+            "/healthz version is 'unknown': the image was built without `--build-arg GIT_COMMIT` (RUNBOOK §2 step 2)"
+        )
+    if not isinstance(version, str) or not _SHA.match(version):
+        raise CheckFailed(f"/healthz version {str(version)[:40]!r} is not a commit SHA")
+    return f"/healthz reports version {version[:12]}"
 
 
 def check_restore_point(ctx: Context) -> str:
@@ -900,6 +1101,8 @@ CHECKS = (
     Check("8", "commit-backend", "release", check_commit_backend,
           "deployed-commit-does-not-match-the-release", "healthz_version"),
     Check("1", "healthz", "liveness", check_healthz, "web-or-a-process-group-is-down"),
+    Check("1", "version-reported", "liveness", check_version_reported,
+          "deployed-commit-does-not-match-the-release", "healthz_version"),
     Check("jobs", "jobs-fresh", "liveness", check_jobs_fresh, "background-jobs-dead-worker-or-beat", "healthz_jobs"),
     Check("9", "restore-point", "recoverability", check_restore_point, "no-recent-restore-point"),
     Check("5", "origin-lock", "edge", check_origin_lock, "421-from-the-origin-gate"),
@@ -915,7 +1118,7 @@ TOOLING_DIAGNOSTICS = "tooling-failures-exit-2"
 @dataclass
 class Result:
     check: Check
-    outcome: str  # pass | fail | skipped | tooling
+    outcome: str  # pass | fail | skipped | paused | tooling
     detail: str
 
 
@@ -924,6 +1127,8 @@ def run_check(check: Check, ctx: Context, skip: set[str]) -> Result:
         return Result(check, "skipped", f"skipped (--skip={check.skip_key}), not verified")
     try:
         return Result(check, "pass", check.run(ctx))
+    except Paused as exc:
+        return Result(check, "paused", str(exc))
     except CheckFailed as exc:
         return Result(check, "fail", str(exc))
     except Tooling as exc:
@@ -946,6 +1151,7 @@ class NoProductionRunner(Runner):
 def _self_test_case(group: str) -> tuple[Check, Context]:
     """One check from `group`, fed a known-bad fixture instead of production."""
     ctx = Context(NoProductionRunner(), now=datetime(2026, 9, 21, 17, 0, tzinfo=timezone.utc))
+    ctx._memo["pauses"] = (True, {})  # the forced failure must fail whatever infra/paused.json says
     by_name = {c.name: c for c in CHECKS}
     if group == "release":
         # One more machine than the file pins, so no future pin can turn this green.
@@ -977,10 +1183,10 @@ def _self_test_case(group: str) -> tuple[Check, Context]:
 
 # --- main ------------------------------------------------------------------
 
-_MARK = {"pass": "PASS ", "fail": "FAIL ", "skipped": "SKIP ", "tooling": "ERROR"}
+_MARK = {"pass": "PASS ", "fail": "FAIL ", "skipped": "SKIP ", "paused": "PAUSE", "tooling": "ERROR"}
 
 
-def report(results: list[Result], out, *, self_test: bool = False) -> int:
+def report(results: list[Result], out, *, self_test: bool = False, paused_groups: tuple[str, ...] = ()) -> int:
     for r in results:
         line = f"{_MARK[r.outcome]} {r.check.label}: {r.detail}"
         if r.outcome == "fail":
@@ -999,7 +1205,12 @@ def report(results: list[Result], out, *, self_test: bool = False) -> int:
         return 2
     passed = sum(1 for r in results if r.outcome == "pass")
     skipped = sum(1 for r in results if r.outcome == "skipped")
-    print(f"exit 0: {passed} passed, {skipped} skipped", file=out)
+    paused = sum(1 for r in results if r.outcome == "paused")
+    summary = f"exit 0: {passed} passed, {skipped} skipped"
+    if paused:
+        declared = ", ".join(paused_groups) or "see infra/paused.json"
+        summary += f", {paused} paused ({declared} declared in infra/paused.json)"
+    print(summary, file=out)
     return 0
 
 
@@ -1061,7 +1272,11 @@ def main(argv: list[str] | None = None, *, runner: Runner | None = None,
 
     ctx = Context(runner, release_commit=release_commit, now=now)
     results = [run_check(check, ctx, skip) for check in CHECKS if check.group in groups]
-    return report(results, out)
+    try:
+        paused_groups = tuple(sorted(ctx.pauses()))
+    except (CheckFailed, Tooling):
+        paused_groups = ()  # already reported as an ERROR line by the checks that read it
+    return report(results, out, paused_groups=paused_groups)
 
 
 if __name__ == "__main__":

@@ -277,7 +277,12 @@ and the four R2 credentials (`R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCES
 `app/database.py` uses the SQLAlchemy defaults plus `pool_pre_ping` and `pool_recycle`.) `STORAGE_BACKEND=r2` is the one exception: it lives in `backend/fly.toml` `[env]`
 rather than a secret, because it is not secret and versioning it with the code makes a
 rollback revert the storage flip atomically. See
-[Object storage](#object-storage-cloudflare-r2) below.
+[Object storage](#object-storage-cloudflare-r2) below. `GATE_BREAK_GLASS` (M8) lives there too,
+as `"0"`, for the same reason: only the exact string `"1"` turns the host gate's origin check
+off during a Cloudflare outage, it is enabled per release with `fly deploy -e`, and a secret
+would survive the clearing redeploy (`infra/incident-diagnostics.md` → Break-glass). `GIT_COMMIT`
+is not a runtime variable either: it is the Dockerfile `prod` stage's build arg
+(`fly deploy --build-arg GIT_COMMIT=<sha>`, RUNBOOK §2), which `/healthz` reports as `version`.
 
 **Frontend (.env.local)**
 ```
@@ -293,7 +298,9 @@ repository, so nothing secret reaches the bundle.
 **Operator-only (never an app runtime variable)** — `CLOUDFLARE_API_TOKEN`: a read-only token
 held in the operator's shell for `infra/cloudflare-drift.py`; its scopes are listed in the
 [`infra/RUNBOOK.md`](../../infra/RUNBOOK.md) header. Never in CI (scheduling the drift script
-is a v1.1 item).
+is a v1.1 item). `FLY_API_TOKEN` (M8): a GitHub Actions secret for `ops-check.yml` only — a
+`fly tokens create readonly` token (org-scoped, read-only, one-year expiry, rotation date in the
+RUNBOOK header); nothing else in CI holds a Fly credential.
 
 ### Ports
 
@@ -312,6 +319,7 @@ is a v1.1 item).
 | GitHub Actions | CI/CD automation |
 | `.github/workflows/test.yml` | Run tests on push/PR |
 | `.github/workflows/doc-guard.yml` | On pull requests: `.agents/bin/doc-guard --range` refuses merges that change a documented code area without updating its owning doc (see `.agents/WORKFLOW.md`) |
+| `.github/workflows/ops-check.yml` | M8: the check between releases — daily at 14:17 UTC and on `workflow_dispatch` (`self_test` input), runs `python3 infra/release-smoke.py --only=liveness,recoverability,edge` with flyctl `0.4.102` and the `FLY_API_TOKEN` secret, which only the two smoke steps receive; retries once after 60 s, then fails the job (GitHub's failure email is the alert; the failing lines and the `exit 1 production:` / `exit 2 tooling:` summary become error annotations, because the email never carries step output). `timeout-minutes: 25` covers both attempts at their worst, and the output streams to the log. Scheduled workflows only fire from the default branch, and GitHub disables them on a public repository after 60 days without a commit (RUNBOOK header) |
 | `.github/workflows/deploy.yml` | Deploy to production (deferred to v1.1; the M8 manual runbook, [`infra/RUNBOOK.md`](../../infra/RUNBOOK.md), comes first) |
 
 **CI Pipeline (Current)** — `.github/workflows/test.yml`, on push to `master` and on pull
@@ -412,9 +420,10 @@ Cloudflare API with the operator's own credentials (a host-side exception in
 | [`RUNBOOK.md`](../../infra/RUNBOOK.md) | The release procedure: gates, backend-first deploy, promote, smoke, Cloudflare and manual checks, tagging (`v1-<UTC date>-<short sha>`), rollback as two doctrines, execution log |
 | [`incident-diagnostics.md`](../../infra/incident-diagnostics.md) | One entry per known failure mode (symptom, distinguishing signal, ordered recovery), including break-glass Mode A/B; every smoke failure line links an entry |
 | [`backup-restore-drill.md`](../../infra/backup-restore-drill.md) | Snapshot and point-in-time restores into dated scratch clusters, with the observed numbers and a restore-point log |
-| `release-smoke.py` | Mechanical assertions in four groups (`release`, `liveness`, `recoverability`, `edge`); exit `0` pass, `1` production, `2` tooling; `--only`, `--skip` (PR1b-only `/healthz` keys print `skipped`, never `pass`), `--release-commit`, `--self-test` |
+| `release-smoke.py` | Mechanical assertions in four groups (`release`, `liveness`, `recoverability`, `edge`); exit `0` pass, `1` production, `2` tooling; `--only`, `--skip` (PR1b-only `/healthz` keys print `skipped`, never `pass`), `--release-commit`, `--self-test`. Liveness includes `[1] version-reported` (a real commit SHA on `/healthz`, for the cron). Reads `paused.json`: a declared group must be stopped, and its checks print `PAUSE`, never `pass`; jobs-fresh fails once a job has succeeded on a later day than the worker's pause, or beat's when only beat is declared (a resume nobody declared) |
 | `cloudflare-drift.py` | Read-only diff of the live WAF rule, origin-lock Transform Rule (presence only; the header value is dropped at parse), Browser Cache TTL, Access apps and Bot Fight Mode against `cloudflare-state.md` |
 | `fly-scale.json` | The pinned machine counts smoke check 3 diffs against; its keys must equal `fly.toml [processes]` |
+| `paused.json` | M8: a deliberate pause of `worker` and/or `beat` (`since`, `review_by`, `reason`; `{}` means none). Past `review_by` the pause fails every run, and a `review_by` more than 31 days out is exit 2. Declared 2026-09-23 at the Upstash request cap (TODOS.md P1) |
 | `cloudflare-state.md`, `r2-cutover-runbook.md` | Cloudflare intent (the drift script's diff target) and the executed M7 cutover |
 
 `infra/*.md` is exempt from the doc map (an execution-log row is not a documented-surface
@@ -559,7 +568,7 @@ todo-app/
 │
 ├── AGENTS.md                 # Project rules for every AI harness (CLAUDE.md imports it)
 ├── infra/                    # RUNBOOK.md, incident-diagnostics.md, backup-restore-drill.md,
-│                             # release-smoke.py, cloudflare-drift.py, fly-scale.json, tests/,
+│                             # release-smoke.py, cloudflare-drift.py, fly-scale.json, paused.json, tests/,
 │                             # cloudflare-state.md, r2-cutover-runbook.md (host-side; see §4)
 └── .agents/docs/             # Documentation (framework docs set)
     ├── PRD.md
