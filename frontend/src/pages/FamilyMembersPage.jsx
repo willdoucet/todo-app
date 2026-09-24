@@ -5,6 +5,8 @@ import TimezoneSettings from '../components/settings/TimezoneSettings'
 import ICloudSettings from '../components/settings/ICloudSettings'
 import MealboardSettings from '../components/settings/MealboardSettings'
 import AccountSection from '../components/settings/AccountSection'
+import BackgroundJobsAlert from '../components/settings/BackgroundJobsAlert'
+import BackgroundJobsSection from '../components/settings/BackgroundJobsSection'
 import usePageTitle from '../hooks/usePageTitle'
 
 export default function FamilyMembersPage() {
@@ -16,9 +18,12 @@ export default function FamilyMembersPage() {
       <Header />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-text-primary dark:text-gray-100 tracking-tight mb-6 sm:mb-8">
-          Settings
-        </h1>
+        <header className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-text-primary dark:text-gray-100 tracking-tight">
+            Settings
+          </h1>
+          <BackgroundJobsAlert />
+        </header>
 
         <div className="bg-card-bg dark:bg-gray-800 rounded-xl border border-card-border dark:border-gray-700 p-6">
           <FamilyMemberManager />
@@ -47,6 +52,8 @@ export default function FamilyMembersPage() {
           </h2>
           <MealboardSettings />
         </div>
+
+        <BackgroundJobsSection />
 
         <AccountSection />
       </main>

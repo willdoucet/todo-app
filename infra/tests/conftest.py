@@ -44,3 +44,13 @@ def smoke():
 @pytest.fixture(scope="session")
 def drift():
     return load_script("cloudflare-drift.py", "cloudflare_drift")
+
+
+@pytest.fixture(autouse=True)
+def no_declared_pause(smoke, tmp_path, monkeypatch):
+    """Every test starts from `{}`. The committed infra/paused.json declares a real pause
+    (TODOS.md P1), which would otherwise change checks 2, 4 and jobs-fresh in every test. The
+    pause tests write their own file; one structural test reads the committed one."""
+    empty = tmp_path / "paused-none.json"
+    empty.write_text("{}")
+    monkeypatch.setattr(smoke, "PAUSE_FILE", empty)

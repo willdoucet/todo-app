@@ -37,6 +37,7 @@
 | **AppSettings** | Singleton app config | `timezone` (IANA name, default UTC) |
 | **Asset** | M7 upload manifest — one row per stored object | `key` PK (`{subdir}/{uuid4}.{ext}`), `content_type` (authoritative on read), `size_bytes`, `referenced`, `created_at`; index `(referenced, created_at)` |
 | **User** | Singleton household login (M3 — 0 or 1 rows in v1) | `email` (CITEXT, unique), `password_hash` (argon2id PHC), `session_version` (bumped on operator password rotation), timestamps |
+| **JobHeartbeat** | M8: last recorded run of each Celery `beat_schedule` task, written by the worker's `task_postrun` handler | `task_name` PK (Celery task name), `last_success_at` / `last_error_at` (timestamptz), `last_error` (exception class name), `error_count`. Staleness is derived per request, never stored |
 | **RefreshToken** | Append-only refresh-token rotation chain (M3) | `user_id` FK CASCADE, `token_hash` BYTEA (32-byte SHA-256, unique), `successor_id` self-FK SET NULL (rotation chain pointer, `use_alter=True`), `issued_at`, `expires_at`, `superseded_at`, `revoked_at` |
 
 ### Entity Relationship Diagram
@@ -194,6 +195,16 @@ UNIQUE(external_id, calendar_integration_id)
 │ updated_at              │
 └─────────────────────────┘
 Singleton — only one row exists (seeded by migration)
+
+┌──────────────────────────────┐
+│        JobHeartbeat (M8)     │  no foreign keys; one row per beat_schedule task
+├──────────────────────────────┤
+│ task_name (PK)               │  Celery task name, e.g. app.tasks.sync_all_reminders
+│ last_success_at (TIMESTAMPTZ)│  NULL until the task first succeeds
+│ last_error (TEXT)            │  exception class of the latest failed recording
+│ last_error_at (TIMESTAMPTZ)  │
+│ error_count                  │  zeroed by the next successful upsert
+└──────────────────────────────┘
 ```
 
 ### Table Definitions
@@ -579,6 +590,22 @@ Upload manifest. See "M7 storage layer" under Code Organization for the write/ad
 
 Index `ix_assets_referenced_created_at (referenced, created_at)` backs the hourly abandoned-upload sweep.
 
+#### job_heartbeats (M8)
+
+Revision `1b6b462491fa` (additive, reversible: `downgrade()` drops the table). Written only by
+the worker's `task_postrun` handler in `app/tasks.py` — on `SUCCESS`, and only for task names in
+`celery_app.conf.beat_schedule` (the one-shot tasks, `health_check` included, never get a row).
+Read every 30 s by the web process's refresher (`app/job_health.py`) and published on
+`/healthz.jobs`.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `task_name` | TEXT | PRIMARY KEY | Celery task name, not the beat-entry key |
+| `last_success_at` | TIMESTAMPTZ | NULLABLE | Set by every successful upsert (`INSERT … ON CONFLICT (task_name)`, idempotent under redelivery) |
+| `last_error` | TEXT | NULLABLE | Exception class name (never its message) when the success upsert failed; cleared by the next success |
+| `last_error_at` | TIMESTAMPTZ | NULLABLE | When that recording failed; cleared by the next success |
+| `error_count` | INTEGER | NOT NULL, DEFAULT 0 | Failed recordings since the last success; kept for diagnostics, not sent on `/healthz` |
+
 ## 2. API Endpoints
 
 ### Base URL
@@ -773,12 +800,12 @@ GIF and SVG rejected with 415). Over-cap → 413.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/auth/register` | Create the singleton household account. Gated by `HOUSEHOLD_ACCESS_KEY` (constant-time compare via `hmac.compare_digest`) AND a "no existing account" check protected by a transaction-scoped pg advisory lock. Returns 200 + access JWT in body + `__Host-refresh` cookie. Wrong key / account-exists / concurrent-loser all return byte-identical `401 {"detail": "registration_unavailable"}`. Password >128 chars → 422. |
-| POST | `/auth/login` | Email + password authentication. Same-client login rotation: if the request carries the user's own refresh cookie, only that one row is revoked (multi-device household preserved). Unknown email / wrong password / overlong password all return byte-identical `401 {"detail": "invalid_credentials"}` and log `reason=bad_credentials`. `password_hasher.verify` is called on every attempt (timing-oracle defense via lazy-cached dummy hash). |
-| POST | `/auth/refresh` | Rotate the refresh cookie. Cases A/B/C documented in `app/auth/service.py`: Case A = fresh cookie → new cookie + new access token; Case B = superseded within 60s grace → access token only, NO Set-Cookie; Case C = past grace → 401. Row-locked (SELECT FOR UPDATE) for serialization across concurrent refreshes. Cookie unknown / expired / revoked / past grace / chain-corrupt all return byte-identical `401 {"detail": "refresh_failed"}`. |
-| POST | `/auth/logout` | Bearer-token-required (CSRF defense — cookie-only logout is rejected). Validates the access JWT against live `users.session_version` BEFORE any mutation. Bumps `users.session_version` to invalidate already-minted access JWTs, then revokes ALL active refresh tokens for the user. Returns 204 with `Set-Cookie: __Host-refresh=; Max-Age=0` to clear the browser cookie. Stale bearer after operator password rotation returns 401 and does NOT revoke any newly-issued valid refresh token. |
+| POST | `/auth/login` | Email + password authentication. Same-client login rotation: if the request carries the user's own refresh cookie, only that one row is revoked (multi-device household preserved). Unknown email / wrong password / overlong password all return byte-identical `401 {"detail": "invalid_credentials"}` and log `reason=bad_credentials`. `password_hasher.verify` is called on every attempt (timing-oracle defense via lazy-cached dummy hash). Holds the `auth_session_issue` advisory lock shared for its transaction (M8), so an operator password rotation, which takes it exclusive, never misses the session it issues. |
+| POST | `/auth/refresh` | Rotate the refresh cookie. Cases A/B/C documented in `app/auth/service.py`: Case A = fresh cookie → new cookie + new access token; Case B = superseded within 60s grace → access token only, NO Set-Cookie; Case C = past grace → 401. Row-locked (SELECT FOR UPDATE) for serialization across concurrent refreshes, after taking the `auth_session_issue` advisory lock shared (M8), so an operator password rotation never misses a successor row inserted while it runs. Cookie unknown / expired / revoked / past grace / chain-corrupt all return byte-identical `401 {"detail": "refresh_failed"}`. |
+| POST | `/auth/logout` | Bearer-token-required (CSRF defense — cookie-only logout is rejected). Validates the access JWT against live `users.session_version` BEFORE any mutation. Bumps `users.session_version` to invalidate already-minted access JWTs, then revokes ALL active refresh tokens for the user, holding the `auth_session_issue` advisory lock exclusive (M8, like the operator password rotation) so a login or refresh in flight on another device commits first and is revoked too. Returns 204 with `Set-Cookie: __Host-refresh=; Max-Age=0` to clear the browser cookie. Stale bearer after operator password rotation returns 401 and does NOT revoke any newly-issued valid refresh token. |
 | GET | `/auth/status` | Public — no auth. Returns `{"account_exists": bool}`. Drives the M4 portal's "Create account" toggle. No version / hostname / config leakage. |
 | GET | `/` | Public — sanity message only (`{"message": "To-Do + Recipe API is running!"}`). |
-| GET | `/healthz` | Public — shallow `{"status": "ok"}` for Fly's HTTP check; deliberately no DB/Redis probe so a dependency flap does not take the app down when `min_machines_running=1`. Exempt from the production host gate. |
+| GET | `/healthz` | Public, and on Fly's health-check path, so the handler reads process memory only and never awaits a database or Redis (a dependency flap must not take the app down when `min_machines_running=1`). `Cache-Control: no-store`. Body (M8): `status`, `version` (the deployed commit from the image's `GIT_COMMIT` build arg, or `"unknown"`), `gate_break_glass` (bool), and `jobs`: `read` (`ok`/`stale`/`unavailable`), `read_at`, `now`, and one row per `beat_schedule` task (`task`, `label`, `interval_s`, `last_success_at`, `stale`, `write_error`) computed at serve time from the refresher's last reading. The contract is pinned in the M8 plan's item 15. Exempt from the production host gate. |
 
 **Endpoint contract notes:**
 - All auth-related failures return `401`; only body-shape failures return `422` (Pydantic).
@@ -805,6 +832,8 @@ Two test artifacts pin the gate from both ends:
 #### Production host gate
 
 A FastAPI middleware in `app/main.py` admits a non-`/healthz` request only if it came through Cloudflare, when `APP_ENV=production`. Two checks, both required: the `Host` header must equal `PUBLIC_API_HOST` (`api.mealy.dev`), and the `X-Origin-Verify` header must match the `ORIGIN_VERIFY_SECRET` Fly secret, which a Cloudflare Transform Rule adds to every request for the API host ([`infra/cloudflare-state.md`](../../infra/cloudflare-state.md) → *Transform Rules — origin lock*). The compare is constant-time on bytes, and an empty secret never matches. The Host check alone let a request sent straight to the Fly IP through, because Fly holds a certificate for `api.mealy.dev`, and that request skipped the `/auth/*` WAF rate limit (found 2026-09-11; LESSONS.md → *A Host-header check does not stop direct-to-origin bypass*). Both failures return the same `421 Misdirected Request` body. In production the lifespan (`_initialize_origin_verify`) refuses to boot without an `ORIGIN_VERIFY_SECRET` of at least 32 characters, so a missing secret fails the deploy instead of 421-ing every request. Cloudflare Access was the edge backstop until the M7 cutover and was removed 2026-09-11; the `/auth/*` WAF rule remains, and this gate is now what keeps direct-to-origin traffic out. Disabled in dev/test so contributors can use any Host header.
+
+Since M8 the gate is the pure `gate_reason(request)`, which returns the first failing check of six: `public_api_host_unconfigured`, `host_absent`, `host_mismatch`, `origin_verify_secret_empty`, `origin_verify_absent`, `origin_verify_mismatch`. Each rejection logs one `app.gate` WARNING through `app/gate_logging.py` (`event="host_gate"`, `outcome="rejected"`, the `reason`, `ip` = the last `X-Forwarded-For` entry, the hop Fly's proxy wrote — never `CF-Connecting-IP` or the first `X-Forwarded-For` entry, both attacker-controlled on a request that went around the edge, and not `request.client.host`, which uvicorn's `--proxy-headers --forwarded-allow-ips=*` sets to that first entry (the socket peer only when there is no header) — the sanitized `request_id`, the path truncated to 128, and the `Host` / `X-Origin-Verify` headers' presence and length only). Those fields are the log message itself, one JSON object (`{"event": "host_gate", …}`), because the app installs no logging config and under uvicorn the logger reaches Python's last-resort handler, which prints the message alone; they also ride on the record as `extra`. The emitter is called inside a `try`, so a logging failure never changes the 421, whose body stays byte-identical across all six reasons. `GATE_BREAK_GLASS` (`fly.toml [env]`, default `"0"`; only the exact string `"1"` enables it) skips the origin-verify checks while the Host checks still run, and logs every admitted request as `outcome="bypassed"`; `/healthz` reports it. The procedure is `infra/incident-diagnostics.md` → Break-glass.
 
 #### Auth subsystem layout (`app/auth/`)
 
@@ -993,7 +1022,7 @@ Env vars: `STORAGE_BACKEND` (`local`|`r2`, default `local`), `SQLALCHEMY_ECHO`
 backend/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPI app, CORS, router registration
+│   ├── main.py              # FastAPI app, CORS, router registration, host gate, /healthz, lifespan
 │   ├── database.py          # Async session factory
 │   ├── models.py            # SQLAlchemy ORM models
 │   ├── schemas.py           # Pydantic validation schemas
@@ -1012,7 +1041,13 @@ backend/
 │   ├── crud_app_settings.py  # Singleton settings CRUD (timezone)
 │   │
 │   ├── celery_app.py        # Celery app with Redis broker + beat schedule
-│   ├── tasks.py             # Celery tasks (sync, push, delete)
+│   ├── tasks.py             # Celery tasks (sync, push, delete) + the task_postrun heartbeat writer (M8)
+│   ├── job_health.py        # M8: beat_intervals(), JOB_LABELS, the /healthz.jobs payload + contract model,
+│   │                        #     the web-side refresher, the job_heartbeats reads and writes
+│   ├── gate_logging.py      # M8: the host gate's six reasons + its app.gate emitter
+│   │
+│   ├── cli/                 # M8: operator tools run over `fly ssh console`
+│   │   └── rotate_password.py  # rotate the household password, revoke every session
 │   │
 │   ├── services/
 │   │   ├── caldav_client.py  # CalDAV protocol (VEVENT + VTODO operations)
@@ -1051,7 +1086,7 @@ backend/
 │   │   ├── tokens.py         # JWT + refresh plaintext/hash + refresh_row_status predicate
 │   │   ├── passwords.py      # PasswordHasher injectable + verify_or_dummy + dummy-cache
 │   │   ├── errors.py         # Single source for byte-identical 401 responses
-│   │   ├── service.py        # Async business logic (register/login/refresh/logout/status)
+│   │   ├── service.py        # Async business logic (register/login/refresh/logout/status/rotate_password)
 │   │   ├── dependencies.py   # validate_bearer + get_current_user + require_media_session
 │   │   ├── routes.py         # /auth/* endpoints
 │   │   └── logging_utils.py  # emit_log_line + IP/request-id sanitization

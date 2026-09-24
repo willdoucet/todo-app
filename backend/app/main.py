@@ -1,13 +1,16 @@
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pathlib import Path
 import hmac
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
 from .routes import tasks, family_members, responsibilities, uploads, lists, items, calendar_events, integrations, app_settings, calendars, sections, meal_slot_types, meal_entries, media
+from app import gate_logging, job_health
 from app.auth import get_current_user, router as auth_router
 
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
@@ -124,7 +127,16 @@ async def lifespan(app: FastAPI):
     _initialize_auth_config()
     _initialize_storage_backend()
     _initialize_origin_verify()
-    yield
+    # M8 item 15: the background-job reading /healthz serves from memory. The
+    # refresher reads job_heartbeats every 30 s; /healthz never awaits it.
+    job_health.mark_started()
+    refresher = asyncio.create_task(job_health.refresh_forever())
+    try:
+        yield
+    finally:
+        refresher.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await refresher
 
 
 # M5 PR1 — disable FastAPI's automatic /docs, /redoc, /openapi.json. These
@@ -179,31 +191,77 @@ app.add_middleware(
 )
 
 
-def _origin_verified(request: Request) -> bool:
+def _origin_verify_reason(request: Request) -> str | None:
     expected = os.getenv("ORIGIN_VERIFY_SECRET", "").strip()
     # An unset secret must never match an absent header ("" == "").
     if not expected:
-        return False
-    presented = request.headers.get(_ORIGIN_VERIFY_HEADER, "")
+        return gate_logging.ORIGIN_VERIFY_SECRET_EMPTY
+    presented = request.headers.get(_ORIGIN_VERIFY_HEADER)
+    if presented is None:
+        return gate_logging.ORIGIN_VERIFY_ABSENT
     # Compare bytes: compare_digest raises TypeError on non-ASCII str, which
     # would turn a forged header into a 500 instead of a 421.
-    return hmac.compare_digest(presented.encode(), expected.encode())
+    if not hmac.compare_digest(presented.encode(), expected.encode()):
+        return gate_logging.ORIGIN_VERIFY_MISMATCH
+    return None
 
 
 # Production host gate — admit a non-/healthz request only if it came through
 # Cloudflare, whose /auth/* WAF rate limit is the only brute-force control on
-# login (infra/cloudflare-state.md). Two checks, both required:
+# login (infra/cloudflare-state.md). The Host check turns away *.fly.dev
+# traffic, but the client writes the Host header: Fly holds a cert for
+# api.mealy.dev, so `curl --resolve api.mealy.dev:443:<fly-ip>` passed it alone
+# (found 2026-09-11). Only the edge can add X-Origin-Verify, so that check is
+# what proves the request came through Cloudflare.
 #
-# 1. Host must be PUBLIC_API_HOST. Turns away *.fly.dev traffic (Adversarial
-#    review run 2), but the client writes the Host header: Fly holds a cert
-#    for api.mealy.dev, so `curl --resolve api.mealy.dev:443:<fly-ip>` passed
-#    this check alone and skipped Cloudflare entirely (found 2026-09-11).
-# 2. X-Origin-Verify must match ORIGIN_VERIFY_SECRET, which a Cloudflare
-#    Transform Rule sets on every request for the API host. Only the edge
-#    can add it, so it proves the request came through Cloudflare.
-#
-# Both failures return the same 421 body. The gate is a no-op outside
-# production so dev / test can continue to use arbitrary Host headers.
+#   request ──▶ APP_ENV != production? ──yes──▶ pass through
+#                  │ no
+#                  ▼
+#        scope["path"] == "/healthz"? ──yes──▶ pass through
+#                  │ no
+#                  ▼
+#        PUBLIC_API_HOST unset ─────────────▶ 421  reason=public_api_host_unconfigured
+#        Host header ""  ───────────────────▶ 421  reason=host_absent
+#        Host != PUBLIC_API_HOST ───────────▶ 421  reason=host_mismatch
+#        GATE_BREAK_GLASS == "1"? ──yes──▶ admit · WARNING outcome=bypassed
+#                  │ no
+#        ORIGIN_VERIFY_SECRET empty ────────▶ 421  reason=origin_verify_secret_empty
+#        X-Origin-Verify missing ───────────▶ 421  reason=origin_verify_absent
+#        compare_digest fails ──────────────▶ 421  reason=origin_verify_mismatch
+#        else ──────────────────────────────▶ call_next
+#   every 421: body {"detail":"host_not_allowed"} (identical) · one app.gate WARNING
+#   the emitter is wrapped: an exception inside it never changes the response
+def break_glass_enabled() -> bool:
+    """``GATE_BREAK_GLASS`` (``fly.toml [env]``, default ``"0"``). Strict: only the
+    exact string ``"1"`` enables it, so ``true``, ``yes`` or a padded value stays off."""
+    return os.getenv("GATE_BREAK_GLASS") == "1"
+
+
+def gate_reason(request: Request) -> str | None:
+    """The first gate check this request fails, or ``None`` to admit it."""
+    allowed = os.getenv("PUBLIC_API_HOST", "").strip().lower()
+    if not allowed:
+        return gate_logging.PUBLIC_API_HOST_UNCONFIGURED
+    # Strip port; Host headers may carry one (e.g. ``api.mealy.dev:443``).
+    incoming = request.headers.get("host", "").strip().lower().split(":")[0]
+    if not incoming:
+        return gate_logging.HOST_ABSENT
+    if incoming != allowed:
+        return gate_logging.HOST_MISMATCH
+    if break_glass_enabled():
+        return None
+    return _origin_verify_reason(request)
+
+
+def _log_gate(emit, *args) -> None:
+    # An observability bug must never change the gate's answer (CEO review 2A):
+    # the emitter reads attacker-supplied headers inside the auth boundary.
+    try:
+        emit(*args)
+    except Exception:
+        pass
+
+
 @app.middleware("http")
 async def production_host_gate(request: Request, call_next):
     if os.getenv("APP_ENV") != "production":
@@ -217,14 +275,15 @@ async def production_host_gate(request: Request, call_next):
     if request.scope["path"] == "/healthz":
         return await call_next(request)
 
-    allowed = os.getenv("PUBLIC_API_HOST", "").strip().lower()
-    # Strip port; Host headers may carry one (e.g. ``api.mealy.dev:443``).
-    incoming = request.headers.get("host", "").strip().lower().split(":")[0]
-    if not allowed or incoming != allowed or not _origin_verified(request):
+    reason = gate_reason(request)
+    if reason is not None:
+        _log_gate(gate_logging.emit_gate_rejection, request, reason)
         return JSONResponse(
             status_code=421,
             content={"detail": "host_not_allowed"},
         )
+    if break_glass_enabled():
+        _log_gate(gate_logging.emit_gate_bypass, request)
     return await call_next(request)
 
 # M5 PR1 — wrapping `protected` APIRouter. ONE place to audit "is this
@@ -277,8 +336,24 @@ async def root():
     return {"message": "To-Do + Recipe API is running!"}
 
 
+def deployed_version() -> str:
+    """The commit this image was built from (Dockerfile prod stage ``ARG GIT_COMMIT``),
+    or ``"unknown"``. Smoke check 8 treats ``unknown`` as a failure, never a pass."""
+    return os.getenv("GIT_COMMIT", "").strip() or "unknown"
+
+
 @app.get("/healthz")
-async def healthz():
+async def healthz(response: Response):
     # Shallow probe by design: deep DB/Redis checks would turn a transient
-    # dep flap into total user-facing downtime when min_machines_running=1.
-    return {"status": "ok"}
+    # dep flap into total user-facing downtime when min_machines_running=1
+    # (LESSONS Decisions 2026-04-23). Everything here is read from the process:
+    # the handler never awaits a store. `no-store` so neither the smoke script
+    # nor the daily ops-check can read a cached body (Eng review 1.2).
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "status": "ok",
+        "version": deployed_version(),
+        "gate_break_glass": break_glass_enabled(),
+        # The refresher's last reading, with staleness computed now (job_health).
+        "jobs": job_health.serve_jobs(),
+    }

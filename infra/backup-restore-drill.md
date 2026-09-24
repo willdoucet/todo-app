@@ -13,7 +13,7 @@ operator's memory is not enough.
 | | |
 |---|---|
 | Owner | willdoucet |
-| Last executed | never. The first execution is M8's "Between the PRs" step 5, after PR1a |
+| Last executed | 2026-09-23, both paths, at the M8 PR1a release. See the execution log |
 | Estimated duration | 60–90 min for both paths. Most of it is waiting for `fly pg create` |
 | Risk | Low for production (read-only against it). Scratch clusters cost money until destroyed |
 | Cadence | Every 3 months as a starting point. The operator sets the real interval at the first execution (open question 2) and records it in the log. The re-run triggers below matter more than the interval |
@@ -131,7 +131,13 @@ fly apps destroy <leftover-drill-app> --yes
    On Linux the second command is `date -u -d '15 minutes ago' +%FT%TZ`. If the restore
    fails with `recovery ended before configured recovery target was reached`, no archived
    commit falls after the target (a quiet database): choose an earlier time, inside the
-   window the listing shows.
+   window the listing shows. **Observed 2026-09-23:** the window's end trailed real time by
+   hours (a 22:13 target at 22:28 failed; replay stopped near 20:37), because the restored
+   configuration sets no `archive_timeout`, so a WAL segment is archived only when its 16 MB
+   fills. Pick a target just before a write you know of. A failed attempt looks like success:
+   `fly pg backup restore` waits about 5 minutes and exits 0 while the machine's role reads
+   `error` in `fly status -a "$PITR"`. Destroy that app and retry under a new name
+   (`"$PITR"-2`).
 2. Restore into a second scratch cluster. `-a` is the **source**; the positional argument is
    the new app:
    ```bash
@@ -220,6 +226,8 @@ Fill in one row per path in the execution log. Re-run the whole drill:
 
 | Date (UTC) | Operator | Path | Restore point (id / target time) | Point's age | Restore duration | Row counts (users · tasks · items · meal_entries · family_members · responsibilities · assets · job_heartbeats) | Scratch destroyed | Notes |
 |---|---|---|---|---|---|---|---|---|
+| 2026-09-23 | willdoucet (run by Claude Code) | 1: volume snapshot | `vs_RAoZLvg9AAPsLYJ3gLQzlle` (2026-09-22T23:42:29Z, incremental, 3,432 bytes stored) | 22 h 17 min (at 21:59:13Z) | 68 s (21:59:13–22:00:21) | 1 · 0 · 1 · 1 · 3 · 1 · 0 · n/a — table not in this schema; alembic `b7e2c9a4f1d8`; `pg_is_in_recovery()` f; archiving off | yes, by the operator; `fly apps list` showed none at 22:53Z | Production at 22:26Z (read-only transaction): 1 · 0 · 1 · 1 · 3 · 2 · 2; the gap is today's writes after the snapshot (a responsibility, and the two assets of the release's upload check). Newest `refresh_tokens.issued_at` restored: 2026-09-21 20:12Z. `fly pg create` needed `--org personal` to run unattended. Counts ran as `psql` over `fly ssh console` with the password expanded on the machine, so no credential left it. |
+| 2026-09-23 | willdoucet (run by Claude Code) | 2: point-in-time | base backup `20260923T164629` + WAL, target 2026-09-23T19:55:00Z | 2 h 41 min (at 22:35:57Z) | 50 s (22:35:57–22:36:47), primary with 3/3 checks at return | 1 · 0 · 1 · 1 · 3 · 1 · 0 · n/a — table not in this schema; alembic `b7e2c9a4f1d8`; `pg_is_in_recovery()` f; archiving off | yes, by the operator, with the failed first attempt `mealy-app-drill-pitr-20260923`; `fly apps list` showed none at 22:53Z | **First attempt failed:** target 22:13:37Z (15 min before) never promoted. Replay stopped after segment `…13` (latest checkpoint 20:37:15Z), because no archived commit followed the target; flyctl waited ~5 min and still exited 0, with role `error`. **Replay proven:** the restore holds a refresh token issued 19:42:30Z, after the 16:46:33Z base backup. **Isolation:** secret names carry `S3_ARCHIVE_REMOTE_RESTORE_CONFIG` (the restore source) and no `S3_ARCHIVE_CONFIG`; `restore_command` reads production's bucket through a `restore` profile; `archive_mode` off. The open question in §3 step 2 is answered: the restore does not archive into production's bucket. |
 
 ## Restore-point log
 
@@ -229,3 +237,4 @@ or the first snapshot seen on a volume each get a row.
 | Date (UTC) | Event | Volume | Observation |
 |---|---|---|---|
 | 2026-09-12 | Host migration found: machine `6835444b795398` created 2026-09-11T23:31:01Z in zone `d2a4`; the previous volume `pending_destroy` in zone `76a8` | `vol_4qlnz9q037wl2qwr` | "No snapshots available"; `fly pg backup` disabled. **No restore point existed.** |
+| 2026-09-23 | Continuous backups enabled (the DB machine resized to 512 MB first; the operator accepted the Tigris terms); first base backup `20260923T164629` at 16:46:33Z | `vol_4qlnz9q037wl2qwr` | Daily volume snapshots land at ~23:41Z (newest 2026-09-22T23:42:29Z, restored by the drill). `flyio/postgres-flex:17.2` reports an image update available; applying it is a drill re-run trigger. |

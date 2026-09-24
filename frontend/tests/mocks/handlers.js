@@ -174,7 +174,33 @@ const mockMealPlans = [
 // Handlers
 // =============================================================================
 
+// The /healthz.jobs contract's healthy example (M8 plan item 15), so any test that renders
+// Settings gets a Background jobs reading without the network. Timestamps end in `Z`
+// (`job_heartbeats` is timestamptz); the card measures every age from `jobs.now`, never the
+// test's clock, so these stay valid whenever the suite runs.
+export const HEALTHZ_HEALTHY = {
+  status: 'ok',
+  version: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
+  gate_break_glass: false,
+  jobs: {
+    read: 'ok',
+    read_at: '2026-09-21T17:02:11Z',
+    now: '2026-09-21T17:02:40Z',
+    rows: [
+      { task: 'app.tasks.sync_all_icloud_integrations', label: 'iCloud calendar sync', interval_s: 600, last_success_at: '2026-09-21T16:58:03Z', stale: false, write_error: false },
+      { task: 'app.tasks.sync_all_reminders', label: 'iCloud reminders sync', interval_s: 600, last_success_at: '2026-09-21T16:58:05Z', stale: false, write_error: false },
+      { task: 'app.tasks.hard_delete_expired_soft_deletes', label: 'Deleted item cleanup', interval_s: 3600, last_success_at: '2026-09-21T16:30:00Z', stale: false, write_error: false },
+      { task: 'app.tasks.sweep_abandoned_uploads', label: 'Unused photo cleanup', interval_s: 3600, last_success_at: '2026-09-21T16:30:02Z', stale: false, write_error: false },
+    ],
+  },
+}
+
 export const handlers = [
+  // -------------------------------------------------------------------------
+  // /healthz (public; the Settings Background jobs card polls it)
+  // -------------------------------------------------------------------------
+  http.get(`${API_BASE}/healthz`, () => HttpResponse.json(HEALTHZ_HEALTHY)),
+
   // -------------------------------------------------------------------------
   // Family Members
   // -------------------------------------------------------------------------

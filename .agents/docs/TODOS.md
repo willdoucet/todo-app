@@ -11,11 +11,12 @@
 Edits to synced items still queue push jobs for when the worker returns. The ~590 jobs queued before the pause were kept, by the operator's decision (a purge would drop queued iCloud pushes).
 **Resume:**
 1. Upstash console → the database → Usage. Confirm the allowance has reset or the plan is upgraded.
-2. Prefer resuming as part of the M8 PR1a release (`infra/RUNBOOK.md`). Its deploy ships #49 for the first time. A deploy leaves a stopped machine stopped, so start them after it.
+2. Resume on its own or as part of a release (`infra/RUNBOOK.md`). #49 shipped with the M8 PR1a release (2026-09-23, Fly v34), so the machines already carry its restart policy and worker flags. A deploy leaves a stopped machine stopped, so start them after any deploy.
 3. Check the ids with `fly status -a mealy-app-prod`, then run `fly machine start d8d2e06fed20d8 d894036c173778 -a mealy-app-prod`.
+   Then empty `infra/paused.json` (to `{}`) in a pull request. The pause is declared there (M8 PR1b), so until that merges the release smoke's check 2 fails with "declared paused … but running", and from the day after the resume the daily `ops-check`'s jobs-fresh fails with "the worker ran after it was declared paused". Either failure is the reminder to merge it.
 4. Decide whether to purge the backlog first; `infra/incident-diagnostics.md` → Background jobs has the command and the trade-off.
 5. Within the hour, confirm a `succeeded` line for each of the four `beat_schedule` tasks: `fly logs -a mealy-app-prod --no-tail | grep -E 'Task app\.tasks\.[a-z_]+\[.*\] succeeded'`. Then mark this entry done.
-**Blocks:** the M8 PR1a release smoke. Check 2 (every process group started) and check 4 (worker round-trip) fail while the worker is paused. It also blocks PR1b's verification (full smoke, `ops-check`, the Background jobs card).
+**Blocks:** no gate. Since M8 PR1b the pause is declared in `infra/paused.json`, so check 2 expects the two machines stopped, check 4 and `[jobs] jobs-fresh` print `PAUSE`, and the smoke run and the daily `ops-check` exit 0 (a merge and `fly deploy` never read the worker either; LESSONS.md → "a failing signal is not a failing gate"). What stays unproven in production until the resume is PR1b's worker side: check 4's round trip, `jobs-fresh` passing, the heartbeat writer's first `job_heartbeats` rows, and the Settings card's "All running on schedule". Until then, within 3 hours of each web restart, the card steps from "Waiting for the first runs" to "Nothing has run yet" with its top alert, which is true.
 **Context:** Found 2026-09-23 during M8's "Between the PRs" step 1 (`fly scale count web=1`). The operator plans to change how the worker uses Upstash later. This entry tracks only the pause and the resume. Related: LESSONS.md → "`fly deploy` leaves an already-stopped machine stopped".
 **Effort:** S (human: ~30 min / CC: ~10 min, once Upstash accepts commands)
 **Priority:** P1
@@ -52,6 +53,14 @@ untouched by the branch). Worth noting: that branch's execution summary reported
 `frontend/eslint.config.js`, then the CI job.
 **Effort:** S (human: ~45 min / CC: ~15 min)
 **Priority:** P2
+**Depends on:** Nothing.
+
+## P3 — Settings scrolls sideways at 375 px: the add-member row overflows
+**What:** At a 375 px viewport, the terracotta "Add" button in `FamilyMemberManager`'s add-member form (`frontend/src/components/family-members/FamilyMemberManager.jsx`, the `flex gap-3` row holding `PhotoUpload`, the name `<input>` and the button) ends 33 px past the viewport, so `/settings` scrolls horizontally on a phone.
+**Why:** The rest of Settings fits at 375 px; one button makes the whole page pan sideways. Likely cause, not yet proven: the name `<input>` is `flex-1` without `min-w-0`, so it keeps its intrinsic minimum width (about 20 characters) and pushes the button out. Try `min-w-0` on the input and on its `flex-1` wrapper first.
+**Context:** Found 2026-09-23 during M8 PR1b's 375 px check of the Background jobs card (execution summary, step 21 note). It predates PR1b, which does not touch the component. To verify a fix, load `/settings` at 375 px and check `document.documentElement.scrollWidth <= window.innerWidth`, in light and dark.
+**Effort:** S (human: ~20 min / CC: ~5 min); a `/quickfix`.
+**Priority:** P3
 **Depends on:** Nothing.
 
 ## P3 — Legacy `/uploads/*` keys that the M7 read proxy cannot serve
@@ -101,6 +110,15 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Effort:** S (human: ~30 min / CC: n/a — Vercel dashboard + DNS)
 **Priority:** P3
 **Depends on:** Nothing. Only worth doing if previews are actually used for review.
+
+## P2 — Continuous backups' newest recovery point trails by hours on a quiet database
+**What:** Production's continuous backups (Fly Postgres Flex, barman-cloud to Tigris, enabled 2026-09-23) archive a WAL segment only when its 16 MB fills; the drill's restored configuration sets no `archive_timeout`. In the first backup-restore drill (2026-09-23), a point-in-time target of 22:13Z, taken at 22:28Z, never promoted: replay stopped after segment `…13`, near 20:37Z. So the newest recoverable point trailed real time by up to about 2 h. A real restore after an incident would lose every write since the last full segment, and the only other restore point is the daily volume snapshot.
+**Why:** The backups were enabled precisely to shrink the recovery-point objective, and on a household-sized database the segments fill slowly, so the lag grows exactly when writes are rare and each one matters. Nothing reports it: smoke check 9's "newest WAL backup" reads `fly pg backup list`, which lists **base** backups (`infra/release-smoke.py` `check_restore_point`), not the newest archived WAL.
+**Next steps:** (1) Read production's own setting, read-only: `SHOW archive_timeout;` on `mealy-app-prod-db` (the drill read a scratch node's config, which may differ). (2) If it is `0`, find how Flex exposes it (`fly postgres config update --help`, or the backup config) and choose a value such as 300 s, weighing Tigris storage (a forced switch archives a mostly empty 16 MB segment, though barman compresses it). (3) Decide whether check 9 should report the newest archived WAL rather than the newest base backup. Re-run the drill afterwards; changing the backup settings is a re-run trigger (`infra/backup-restore-drill.md` §5).
+**Context:** `infra/backup-restore-drill.md` → Execution log, Path 2 row, and the §3 step 1 note. Found during M8's "Between the PRs" step 5.
+**Effort:** M (human: ~2 h / CC: ~30 min, plus a drill re-run)
+**Priority:** P2
+**Depends on:** Nothing.
 
 ## P2 — App-layer rate limit on `/auth/login`, behind the Cloudflare edge rule
 **What:** Limit login attempts in the app itself, backed by the Redis the app already runs (Upstash in production, `redis` in compose): a per-IP counter on `POST /auth/login` (and `/auth/register`) keyed on `resolve_client_ip`, plus a cap on failed attempts against the single household account, answering 429 before argon2 runs.
@@ -275,7 +293,8 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Priority:** P2
 **Depends on:** v1 productionization complete (no point before the app is accessible to the household).
 
-## P2 — Background-job health signal that does not depend on iCloud
+## P2 — Background-job health signal that does not depend on iCloud  ✅ DONE (M8 PR1b, 2026-09-24)
+**Status:** ✅ DONE on `prod-launch-release` (PR: https://github.com/willdoucet/todo-app/pull/62). A table was chosen over a Redis key: the worker's `task_postrun` handler upserts a `job_heartbeats` row for each successful `beat_schedule` task (or records the write error), the web process reads it every 30 s and serves it as `/healthz.jobs`, Settings shows a Background jobs card and top alert with the shared freshness dot, and the release smoke and the daily `ops-check.yml` assert `[jobs] jobs-fresh`. Unproven in production until the worker and beat resume (the P1 entry above): until then the card reads the jobs overdue, which is true. Kept as a record; safe to remove on the next TODOS.md prune.
 **What:** A "background jobs last ran" signal that is true whenever the Celery worker is alive, independent of any integration. Smallest shape: the worker writes a timestamp on every periodic task completion (Redis key, or a one-row table), the API exposes it (e.g. on the existing app-settings or a small `/health/jobs` read), and Settings renders it with the same freshness dot as the iCloud line. Optionally assert it in the deploy runbook alongside `fly status`.
 **Why:** The 2026-09-11 outage ran 103 days undetected. The sync-freshness dot shipped that day only helps when iCloud is connected and somebody opens Settings — a household that never connects iCloud gets no signal at all, and neither does an unattended deploy. The worker also runs the soft-delete purge and the abandoned-upload sweep, both of which fail just as silently.
 **Context:** Follow-up to the widget TODO above (see LESSONS.md, "`fly deploy` leaves an already-stopped machine stopped"). The periodic tasks are in `backend/app/tasks.py`; the schedule is `beat_schedule` in `backend/app/celery_app.py` (two 10-minute jobs, two hourly). A Redis key avoids a migration but dies with the broker; a table survives it and is queryable from the API without touching Redis. Where to start: decide the store, then write the timestamp from a `task_postrun` signal so no task has to remember to do it. Too big for a quickfix — it adds an endpoint and a data store, so it needs a plan.
@@ -322,6 +341,14 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Effort:** S (human: ~1 hr / CC: ~15 min)
 **Priority:** P3
 **Depends on:** Nothing.
+
+## P2 — The `/auth/*` log lines reach `fly logs` as a bare event name
+**What:** Make `app.auth.logging_utils.emit_log_line` print its fields. Today it logs `logger.warning(event, extra=payload)` (and `logger.info` on success), and the app installs no logging config, so under uvicorn the `app.auth` logger reaches Python's last-resort handler: a failed login prints only `auth.login`, and a successful one (INFO, below the handler's WARNING level) prints nothing. The `outcome`, `reason`, `ip`, `request_id` and `latency_ms` fields exist only on the `LogRecord`. The smallest fix is the one M8 PR1b made for the host gate (`backend/app/gate_logging.py` → `_emit`): the payload as one JSON object in the message (`json.dumps(payload)`, which also escapes an attacker-chosen value into one line), keeping `extra` for the tests, plus a test that formats the record with `logging.Formatter("%(message)s")` rather than reading its attributes. Decide separately whether success lines should print at all (INFO needs a handler, which is the logging-config decision the epic deferred to v1.1).
+**Why:** REVIEW_CHECKLIST → FastAPI → Operations and BACKEND_STRUCTURE describe every auth request as one structured line with outcome and reason. In production none of that has ever been readable, so an incident that greps `fly logs` for a login failure's reason finds a bare `auth.login` or nothing. The P2 below ("Structured-JSON logging on protected-route 401s") assumes these lines work.
+**Context:** Found 2026-09-23 by `/review-implementation` of M8 PR1b while fixing the same defect in the new gate line. Reproduced with a real uvicorn in the `api` container: a 401 from `POST /auth/login` logged exactly `auth.login`. Tests never saw it because `tests/integration/auth/test_log_hygiene.py` and the M3 auth log tests assert `caplog` record attributes.
+**Effort:** S (human: ~1 h / CC: ~15 min)
+**Priority:** P2
+**Depends on:** Nothing. Do it before the protected-route 401 TODO below, which reuses `emit_log_line`.
 
 ## P2 — Structured-JSON logging on protected-route 401s
 **What:** Extend the M3 `app.auth.logging_utils.emit_log_line` discipline to fire on every 401 returned by the M5 protected-route boundary (i.e., from `Depends(get_current_user)` failures, not just `/auth/*` endpoints). Implement via a FastAPI `exception_handler` for the auth-domain HTTPException raised by `get_current_user`, or via a thin dependency wrapper that emits the log line before re-raising.
@@ -383,7 +410,8 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Priority:** P2
 **Depends on:** M8 PR1a merged (RUNBOOK §5.1 and smoke check 7 exist); a release window, since it can only be verified in production.
 
-## P3 — Confirm boto3 default checksums against R2 at the first M8 release (leaked M7 finding)
+## P3 — Confirm boto3 default checksums against R2 at the first M8 release (leaked M7 finding)  ✅ DONE (M8 PR1a release, 2026-09-23)
+**Status:** ✅ DONE at the first executed release, `v1-20260923-f0a8d81`: the RUNBOOK's manual upload check (a throwaway family-member photo) landed in R2 and read back with boto3 **1.43.90** on its default checksum settings, so no pin is needed. A future boto3 bump re-opens the question; `infra/RUNBOOK.md` → Execution log records the pin. Kept as a record; safe to remove on the next TODOS.md prune.
 **What:** During M8's first executed release, run the RUNBOOK's R2 smoke upload with boto3's default checksum settings and confirm the object lands and reads back. If it fails or R2 rejects the checksum headers, pin `request_checksum_calculation` and `response_checksum_validation` to `when_required` in `backend/app/storage/r2.py`'s client config and record the decision in TECH_STACK → Object storage.
 **Why:** boto3 1.36+ sends CRC32 checksums by default. R2 had a documented incident with that default (January 2025, marked resolved) and Cloudflare's current R2 boto3 docs use the default client, so it is probably fine — but it has never been verified on this deployment. M7's final adversarial pass (PR #44, 2026-09-11) logged it as "investigate at runbook smoke" and it reached neither the M8 plan nor this file: the one M7 finding that leaked.
 **Pros:** (a) One smoke upload, already in the runbook; (b) closes the last open M7 adversarial finding with evidence; (c) if it fails, the fix is two client parameters.

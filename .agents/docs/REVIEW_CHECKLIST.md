@@ -59,6 +59,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - Production-only host or origin gate returns a distinct status (e.g. 421) and is disabled in dev and test.
 - A route gated by something OTHER than `get_current_user` (a cookie guard, a signed token) carries its own structural assertion that it still has that guard; an exemption in the auth-propagation test never stands alone.
 - No response header is built from an unvalidated path or query parameter. Starlette encodes header values as latin-1, so a non-latin-1 value is an unhandled 500 — validate first, then build headers from the already-allowlisted value.
+- Under `uvicorn --proxy-headers --forwarded-allow-ips=*`, `request.client.host` is the FIRST `X-Forwarded-For` entry, which the sender writes, not the socket peer. An address that must not be forgeable is the LAST entry (the hop the platform's proxy wrote), and its test runs through uvicorn's `ProxyHeadersMiddleware`, which the ASGI test transport skips.
 
 ### Query efficiency
 - List endpoints eager-load every relationship the `response_model` touches; no lazy load fires during serialization.
@@ -79,6 +80,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 ### Operations
 - `/healthz` is public, cheap, and reports the deployed version.
 - Every auth-related request emits exactly one structured log line with event, outcome, reason, sanitized ip, request id, and latency; never a credential.
+- A structured log line is tested in the form production prints it. With no logging config, uvicorn leaves the root logger without a handler and Python's last-resort handler prints `%(message)s` alone, so fields passed only as `extra` never reach the platform log. Put the fields in the message as one JSON object (which also keeps an attacker-chosen value on one line) and assert on `logging.Formatter("%(message)s").format(record)`, not on `caplog` attributes.
 
 ### Testing
 - A structural test walks `app.routes` and asserts every non-allowlisted route carries the auth dependency and the docs routes are absent.
@@ -203,6 +205,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - New query shapes have a supporting index; `EXPLAIN` on a realistic data size shows no sequential scan on a large table.
 - "Only one may exist" races (singleton registration) use a transaction-scoped advisory lock.
 - Rotation chains and counters use `SELECT ... FOR UPDATE`, not optimistic retries.
+- A revoke-everything write (`UPDATE … WHERE revoked_at IS NULL`) does not see a row a concurrent transaction inserts and commits after the UPDATE began (READ COMMITTED takes the statement's snapshot once; a row lock never re-scans). Paths that create such rows and the path that revokes them serialize on one transaction-scoped advisory lock, creators shared and the revoker exclusive, each taken before any row lock; a test holds the lock on a second real connection and asserts the other side waits.
 - Unbounded JSONB columns have a size expectation written down.
 
 ### Secrets & config
@@ -258,6 +261,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 
 ### Testing
 - `build` runs in CI as its own step, with the production env shape.
+- A browser API newer than TECH_STACK → Browser Support's floor has a fallback and a test with the API removed: Vite transpiles syntax, not APIs (`AbortSignal.timeout` is Safari 16 / Chrome 103 against a Safari 14 / Chrome 90 floor, and without it every call throws).
 
 ## Tailwind CSS
 
@@ -396,12 +400,14 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - `doc-guard` runs on every pull request with `fetch-depth: 0` so the base range resolves.
 - Every job runs the same command as development-commands.md; there is no CI-only code path.
 - A `concurrency` group cancels superseded runs; every job has `timeout-minutes`.
+- `timeout-minutes` covers the worst case of every attempt a job makes (each call at its own timeout, times the retries, plus any pause), and a long step streams its output (`python -u … | tee` under `set -o pipefail`) so a run the timeout kills still shows how far it got.
 - Actions are pinned to a major version or a SHA; `permissions` is minimal (`contents: read` unless a job needs more).
 - Required checks have stable job names; new suites stay informational until they have soaked flake-free.
 - Test artifacts are uploaded on failure only.
 
 ### Secrets & config
 - Secrets are referenced as `${{ secrets.NAME }}` and never echoed; no step runs `env` or `printenv` bare.
+- A secret is set in the `env` of the steps that use it, never job-wide, so a third-party action in the same job never receives it.
 - One-time CI secrets (a test encryption key) are documented with their generation command in development-commands.md.
 - Forked pull requests do not receive secrets; jobs that need them are skipped or gated, not failed.
 
@@ -439,6 +445,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - A reader that pulls timestamps out of a table skips rows that say they failed; a failed backup is not a restore point.
 - A printed remediation never tells the operator to start a machine the platform keeps stopped on purpose (a Fly standby). A standby that *is* started counts toward its group: a running beat standby beside its primary is two beats.
 - A runbook step never runs a repo script from a checkout of another commit (a rollback's previous release): the script may not exist there, or checks less. Run it from the release checkout.
+- A declaration that makes a scheduled check stand down (a deliberate pause, a waiver) is also checked, by that scheduled check, for having outlived its cause, using evidence it already reads (a job that succeeded after the pause). A release-only check that catches it is not enough: the cron runs daily and the release monthly.
 
 ### Testing
 - A check's rule is tested against real `git` in a scratch repository (squash merge included) when the rule is about commit relationships; a faked runner only proves the classification of git's answer.

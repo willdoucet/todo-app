@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+from celery.signals import task_postrun
+
 from .celery_app import celery_app
 from .database import AsyncSessionLocal
 
@@ -24,6 +26,63 @@ def run_async(coro):
         if engine is not None:
             loop.run_until_complete(engine.dispose())
         loop.close()
+
+
+# --- Background-job heartbeats (M8 item 15) ----------------------------------
+#
+#   any task ends ─▶ task_postrun
+#       state == "SUCCESS"?                              ── no ─▶ drop (a failure is not a run)
+#       name in job_health.scheduled_intervals()?        ── no ─▶ drop (the 12 one-shot tasks,
+#            │ yes                                                 health_check included)
+#       run_async(upsert: last_success_at = now, errors cleared)
+#            │ raises? WARNING, then a second write:
+#            │     last_error = error class, last_error_at = now, error_count + 1
+#            │         raises too? one more WARNING, nothing else
+#   The handler never raises, so it never taints a task result. The second write is what
+#   lets /healthz say "can't record job runs" instead of "stopped"; it cannot report a
+#   database outage, because it goes to the same database (the plan's stated limit).
+#   run_async gives the write its own loop: the task's loop is closed by the time this runs.
+
+
+def _in_app_session(write, *args):
+    async def go():
+        async with AsyncSessionLocal() as db:
+            await write(db, *args)
+            await db.commit()
+
+    return go()
+
+
+def _write_heartbeat(task_name: str) -> None:
+    from . import job_health
+
+    now = job_health.utcnow()
+    try:
+        run_async(_in_app_session(job_health.upsert_heartbeat_success, task_name, now))
+    except Exception as exc:
+        error = type(exc).__name__
+        logger.warning("Job heartbeat not recorded for %s: %s", task_name, error)
+        try:
+            run_async(_in_app_session(job_health.record_heartbeat_error, task_name, error, now))
+        except Exception as second:
+            logger.warning(
+                "Job heartbeat error not recorded either for %s: %s", task_name, type(second).__name__
+            )
+
+
+@task_postrun.connect
+def record_job_heartbeat(sender=None, state=None, **_):
+    """Record a ``beat_schedule`` task's success in ``job_heartbeats``."""
+    from . import job_health
+
+    task_name = getattr(sender, "name", None)
+    try:
+        if state != "SUCCESS" or task_name not in job_health.scheduled_intervals():
+            return
+    except Exception as exc:  # an uncomputable schedule must not break every task
+        logger.warning("Job heartbeat filter failed: %s", type(exc).__name__)
+        return
+    _write_heartbeat(task_name)
 
 
 @celery_app.task(name="app.tasks.health_check")

@@ -8,7 +8,7 @@ rollback. It covers only this one type of task. When something is broken, use
 | | |
 |---|---|
 | Owner | willdoucet (the operator; one operator by design) |
-| Last executed | never. The first execution is the M8 PR1a release (plan "Between the PRs", step 2) |
+| Last executed | 2026-09-23, `v1-20260923-f0a8d81` (M8 PR1a, with the rollback dry-run; see the execution log) |
 | Estimated duration | 30–45 min: deploy ~5, promote ~2, smoke ~2, manual checks ~10, log ~5 |
 | Risk | Medium. At `web=1` every deploy replaces the only web machine in place, so the API is down for a few seconds |
 | Minimum flyctl | v0.4.102 (`fly version`). The smoke script parses `--json` output that older releases shaped differently |
@@ -28,8 +28,35 @@ git log -1 --format=%cI origin/master
 anywhere (LESSONS.md):
 
 - `FLY_API_TOKEN`: GitHub Actions secret for `ops-check.yml`. It is a `fly tokens create
-  readonly` token with a one-year expiry. Created with PR1b. **Rotate by:** _record the date
-  when the token is created_.
+  readonly` token (org-scoped, read-only) with a one-year expiry. Created 2026-09-23, before
+  PR1b merged; its first dispatch below still waits for the merge.
+  **Rotate by:** 2027-09-23, the day it expires. To create or rotate it, pipe
+  it straight into the secret so it never prints:
+  ```bash
+  fly tokens create readonly -o personal -n ops-check -x 8760h | gh secret set FLY_API_TOKEN
+  ```
+  `-o` names the organization so flyctl does not prompt mid-pipe. If the first run below
+  reports the token rejected (exit 2), stdout carried more than the token: run `gh secret
+  set FLY_API_TOKEN` on its own and paste the token at its prompt.
+  Then prove it can read what the cron needs, and run the watchdog at once rather than
+  waiting for the schedule (scheduled workflows only fire from the default branch):
+  ```bash
+  gh workflow run ops-check.yml
+  gh run list --workflow=ops-check.yml --limit 1
+  gh workflow run ops-check.yml -f self_test=true
+  ```
+  The first run must be green, and its `[9] restore-point` line must report a WAL backup
+  (`newest WAL backup …` or `WAL backups disabled`) with no `also:` part. Check 9 passes on a
+  recent volume snapshot alone and reports a refused `fly pg backup list` only as `also: …`,
+  so a green run by itself does not prove that read. With that, `[9]` and `[5] origin-lock`
+  prove the token can run `fly volumes snapshots list`, `fly pg backup list` and
+  `fly ips list`; the
+  self-test run must fail, and its run page's error annotations must name `[jobs] jobs-fresh`
+  and read `exit 1 production:` (`gh run view <run id>` lists them). GitHub's failure email
+  carries the run's status, never the log, and its docs do not say whether it includes
+  annotations: record in the execution log whether the email showed those two annotations or
+  only "Process completed with exit code 1", since that is what a real alert will look like. If a read is refused, the token lacks a scope: do not replace it with
+  a deploy-capable token; drop the cron to its credential-free checks instead.
 - `CLOUDFLARE_API_TOKEN`: local shell only, read-only, used by `infra/cloudflare-drift.py`.
   Zone `mealy.dev` scopes: Zone WAF Read, Transform Rules Read, Zone Settings Read, Bot
   Management Read. Account scope: Access: Apps and Policies Read.
@@ -77,7 +104,12 @@ Every `fly` command needs `-a <app>` or must run from `backend/`. The repo root 
       ```bash
       git checkout master && git pull
       RELEASE=$(git rev-parse HEAD); echo "$RELEASE"
+      test -z "$(git status --porcelain)" && echo clean || echo "NOT CLEAN: stop"
       ```
+      It must print `clean`. `fly deploy` uploads the working tree as it stands, uncommitted
+      and untracked files included, while `/healthz` reports whatever `$RELEASE` says, so a
+      dirty checkout ships unreviewed code that check 8 then passes as the release. Deploy from
+      a clean checkout (a fresh `git worktree add` of `master` if this one holds other work).
 - [ ] **Tell the household before it feels the release.** Pick a quiet hour. At `web=1` the
       single web machine is replaced in place, and a save made during that window fails with
       an error toast (the change is reverted, not lost silently). If someone is using the
@@ -176,7 +208,14 @@ Stop at the first gate that fails.
    staged deployment **whose commit SHA equals `$RELEASE`** (`echo ${RELEASE:0:7}`), and
    only once it is **Ready**. Never "the latest staged": that can be an older leftover, or
    a build still running. Dashboard: Deployments → the `master` row with that commit and
-   status Ready → ⋯ → **Promote**. Domains move instantly, with no rebuild.
+   status Ready → ⋯ → **Promote**. Domains move instantly, with no rebuild. Or from the
+   CLI (after `vercel login`), taking the deployment's URL from the record Vercel writes to
+   GitHub for that commit:
+   ```bash
+   URL=$(gh api "repos/willdoucet/todo-app/deployments/$(gh api "repos/willdoucet/todo-app/deployments?sha=$RELEASE" -q '.[0].id')/statuses" -q '.[0].environment_url'); echo "$URL"
+   vercel inspect "$URL" --scope willdoucets-projects     # status must read Ready
+   vercel promote "$URL" --scope willdoucets-projects --yes
+   ```
    A promotion you forget leaves production on the previous bundle. Smoke check 8 catches
    that whenever the release changed `frontend/`: it compares the deployed build's
    `frontend/` with the release's. If Vercel made no deployment for `$RELEASE` (a build
@@ -202,6 +241,14 @@ Stop at the first gate that fails.
    a busy queue or a Postgres primary that is waking up delays `health_check` past 30 s.
    Check 5 (`rate-limited, unverified`) can fail on a 429. For either, wait, look at the
    worker log or the WAF window, and retry once before treating it as a broken release.
+
+   **A declared pause.** When `infra/paused.json` declares the worker or beat paused (it does
+   from 2026-09-23 until the Upstash cap is addressed, TODOS.md P1), check 2 expects those
+   groups **stopped**, and check 4 and `[jobs] jobs-fresh` print `PAUSE`, never `PASS`. The
+   run exits 0 and its summary counts them (`… 2 paused (beat, worker declared in
+   infra/paused.json)`). A paused group that is running, a job that succeeded on a later day
+   than the worker's `since` (a resume nobody declared), or a pause past its `review_by`
+   date, fails. See [incident-diagnostics.md → A deliberate pause](./incident-diagnostics.md#a-deliberate-pause-worker-or-beat).
 
    To prove the exit plumbing without touching production (no command reaches it):
    ```bash
@@ -314,11 +361,12 @@ The backend must never trail the frontend by more than one `fly deploy`.
 ### 5.1 Frontend first: promote the previous build, then purge the edge cache
 
 In Vercel, promote the previous production deployment: the one whose commit is the
-previous release tag's SHA (`git rev-list -n 1 <previous-tag>`). Before the first tag exists
-(the M8 PR1a release), it is the `master` commit before the release merge,
-`git rev-parse "$RELEASE^"`: Vercel promoted every merge until §0 turned that off.
-Deployments → that row → ⋯ → **Promote**. A deployment that was already promoted cannot be
-promoted again, so use **Instant Rollback** for it.
+previous release tag's SHA (`git rev-list -n 1 <previous-tag>`). Deployments → that row →
+⋯ → **Promote**, or `vercel promote <its URL>` as in §2 step 4. **Promote**, not Instant
+Rollback: Promote works on a build that was Current before (observed 2026-09-23), while on
+the Hobby plan Instant Rollback reaches only the production deployment just before the
+current one and refuses anything older with `402 … upgrade to pro`. One stray promotion (a
+merge that went Current, as #60's did) puts the previous release out of its reach.
 
 Then, before re-testing: Cloudflare, zone `mealy.dev` → Caching → Configuration →
 **Purge Everything**, and do an empty-cache reload in every browser that opened the old
@@ -342,10 +390,9 @@ listing). The rollback is a deploy of the previous image:
    ```bash
    git checkout <previous-release-tag>
    ```
-   No tag yet (the M8 PR1a release): `git checkout "$RELEASE^"`. Untagged deploys recorded
-   no commit, so this matches the running image's `[env]` only if no `backend/fly.toml`
-   `[env]` change merged without a deploy; `git log --oneline -3 -- backend/fly.toml` shows
-   the last changes.
+   The tag is what makes this exact. Its checkout's `fly.toml [env]` is the one the tagged
+   image ran with, so read `git log --oneline -3 -- backend/fly.toml` only when a
+   `backend/fly.toml` change merged between that tag and a deploy.
 3. Deploy that image **without the release command**:
    ```bash
    (cd backend && fly deploy -a mealy-app-prod --image <image-ref> --skip-release-command)
@@ -361,12 +408,16 @@ listing). The rollback is a deploy of the previous image:
    git checkout master
    python3 infra/release-smoke.py --only=liveness,edge --skip=healthz_jobs,healthz_gate_break_glass
    ```
+   A pre-PR1b image (PR1a's) lacks all three `/healthz` fields, so rolling back to one skips
+   `healthz_version` too: `--skip=healthz_jobs,healthz_version,healthz_gate_break_glass`.
    While the rolled-back image lacks `jobs`, the daily `ops-check` fails naming the missing
    key. That is a correct signal. Roll forward soon, or disable the workflow for the
    duration. Never teach the script to pass on a missing key.
 5. **Roll forward** when the fix is merged: back to `master`, and §2 again. To roll the
-   frontend forward to a deployment that was already promoted (a false alarm, or the M8
-   PR1a dry-run), use **Instant Rollback** to it: Promote works only on a Staged build.
+   frontend forward to a deployment that was already promoted (a false alarm, or a dry-run),
+   **Promote** it again (§5.1), then Purge Everything once more: while the previous bundle
+   was live, a request for one of the release's chunk names was answered with HTML and
+   cached under that name.
 
 ### 5.3 A migration has already landed
 
@@ -377,9 +428,39 @@ listing). The rollback is a deploy of the previous image:
   [incident-diagnostics.md → A real restore into production](./incident-diagnostics.md#a-real-restore-into-production):
   stop the worker first, or the abandoned-upload sweep can delete live media.
 
+## 6. Rotate the household password
+
+The operator CLI (M8 item 6). It sets a new password and signs **every** household session
+out in one transaction: every open tab lands on the sign-in page on its next request, and an
+unsaved form is lost.
+
+1. **Tell the household first,** and give them the new password. The one exception is a
+   rotation because the password leaked: then rotate first, and tell them after.
+2. Open a shell on a **web** machine. Use `--select`, not `-C "..."`: the password prompt
+   needs a TTY, which `-C` does not reliably allocate. Choose a `web` machine; the worker and
+   beat run no API code, and may be paused:
+   ```bash
+   fly ssh console -a mealy-app-prod --select
+   ```
+3. In that shell, run the CLI with the interpreter spelled out. The prod image's `PATH` entry
+   is relative (`.venv/bin`), so a bare `python` outside `/app` is the system one:
+   ```bash
+   cd /app && /app/.venv/bin/python -m app.cli.rotate_password <household email>
+   ```
+   It prompts twice. Expected: `rotated: user 1; N refresh token(s) revoked; session version
+   is now M`, then `all sessions revoked; the household must sign in with the new password`.
+   Exit `1` means refused and nothing written (no such user, a mismatch, empty, or over 128
+   characters, the most login accepts). Exit `2` means a database error or one nobody
+   anticipated (named by its type only): the rotation may not have completed (the connection
+   can drop around the commit), so try signing in with the new password before retrying.
+4. Sign in at `https://mealy.dev` with the new password. A tab that was signed in shows the
+   sign-in page with "Your session ended. Someone may have signed out on another device, or
+   the household password changed."
+
 ---
 
 ## Execution log
 
 | Date (UTC) | Operator | Release | Migrations (id · reversibility) | Outcome | Deploy downtime (s) | Notes |
 |---|---|---|---|---|---|---|
+| 2026-09-23 | willdoucet (run by Claude Code) | `v1-20260923-f0a8d81`: Fly v34, rolled back to v33's image as v35, forward as v36; Vercel `dpl_Gzqsu1SKbRJnVCKGWQKMLUj3uZUD` | none (production at `b7e2c9a4f1d8`, the head) | Pass. Smoke exit 0: 8 passed, 4 skipped (the PR1a list), 1 paused (worker and beat, declared). Cloudflare dashboard 3/3; drift `exit 0: no drift`; manual checks 4/4. Rollback dry-run: rolled-back smoke (liveness, edge) exit 0, 4 passed, 3 skipped; after the roll forward the same result as the release | ~4 each: release 19:50:08–19:50:12, rollback 20:13:45–20:13:49, roll forward 21:50:19–21:50:23 | **CI gate:** `visual-tests` on `f0a8d81` hit its 25-min timeout twice (a Playwright report-server hang after a flaky failure, fixed separately); the operator accepted equivalence: `frontend/`, `backend/`, `infra/`, `.github/` are identical to `91edffa`, green on all five jobs. **Vercel:** #60's merge build went Current at merge (the auto-assign toggle had not been saved), so PR1a's frontend led the backend ~3 h, harmlessly (a meta tag and the build command). **Smoke** ran from the PR1b branch's script, which reads `infra/paused.json`; master's copy fails checks 2 and 4 on the declared pause. `ops-check`: n/a, not yet on the default branch. **R2 upload** read back with boto3 1.43.90 (default checksums). **Procedure fixes (this row's pull request):** the previous release was `91edffa^` = `1087f30`, not `$RELEASE^`, because the release spanned two merges (#60, #61), so the tag, not `^`, names it from now on; Instant Rollback refused `1087f30`'s build (402, Hobby) while `vercel promote` worked both ways, so §5.1 and §5.2 now say Promote; the roll forward needs a second purge; §2 step 4 gained the CLI commands. The backup-restore drill is logged in its own file. |

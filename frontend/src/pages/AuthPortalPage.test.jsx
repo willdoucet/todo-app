@@ -206,6 +206,12 @@ describe('Bounce banner', () => {
     renderPortal({ url: '/auth?return_to=%2Fcalendar' })
     await screen.findByText('Welcome back')
     expect(screen.getByText(/your session ended/i)).toBeInTheDocument()
+    // M8 item 6: the likely causes, since a rotation signs every tab out too.
+    expect(
+      screen.getByText(
+        'Your session ended. Someone may have signed out on another device, or the household password changed. Sign in to pick up where you left off.'
+      )
+    ).toBeInTheDocument()
   })
 
   it('does NOT render the bounce banner without ?return_to=', async () => {

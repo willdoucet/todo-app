@@ -24,10 +24,22 @@ Same-client login rotation: a successful /auth/login that arrives carrying
 its own __Host-refresh cookie revokes ONLY that one row (revoked_at).
 Other devices' tokens remain live. Multi-device household preserved.
 
-Operator password rotation (M8 CLI; mechanism wired here):
-    user.session_version += 1     (kills all in-flight access JWTs)
-    UPDATE refresh_tokens SET revoked_at = NOW()
-        WHERE user_id = X AND revoked_at IS NULL  (kills all active sessions)
+Operator password rotation (M8: ``rotate_password()``, run by ``app.cli.rotate_password``):
+    hash the new password → pg_advisory_xact_lock('auth_session_issue')  (exclusive:
+        waits for every in-flight login and refresh to commit, holds new ones off)
+    → set password_hash (dirty, same session) → count live refresh rows
+    → logout(): session_version += 1 (kills all in-flight access JWTs)
+                UPDATE refresh_tokens SET revoked_at = NOW()
+                    WHERE user_id = X AND revoked_at IS NULL  (kills all active sessions)
+                ONE commit: hash, bump and revoke land together or not at all
+    → re-read session_version for the summary
+    The ordering is what keeps a crash fail-closed: there is no moment where the new
+    password is stored and the old sessions still work, or the reverse. The lock is what
+    keeps a CONCURRENT sign-in from outliving it: without it, a login that checked the old
+    hash, or a refresh that inserted a successor, could commit its row after the revoke's
+    snapshot was taken, and that row would survive (found by /review-implementation's
+    adversarial pass, M8 PR1b; READ COMMITTED never re-scans for rows inserted after a
+    statement began).
 
 Concurrency invariants:
     /auth/refresh:  SELECT ... FOR UPDATE on the row whose token_hash
@@ -38,6 +50,17 @@ Concurrency invariants:
                     "no existing user" check.
     /auth/login success block: revoke-old-cookie + insert-new-refresh
                     commit together via the single db.commit() at the end.
+    /auth/login, /auth/refresh vs rotate_password and logout:
+                    pg_advisory_xact_lock_shared(hashtext('auth_session_issue'))
+                    first, before any row lock; rotate_password and logout (the
+                    Sign out button revokes every device too) take the same key
+                    exclusive, also before any row lock. So a rotation waits
+                    for every in-flight sign-in to commit (its rows are
+                    then visible to the revoke), and a sign-in that starts
+                    during a rotation waits and then reads the new hash
+                    and session_version. Shared holders never block each
+                    other; everyone takes the advisory lock before row
+                    locks, so no deadlock.
 """
 
 from __future__ import annotations
@@ -60,6 +83,17 @@ from app.auth.schemas import PASSWORD_MAX_LENGTH
 # registrations serialize on this lock so only one passes the
 # "no existing user" check.
 ADVISORY_LOCK_KEY = "auth_register_singleton"
+
+# Every path that issues a session (login, refresh) holds this shared; the operator's
+# password rotation holds it exclusive. See "Concurrency invariants" above.
+SESSION_ISSUE_LOCK_KEY = "auth_session_issue"
+
+
+async def _hold_session_issue_lock(db: AsyncSession, *, exclusive: bool = False) -> None:
+    # Transaction-scoped: released by the commit or rollback that ends the request. text()
+    # interpolation is safe: the function name and key are module constants, not input.
+    fn = "pg_advisory_xact_lock" if exclusive else "pg_advisory_xact_lock_shared"
+    await db.execute(text(f"SELECT {fn}(hashtext('{SESSION_ISSUE_LOCK_KEY}'))"))
 
 # Bound Case B successor traversal so a corrupt chain can't loop forever.
 SUCCESSOR_TRAVERSAL_MAX_HOPS = 10
@@ -175,7 +209,12 @@ async def login(
         await passwords.verify_or_dummy(None, password)
         raise errors.invalid_credentials("bad_credentials")
 
-    # 2. Lookup. CITEXT email column means the comparison is case-insensitive.
+    # 2. Hold off a concurrent password rotation until this login commits, and wait for
+    # one already in flight, so the hash checked below is the one that stands (see
+    # "Concurrency invariants").
+    await _hold_session_issue_lock(db)
+
+    # Lookup. CITEXT email column means the comparison is case-insensitive.
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
@@ -235,6 +274,10 @@ async def refresh(
 
     incoming_hash = tokens.hash_refresh_token(incoming_cookie)
 
+    # 0. Before any row lock: a concurrent password rotation must see this refresh's
+    # successor row, or wait for it (see "Concurrency invariants").
+    await _hold_session_issue_lock(db)
+
     # 1. Lookup + lock. The FOR UPDATE is required (Adversarial review):
     # without it, two simultaneous Case-A refreshes can both insert
     # successors against the same row.
@@ -289,11 +332,13 @@ async def _refresh_case_a(
     row.superseded_at = now
     row.successor_id = new_row.id
 
-    # Read user.session_version AS IT STANDS NOW (post any concurrent
-    # password rotation). The rotation transaction blocks on the row
-    # lock we hold; if it commits AFTER ours, the new refresh row gets
-    # revoked and the access JWT carries pre-rotation session_version
-    # which fails the next dependency check anyway.
+    # Read user.session_version AS IT STANDS NOW. A password rotation cannot
+    # be in flight: it waits on the session-issue lock this refresh holds
+    # (see "Concurrency invariants"), so it commits either before this
+    # transaction began — and then the incoming row was already revoked —
+    # or after it commits, when the revoke sees and revokes new_row. The
+    # row lock alone never did that: an UPDATE's snapshot does not include
+    # rows inserted after it began (M8 PR1b review).
     sv_result = await db.execute(
         select(User.session_version).where(User.id == row.user_id)
     )
@@ -382,7 +427,17 @@ async def logout(db: AsyncSession, user_id: int) -> None:
     derived from a fully-validated bearer (session_version checked, exp
     verified). Bumping session_version invalidates already-minted access JWTs
     in other tabs/devices instead of leaving them live until exp.
+    The one intentional exception is ``rotate_password`` (the M8 operator CLI),
+    which is authenticated by ``fly ssh``, not by a JWT.
+
+    Holds the session-issue lock exclusive, like a rotation, so a login or refresh in
+    flight on another device commits first and its row is revoked here, rather than
+    surviving a sign-out that promises every device (final review, M8 PR1b). Taken after
+    the caller's bearer check, never before: an unauthenticated request must not queue
+    behind or hold off sign-ins. Re-entrant, so ``rotate_password``, which already holds
+    it, is unaffected.
     """
+    await _hold_session_issue_lock(db, exclusive=True)
     await db.execute(
         update(User)
         .where(User.id == user_id)
@@ -397,6 +452,56 @@ async def logout(db: AsyncSession, user_id: int) -> None:
         .values(revoked_at=func.now())
     )
     await db.commit()
+
+
+# =============================================================================
+# Operator password rotation (M8 item 6)
+# =============================================================================
+
+class RotationRejected(Exception):
+    """The rotation was refused before anything was written. The message is safe to print."""
+
+
+@dataclass(frozen=True)
+class RotationSummary:
+    user_id: int
+    tokens_revoked: int
+    session_version: int
+
+
+async def rotate_password(db: AsyncSession, email: str, new_password: str) -> RotationSummary:
+    """Set a new household password and revoke every session, in one transaction.
+
+    The hash is set on ``db`` and left for ``logout`` to commit: ``logout`` is the only
+    commit, so the new hash, the ``session_version`` bump and the refresh-token revocation
+    land together or not at all. It holds the session-issue lock exclusive from after hashing
+    until that commit, so no login or refresh is in flight while it revokes (a session one
+    of them committed afterwards would survive). Overlong input is refused before any hashing (argon2's
+    128-character limit, ``PASSWORD_MAX_LENGTH``): a password login can never accept would
+    lock the household out with the one tool that exists to let it back in.
+    """
+    if not new_password:
+        raise RotationRejected("the new password is empty")
+    if len(new_password) > PASSWORD_MAX_LENGTH:
+        raise RotationRejected(f"the new password is longer than {PASSWORD_MAX_LENGTH} characters")
+    # CITEXT column: case-insensitive, the same lookup login uses.
+    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if user is None:
+        raise RotationRejected("no user with that email")
+
+    new_hash = await passwords.hash_password(new_password)
+    # Hashed first, so sign-ins wait only for the writes below. From here to logout()'s
+    # commit no login or refresh can be in flight (see "Concurrency invariants").
+    await _hold_session_issue_lock(db, exclusive=True)
+    user.password_hash = new_hash
+    live = await db.scalar(
+        select(func.count())
+        .select_from(RefreshToken)
+        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+    )
+    await logout(db, user.id)
+    version = await db.scalar(select(User.session_version).where(User.id == user.id))
+    return RotationSummary(user_id=user.id, tokens_revoked=live, session_version=version)
 
 
 # =============================================================================

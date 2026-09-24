@@ -22,6 +22,16 @@ primary_region = "sjc"
   # disk-backed read.
   STORAGE_BACKEND = "r2"
 
+  # M8 break-glass (infra/incident-diagnostics.md → Break-glass). Only the exact
+  # string "1" turns it on; then the host gate skips the X-Origin-Verify check
+  # (the Host check stays) and logs every admitted request as `bypassed`. For a
+  # Cloudflare proxy/WAF outage with DNS still resolving (Mode A), enabled per
+  # release with `fly deploy --image <running ref> -e GATE_BREAK_GLASS=1`.
+  # Versioned here, never a Fly secret: a secret would survive the clearing
+  # redeploy and leave the gate open. /healthz reports it as `gate_break_glass`
+  # and the daily ops-check fails while it is on.
+  GATE_BREAK_GLASS = "0"
+
 [deploy]
   # Runs against the new image before web takes traffic. Migrations must be
   # backward-compatible: a release_command failure leaves the previous

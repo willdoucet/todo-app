@@ -580,3 +580,33 @@ class Asset(Base):
         # as a cheap index scan rather than a table scan (M7 eng review, perf).
         Index("ix_assets_referenced_created_at", "referenced", "created_at"),
     )
+
+
+class JobHeartbeat(Base):
+    """Last recorded run of one Celery ``beat_schedule`` task (M8 item 15).
+
+    Written only by the worker's ``task_postrun`` handler (``app.tasks``), only for
+    ``beat_schedule`` task names, only on ``SUCCESS``; read by the web process's
+    refresher (``app.job_health``). Keyed by Celery task name
+    (``app.tasks.sync_all_reminders``), not by beat-entry key.
+
+    Row lifecycle, per task. Staleness is derived per request from the task's own
+    interval, never stored::
+
+        no row / last_success_at NULL ──first SUCCESS──▶ fresh
+            │ stale once 3 × interval has passed         │ no SUCCESS for 3 × interval
+            │ since the web process started              ▼
+            └──────────────────────────────────────▶  stale ──next SUCCESS──▶ fresh
+
+        SUCCESS whose upsert fails ─▶ second write: last_error (class name),
+                                      last_error_at, error_count + 1
+        next successful upsert     ─▶ error_count = 0, last_error(_at) cleared
+    """
+
+    __tablename__ = "job_heartbeats"
+
+    task_name = Column(Text, primary_key=True)
+    last_success_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    last_error_at = Column(DateTime(timezone=True), nullable=True)
+    error_count = Column(Integer, nullable=False, server_default=text("0"))

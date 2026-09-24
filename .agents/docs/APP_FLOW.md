@@ -22,7 +22,7 @@
 | `/` | `CalendarPage` (`components/calendar/`) | Home screen with unified calendar view |
 | `/lists` | `ListsPage` | Task management with list sidebar |
 | `/responsibilities` | `ResponsibilitiesPage` | Daily routines and recurring tasks |
-| `/settings` | `FamilyMembersPage` | Manage household members, timezone, and calendar integrations |
+| `/settings` | `FamilyMembersPage` | Manage household members, timezone, and calendar integrations; see whether background jobs are running (M8) |
 | `/mealboard/planner` | `MealPlannerView` | Weekly meal calendar |
 | `/mealboard/recipes` | `RecipesView` | Unified Item catalog — tabbed: Recipes + Food Items |
 | `/mealboard/finder` | `RecipeFinderView` | Coming soon placeholder |
@@ -618,6 +618,42 @@ Shopping items are no longer added directly from the Mealboard UI — they appea
 - Click "Disconnect" on integration card
 - Integration and all its synced events are cascade-deleted
 
+#### Checking background jobs (M8)
+
+**Trigger:** anyone opens Settings; the card is always there, above Account.
+
+The **Background jobs** card polls the public `GET /healthz` every 30 seconds while Settings is
+open (unauthenticated, so a `/healthz` failure never signs anyone out) and shows one headline
+that follows the **worst** job, one row per scheduled job, and, in states 2–4, a line saying what
+it means. The same reading drives a one-line alert under the Settings title. First match wins:
+
+| # | State | Headline | Top alert under "Settings" |
+|---|---|---|---|
+| 1 | Can't check (no reading, a malformed one, or the newest over 2 min old) | "Can't check right now" + "Trying again every 30 seconds." (rows hidden) | none |
+| 2 | Can't record (a stale job whose recording failed) | "Can't record job runs" | "Background jobs can't be recorded · See background jobs" |
+| 3 | Stopped (every job stale) | "Nothing has run in 3 hr" / "Nothing has run yet" | "Background jobs have stopped · See background jobs" |
+| 4 | Behind (some jobs stale) | "1 job is behind schedule" / "2 jobs are behind schedule" | "Unused photo cleanup is behind schedule · See background jobs" / "2 background jobs are behind schedule · See background jobs" |
+| 5 | Waiting (a job has not run yet, none overdue) | "Waiting for the first runs" / "Waiting on N jobs" | none |
+| 6 | Running | "All running on schedule" | none |
+
+- **Rows:** "iCloud calendar sync", "iCloud reminders sync", "Deleted item cleanup", "Unused
+  photo cleanup" (labels sent by the server), each with "ran 4 min ago", "last ran 3 hr ago ·
+  overdue" (red), "hasn't run yet · runs every 10 min" / "runs every hour", "hasn't run yet ·
+  overdue", or "can't record runs".
+- **What it means (states 2–4):** a stale calendar sync → "If you use iCloud sync, new or
+  changed events may not show up yet."; reminders → "…reminder changes may not sync yet.";
+  cleanup jobs → "Nothing you'll notice yet."; stopped → "iCloud events and reminders won't
+  sync until this is fixed."; can't record → "They may still be running, but the app can't
+  confirm it." or, when every job is stale and one has no recording error, "Nothing has run,
+  and the app can't record that either." States 2 and 3 end "If this lasts more than an hour,
+  tell whoever set up this app."
+- **"See background jobs"** scrolls to the card and focuses its heading (no page jump in the
+  URL). A reading that could not refresh keeps showing for up to 2 minutes with "Couldn't
+  refresh · showing results from 1 min ago". Screen readers hear one announcement when the
+  state changes, never on each poll.
+- Operator side: the same reading is what the daily `ops-check` and the release smoke script
+  assert (`infra/RUNBOOK.md`; `infra/incident-diagnostics.md` → Background jobs).
+
 #### Syncing with Google Calendar (Planned)
 
 **Status:** Not yet implemented. Will use OAuth 2.0 flow instead of app-specific passwords.
@@ -628,8 +664,12 @@ Shopping items are no longer added directly from the Mealboard UI — they appea
 
 ### API Error States
 
-> **Target copy — not yet implemented as written.** Today a 401 triggers a silent one-shot
-> redirect to `/auth?return_to=…` (`lib/auth/redirect.js`), and other failures surface as toasts
+> **Target copy — not yet implemented as written.** Today a 401 triggers a one-shot redirect to
+> `/auth?return_to=…` (`lib/auth/redirect.js`). It is not silent: whenever `return_to` is
+> present, the sign-in page shows "Your session ended. Someone may have signed out on another
+> device, or the household password changed. Sign in to pick up where you left off." (the
+> likely causes added in M8, since a password rotation also signs every tab out; corrected
+> 2026-09-23 — this note called the redirect silent). Other failures surface as toasts
 > carrying the API's `detail` string via `ToastProvider`. The messages below are the intended
 > user-facing wording for a future error-handling pass (IMPLEMENTATION_PLAN.md → Phase 4).
 

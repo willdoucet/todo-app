@@ -16,8 +16,8 @@ the remote side: names only, or an existence check.
 
 ## Where a failure line sends you
 
-Every `FAIL` line from `infra/release-smoke.py`, and every `ops-check` failure email, ends
-with a link into this file.
+Every `FAIL` line from `infra/release-smoke.py`, and so every `ops-check` failure annotation
+(on the run page, and in the email if GitHub shows it), ends with a link into this file.
 
 | Check (smoke / ops-check) | Entry |
 |---|---|
@@ -27,9 +27,10 @@ with a link into this file.
 | `[5] origin-lock` | [421 from the origin gate](#421-from-the-origin-gate) |
 | `[glass] break-glass-off` | [Break-glass: the origin gate during a Cloudflare outage](#break-glass-the-origin-gate-during-a-cloudflare-outage) |
 | `[6] private-media-headers`, `[7] vercel-cache-headers` | [Cache headers changed](#cache-headers-changed) |
-| `[8] commit-frontend`, `[8] commit-backend` | [Deployed commit does not match the release](#deployed-commit-does-not-match-the-release) |
+| `[8] commit-frontend`, `[8] commit-backend`, `[1] version-reported` | [Deployed commit does not match the release](#deployed-commit-does-not-match-the-release) |
 | `[9] restore-point` | [No recent restore point](#no-recent-restore-point) |
 | any `ERROR` line, `exit 2 tooling:` | [Tooling failures (exit 2)](#tooling-failures-exit-2) |
+| a `PAUSE` line; a `FAIL` naming `infra/paused.json` | [A deliberate pause (worker or beat)](#a-deliberate-pause-worker-or-beat) |
 
 **The alert-fatigue rule.** A daily check that flaps trains its reader to ignore it, which is
 worse than having no check. If `ops-check` produces a false failure, fix or remove the
@@ -80,8 +81,11 @@ a scanner hitting the origin IP can fill that short window with noise. This is a
 
 ## Background jobs (dead worker or beat)
 
+**First, check `infra/paused.json`.** If it declares the worker or beat paused, the stop is
+deliberate: see [A deliberate pause](#a-deliberate-pause-worker-or-beat), next.
+
 This is the in-app name. From PR1b, Settings shows a **Background jobs** card, and the
-`ops-check` email uses the same labels:
+`ops-check` failure lines use the same labels:
 
 | Label (Settings, email) | Celery task (`beat_schedule`) | Runs every |
 |---|---|---|
@@ -145,6 +149,55 @@ A household report of "Unused photo cleanup is behind schedule" maps to
   4. Confirm a `succeeded` line for each of the four tasks within an hour (the two syncs
      within about 10 minutes).
 
+## A deliberate pause (worker or beat)
+
+The worker, beat, or both can be stopped **on purpose**, and the stop is then declared in
+`infra/paused.json`, never left for someone to find. A stopped worker nobody remembers
+stopping is exactly the failure M8 exists to catch.
+
+**Declared now (2026-09-23): worker and beat, until the Upstash request cap is addressed.**
+Upstash, Celery's broker, refused every command at its 500,000-request monthly limit; the
+record and the resume steps are TODOS.md's P1 entry.
+
+The file: `{}` means nothing is paused. Each entry names a group (`worker` or `beat`; web
+cannot be paused) with exactly `since` and `review_by` (`YYYY-MM-DD`) and `reason`. Both dates
+are **UTC** dates (`date -u +%F` on the day of the stop): the script compares them with the UTC
+date of each job's last success and of the run, so a local date written after 17:00 Pacific
+would read the day's earlier runs as "ran after the pause" and fail every run:
+
+```json
+{"worker": {"since": "2026-09-23", "review_by": "2026-10-23", "reason": "Upstash request cap; TODOS.md P1"}}
+```
+
+How `infra/release-smoke.py`, and so the daily `ops-check`, reads it:
+
+| Check | While declared, inside `review_by` | After `review_by` |
+|---|---|---|
+| `[2] groups-started` | the declared group must be **stopped**: running fails ("declared paused … but running") | fails, every run |
+| `[4] worker-roundtrip` | `PAUSE` when the worker is declared (not run, never `pass`) | fails, every run |
+| `[jobs] jobs-fresh` | `PAUSE` when worker or beat is declared, *after* the reading passed the unusable-reading rule: "web cannot read job_heartbeats" still fails. It also **fails** when a job succeeded on a later day than the worker's `since` ("the worker ran after it was declared paused"): the worker was resumed and the file not emptied. With only beat declared, the same test runs against beat's `since` ("the beat ran after…"), because only beat enqueues the four jobs; with both declared, a later success speaks for the worker alone, since a resumed worker also drains jobs queued before the pause. This is the daily `ops-check`'s only sign of that, since check 2 is not in its groups | fails, every run |
+
+The summary line counts them: `exit 0: 11 passed, 0 skipped, 2 paused (beat, worker declared
+in infra/paused.json)`. A malformed file, a group other than worker or beat, or a `review_by` more than 31 days after
+the run is exit 2.
+The Settings **Background jobs** card is not pause-aware: it reads "Nothing has run" and
+"Background jobs have stopped", which is true.
+
+- **Declare a pause:** stop the machines (`fly machine stop <id> -a mealy-app-prod`; a
+  `beat` pause also stops the queue filling), then add the entry in a pull request with a
+  review date no more than 31 days out (a later one is exit 2 on every run), and a TODOS.md
+  entry saying how to resume.
+- **Extend it:** change `review_by` in a pull request, again at most 31 days past the day it
+  merges. The review date exists so a pause
+  cannot quietly become the next 103 days; a failing `ops-check` is the reminder.
+- **Resume:** confirm the reason is gone (for the Upstash cap: the console's Usage page),
+  start the machines (`fly machine start <id> …`; ids from `fly status -a mealy-app-prod`),
+  and empty the file (`{}`) in a pull request. Until that merges, the release smoke's check 2
+  fails "declared paused but running", and from the day after the resume the daily
+  `ops-check` fails "the worker ran after it was declared paused". Either is the nudge to
+  merge it. Then confirm a `Task … succeeded` line
+  for each of the four jobs (previous entry) and mark the TODOS entry done.
+
 ## 421 from the origin gate
 
 The production host gate (`backend/app/main.py`) returns the same
@@ -166,10 +219,11 @@ tell the checks apart.
   | `host_mismatch` | a `Host` other than `api.mealy.dev` (for example the `*.fly.dev` name) | yes |
   | `origin_verify_absent` | no `X-Origin-Verify`: the request went around Cloudflare, or the Transform Rule is not applied | yes |
   | `origin_verify_mismatch` | the header is present but wrong: the Fly secret and the rule's value have drifted | yes |
-  | `host_absent` | no `Host` header | **no.** uvicorn's HTTP layer answers 400 first. Defense in depth only |
+  | `host_absent` | no usable `Host` | **rare.** A missing or empty `Host` gets uvicorn's 400 first; a `Host` that is only a port (`:443`) does reach the gate and reads as this. Nothing legitimate sends it: treat it as a probe |
   | `origin_verify_secret_empty` | empty `ORIGIN_VERIFY_SECRET` at request time | **no.** Production refuses to boot below 32 characters. Tests only |
 
-  Do not wait for either of the last two; they cannot appear. Before PR1b the gate logs
+  Do not wait for `origin_verify_secret_empty`; it cannot appear. `host_absent` only
+  appears for a malformed `Host`. Before PR1b the gate logs
   nothing, and the two drift cases look identical from outside.
 - **Recovery:** the ordered steps in
   [`cloudflare-state.md` → Transform Rules — origin lock](./cloudflare-state.md#transform-rules--origin-lock-modify-request-header).
@@ -376,7 +430,9 @@ applies. It is the one path in this milestone that can lose real data.
     commit (RUNBOOK §2 step 4). The check compares code, not commits: a release that did
     not touch `frontend/` passes on the previous build.
   - **backend, `unknown`:** the deploy ran without `--build-arg GIT_COMMIT` (from PR1b on,
-    `/healthz` reports it). Redeploy with the argument.
+    `/healthz` reports it). Redeploy with the argument. Between releases the daily
+    `ops-check` asserts the same through `[1] version-reported`: `unknown`, empty, or not a
+    commit SHA fails there too, with the same fix.
   - **backend, differs from the release in `backend/`:** the deploy was skipped or failed,
     a different branch was deployed, or a rollback is in place. Deploy the release commit.
   - **"not in local history":** your checkout is behind. Run `git fetch` and re-run the
@@ -428,3 +484,6 @@ applies. It is the one path in this milestone that can lose real data.
   never a pass.
 - Cloudflare drift script: `CLOUDFLARE_API_TOKEN` is unset, or lacks a scope listed in the
   RUNBOOK header.
+- `infra/paused.json` does not parse, declares a group other than worker or beat, or an
+  entry lacks `since`, `review_by` or `reason`: fix the file in a pull request (the format
+  is in [A deliberate pause](#a-deliberate-pause-worker-or-beat)).

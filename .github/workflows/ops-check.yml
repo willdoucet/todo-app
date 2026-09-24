@@ -1,0 +1,116 @@
+# M8 item 13 — the check that runs between releases.
+#
+# Both of this deployment's real incidents happened between releases, where nothing
+# was looking: a worker stopped for 103 days, and a restore point lost to a Fly host
+# move. This runs the smoke script's cron groups daily:
+#
+#   liveness        /healthz by both paths, the deployed version, background jobs fresh
+#   recoverability  a snapshot or WAL restore point under 48 h
+#   edge            origin lock both ways, break-glass off, cache headers
+#
+# never the release group, which compares a deploy with a release and would be noise on
+# a schedule. The script is the one place every check lives (infra/release-smoke.py);
+# a deliberate pause in infra/paused.json is read by the script, not special-cased here.
+# GitHub's own failure email is the alert. Every failure line names the check, its exit
+# class (`exit 1 production:` / `exit 2 tooling:`), and its incident-diagnostics entry, and
+# the retry step turns those lines into error annotations for the run page (and the email,
+# if GitHub includes them).
+#
+# Scheduled workflows only fire from the default branch, and GitHub disables them on a
+# public repository after 60 days without a commit (workflow runs do not reset that);
+# infra/RUNBOOK.md's header has the 50-day re-arm, and its pre-release gate checks that
+# the latest run is green and recent. Prove the alert without touching production:
+#   gh workflow run ops-check.yml -f self_test=true
+name: ops-check
+
+on:
+  schedule:
+    - cron: "17 14 * * *"  # daily at 14:17 UTC, off the hour where GitHub's scheduler is busiest
+  workflow_dispatch:
+    inputs:
+      self_test:
+        description: "Force one failure against a built-in fixture (proves the email, contacts nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-check
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    # One attempt can take ~7 min when every call hits its own timeout (fly 60 s, curl 25 s),
+    # and there are two attempts plus a 60 s pause: 10 minutes would kill the retry mid-run.
+    timeout-minutes: 25
+    env:
+      SMOKE_ARGS: --only=liveness,recoverability,edge${{ inputs.self_test && ' --self-test' || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@1.6
+        with:
+          # The RUNBOOK's minimum, and the version whose --json output the script parses.
+          version: 0.4.102
+
+      # Retry once (CEO review 2F): a transient network blip never emails, a real failure
+      # still does. The first attempt's failure only triggers the second.
+      #
+      # FLY_API_TOKEN is a `fly tokens create readonly` token: org-scoped, read-only,
+      # one-year expiry, rotation date in the RUNBOOK header. It is set on these two steps
+      # only, never job-wide, so the third-party setup action above never sees it. flyctl
+      # reads it from the environment; it is never echoed. Without it the recoverability and
+      # edge checks exit 2 (tooling), never pass.
+      #
+      # Output streams through tee (python -u), so a run the timeout kills still shows the
+      # check lines it reached; pipefail makes the step's code the script's, not tee's.
+      - name: Smoke checks (first attempt)
+        id: first
+        continue-on-error: true
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set +e -o pipefail
+          python3 -u infra/release-smoke.py $SMOKE_ARGS | tee smoke.out
+          exit $?
+
+      # A failure's own words become error annotations: GitHub's failure email carries the
+      # run's status, never step output, so without these the alert reads at best "Process
+      # completed with exit code 1" (final review, M8 PR1b). Annotations show on the run page
+      # and, where GitHub includes them, in the email (the RUNBOOK's first self-test run
+      # records which). One per
+      # FAIL / ERROR line (the check, its cause, its diagnostics entry), then the summary
+      # line (`exit 1 production: …` / `exit 2 tooling: …`). Each is one line of the
+      # script's output, so it cannot start a second workflow command.
+      - name: Smoke checks (retry once)
+        if: steps.first.outcome == 'failure'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          sleep 60
+          set +e -o pipefail
+          python3 -u infra/release-smoke.py $SMOKE_ARGS | tee smoke.out
+          code=$?
+          { echo '```'; cat smoke.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -ne 0 ]; then
+            grep -E '^(FAIL|ERROR) ' smoke.out | while IFS= read -r line; do
+              echo "::error title=ops-check::$line"
+            done
+            echo "::error title=ops-check::$(tail -n 1 smoke.out)"
+          fi
+          exit "$code"
+
+      - name: Summary
+        if: steps.first.outcome == 'success'
+        run: |
+          { echo '```'; cat smoke.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

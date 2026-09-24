@@ -117,6 +117,25 @@ describe('ICloudSettings', () => {
       })
     })
 
+    it('renders the fresh line with the sage dot and the secondary gray (Design review 5A, 6A)', async () => {
+      serveIntegration({ last_sync_at: naiveUtc(5 * 60000) })
+      render(<ICloudSettings />)
+
+      const line = await screen.findByText(/Last synced 5 min ago/)
+      expect(line).toHaveClass('text-text-secondary')
+      expect(line).not.toHaveClass('text-text-muted')
+      expect(line.querySelector('[aria-hidden="true"]')).toHaveClass('bg-sage-500')
+    })
+
+    it('renders the overdue line with the red dot and red text', async () => {
+      serveIntegration({ last_sync_at: naiveUtc(3 * 3600000) })
+      render(<ICloudSettings />)
+
+      const line = await screen.findByText(/Last synced 3 hr ago · sync overdue/)
+      expect(line).toHaveClass('text-red-600')
+      expect(line.querySelector('[aria-hidden="true"]')).toHaveClass('bg-red-500')
+    })
+
     it('says nothing when an integration has never synced', async () => {
       serveIntegration({ last_sync_at: null })
       render(<ICloudSettings />)
