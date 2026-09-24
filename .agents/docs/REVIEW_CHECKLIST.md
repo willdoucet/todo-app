@@ -402,6 +402,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - A `concurrency` group cancels superseded runs; every job has `timeout-minutes`.
 - `timeout-minutes` covers the worst case of every attempt a job makes (each call at its own timeout, times the retries, plus any pause), and a long step streams its output (`python -u … | tee` under `set -o pipefail`) so a run the timeout kills still shows how far it got.
 - Actions are pinned to a major version or a SHA; `permissions` is minimal (`contents: read` unless a job needs more).
+- A step calls a CLI by the name its setup action installs, not the name a laptop has: `setup-flyctl` installs only `flyctl`, while Homebrew adds `fly` too (M8's `ops-check.yml` first dispatch exited 2 on it). A workflow that runs an operator script is dispatched once before anything relies on it.
 - Required checks have stable job names; new suites stay informational until they have soaked flake-free.
 - Test artifacts are uploaded on failure only.
 

@@ -63,6 +63,17 @@ jobs:
           # The RUNBOOK's minimum, and the version whose --json output the script parses.
           version: 0.4.102
 
+      # The action puts only a `flyctl` binary on PATH, and the smoke script runs `fly`, as
+      # every operator command does (Homebrew installs both names, so a laptop never shows
+      # it). Without this the first dispatch exited 2: "`fly` is not on PATH" (M8 PR1b
+      # release). infra/tests/test_ops_check_workflow.py runs this block.
+      - name: Expose flyctl as fly
+        run: |
+          flyctl_bin="$(command -v flyctl)"  # an assignment, so a missing flyctl fails the step
+          mkdir -p "$RUNNER_TEMP/flybin"
+          ln -s "$flyctl_bin" "$RUNNER_TEMP/flybin/fly"
+          echo "$RUNNER_TEMP/flybin" >> "$GITHUB_PATH"
+
       # Retry once (CEO review 2F): a transient network blip never emails, a real failure
       # still does. The first attempt's failure only triggers the second.
       #
