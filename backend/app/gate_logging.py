@@ -14,8 +14,9 @@ What the emitter does to its host:
 This is a separate emitter, not a wrapper around ``app.auth.logging_utils.emit_log_line``:
 that function resolves the IP from ``CF-Connecting-IP`` / ``X-Forwarded-For``, and on a
 request that went around the edge (the only interesting rejection) both are
-attacker-controlled. The IP here is the hop Fly's proxy saw (``_hop_ip``). It reuses the
-payload's field names and ``resolve_request_id`` (allowlist-validated), nothing else.
+attacker-controlled. The IP here is ``Fly-Client-IP``, the address Fly's proxy accepted the
+connection from (``_client_ip``). It reuses the payload's field names and
+``resolve_request_id`` (allowlist-validated), nothing else.
 
 Never logged: the secret, or any presented ``Host`` / ``X-Origin-Verify`` value. Presence
 and length only.
@@ -59,33 +60,34 @@ REASONS = (
 PATH_MAX_LENGTH = 128
 
 
-def _hop_ip(request: Request) -> str:
-    """The address Fly's proxy accepted the connection from: the last ``X-Forwarded-For``
-    entry, across every copy of the header. The last entry is the one Fly's proxy writes,
-    whether it appends to a client-sent header or replaces it: the attacker's own address on
-    a direct request, a Cloudflare edge address otherwise.
+def _client_ip(request: Request) -> str:
+    """The address Fly's proxy accepted the connection from, which it sends as
+    ``Fly-Client-IP`` (the last copy, should a client-sent one arrive beside it): the sender's
+    own address on a direct request, a Cloudflare edge address otherwise.
 
-    Not ``request.client.host``: production runs uvicorn with ``--proxy-headers
-    --forwarded-allow-ips=*``, which sets that to the FIRST entry, the one the sender writes
-    (found by /review-implementation's adversarial pass, M8 PR1b). Without the header (dev,
-    tests) the socket peer is the only address there is.
+    Never an ``X-Forwarded-For`` entry. The first is the one the sender writes, and the last
+    is Fly's own edge, the app's anycast address, the same on every request (seen in
+    production, 2026-09-24). Not ``request.client.host`` while ``X-Forwarded-For`` is present
+    either: production runs uvicorn with ``--proxy-headers --forwarded-allow-ips=*``, which
+    sets it to that first entry. Without either header (dev, tests, a private-network request)
+    the socket peer is the only address there is.
     """
-    entries = [e.strip() for value in request.headers.getlist("x-forwarded-for") for e in value.split(",")]
-    entries = [e for e in entries if e]
-    if entries:
-        return entries[-1]
-    return request.client.host if request.client and request.client.host else "unknown"
+    values = request.headers.getlist("fly-client-ip")
+    if values and values[-1].strip():
+        return values[-1].strip()
+    if "x-forwarded-for" not in request.headers and request.client and request.client.host:
+        return request.client.host
+    return "unknown"
 
 
 def _payload(request: Request, outcome: str, reason: Optional[str]) -> dict:
     host = request.headers.get("host")
     origin = request.headers.get("x-origin-verify")
-    peer = _hop_ip(request)
     return {
         "event": "host_gate",
         "outcome": outcome,
         "reason": reason,
-        "ip": peer[:IP_MAX_LENGTH],
+        "ip": _client_ip(request)[:IP_MAX_LENGTH],
         "request_id": resolve_request_id(request),
         "path": request.scope.get("path", "")[:PATH_MAX_LENGTH],
         "host_present": host is not None,

@@ -116,3 +116,12 @@
 - Tests: infra/tests/test_ops_check_workflow.py (4: the reproduction with the script's own runner, the workflow's step run as `bash -e`, a missing flyctl fails the step, step order); red before the fix, `python3 -m pytest infra/tests -q` 165 passed after; two mutation checks red then restored; real runner: a dispatch from the branch (`gh workflow run ops-check.yml --ref quickfix/ops-check-fly-path`, run 36017858233) was green on the first attempt, `exit 0: 7 passed, 0 skipped, 1 paused`, with `[5] origin-lock` passing. `[9] restore-point` passed on the volume snapshot, with `also: fly pg backup list … unauthorized`: that read executes on the Postgres VM, which the read-only token cannot do, so the cron cannot see WAL backups. Not this fix's cause (the PATH bug hid it); recorded for M8 PR2 (RUNBOOK correction, a TODO for a narrow machine-exec token)
 - Docs: updated 3 docs (TECH_STACK CI/CD row, LESSONS Bug Log, REVIEW_CHECKLIST GitHub Actions)
 - Branch: quickfix/ops-check-fly-path · PR: https://github.com/willdoucet/todo-app/pull/63
+
+## 2026-09-24 — gate-log-fly-client-ip
+- Source: free text (production observation after the M8 PR1b release `v1-20260924-f4a6814`: both `host_gate` rejections logged the app's own anycast addresses as `ip`)
+- What: the host gate logs `Fly-Client-IP` (the last copy) as `ip`; without it, the socket peer when there is no `X-Forwarded-For` either, else `"unknown"`
+- Why: the last `X-Forwarded-For` entry it logged is Fly's own edge (`66.241.124.153` / `2a09:8280:1::10e:a0e0:0`, the A and AAAA records of `mealy-app-prod.fly.dev`), the same on every request, so `ip` named no sender
+- Files: backend/app/gate_logging.py, backend/tests/integration/auth/test_host_gate.py
+- Tests: test_host_gate.py::test_gate_ip_is_fly_client_ip_never_a_forwarded_entry (red first: logged `203.0.113.9`), plus the `"unknown"` fallback, last-copy and 128-cap tests; full backend suite 1059 passed, 3 skipped; two mutation checks each red on their own test; real uvicorn with `--proxy-headers --forwarded-allow-ips=*` printed the `Fly-Client-IP` value while its access line showed the forged `6.6.6.6`. Unproven until the next release: that Fly overwrites a client-sent `Fly-Client-IP` (TODOS.md P2 check, also in the PR body)
+- Docs: updated 4 docs (BACKEND_STRUCTURE Production host gate, REVIEW_CHECKLIST FastAPI, LESSONS Bug Log + host-header rule bullet, TODOS release check)
+- Branch: quickfix/gate-log-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/64
