@@ -1,8 +1,8 @@
 {
   "branch": "prod-launch-release",
-  "commit": "6f0a608",
+  "commit": "394dccf",
   "created_at": "2026-09-11T22:37:41Z",
-  "implementation_status": "ready-for-review",
+  "implementation_status": "partially-shipped",
   "key": "plan:prod-launch-release",
   "kind": "plan",
   "milestone": "M8",
@@ -10,10 +10,10 @@
   "parent_epic": "v1-productionization",
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
-  "pr": "https://github.com/willdoucet/todo-app/pull/60",
-  "reason": "/final-review of PR1b clean: 13 found, 7 fixed (Sign out takes the auth_session_issue lock; ops-check failure lines become annotations; pause review_by at most 31 days out; beat-only resume detected; CLI exit 2 on any unexpected error; UTC pause dates; TODOS P1), 1 accepted, 2 by design, 3 not a defect or a lead. Overruled the plan in place: step 10 checks the run's annotations and records what the email showed. Verify at the PR1b release: the email's content and the gate's logged ip. Suites green (backend 1057, frontend 632, infra 161); nothing committed. Next: /ship.",
-  "reason_at": "2026-09-24T03:23:13Z",
-  "reason_by": "final-review",
+  "pr": "https://github.com/willdoucet/todo-app/pull/62",
+  "reason": "PR1b shipped as #62. Merge it, then run Between the PRs steps 7-11 before PR2. Step 7: deploy per infra/RUNBOOK.md, listing migration 1b6b462491fa as additive and reversible, with the rollback command already pasted. Step 8: run the full release-smoke; record PAUSE as PAUSE while infra/paused.json declares the worker and beat. Step 9: run rotate_password end to end. Step 10: dispatch ops-check.yml, then self_test; check its error annotations and record what the email showed. Step 11: rehearse GATE_BREAK_GLASS in local compose only. At the release, also verify the gate's logged ip is Fly's proxy hop. Then /execute-plan runs PR2.",
+  "reason_at": "2026-09-24T03:39:26Z",
+  "reason_by": "ship",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
@@ -29,10 +29,16 @@
       "part": "PR1a",
       "pr": "https://github.com/willdoucet/todo-app/pull/60",
       "shipped_at": "2026-09-23T16:07:56Z"
+    },
+    {
+      "commit": "394dccf",
+      "part": "PR1b",
+      "pr": "https://github.com/willdoucet/todo-app/pull/62",
+      "shipped_at": "2026-09-24T03:39:26Z"
     }
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-24T03:23:13Z",
-  "workflow_status": "ready-for-review"
+  "updated_at": "2026-09-24T03:39:26Z",
+  "workflow_status": "partially-shipped"
 }

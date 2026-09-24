@@ -7,15 +7,15 @@ milestone: "M8"
 ui_scope: true
 risk_tags: ["infra", "security", "auth", "data", "migration"]
 ship_parts: ["PR1a", "PR1b", "PR2"]
-workflow_status: "ready-for-review"
+workflow_status: "partially-shipped"
 review_status: ["ceo-reviewed", "eng-reviewed", "adversarial-reviewed", "design-reviewed", "impl-reviewed", "final-reviewed"]
-implementation_status: "ready-for-review"
-shipped_parts: [{"part": "PR1a", "pr": "https://github.com/willdoucet/todo-app/pull/60", "shipped_at": "2026-09-23T16:07:56Z", "commit": "6f0a608"}]
-reason: "/final-review of PR1b clean: 13 found, 7 fixed (Sign out takes the auth_session_issue lock; ops-check failure lines become annotations; pause review_by at most 31 days out; beat-only resume detected; CLI exit 2 on any unexpected error; UTC pause dates; TODOS P1), 1 accepted, 2 by design, 3 not a defect or a lead. Overruled the plan in place: step 10 checks the run's annotations and records what the email showed. Verify at the PR1b release: the email's content and the gate's logged ip. Suites green (backend 1057, frontend 632, infra 161); nothing committed. Next: /ship."
-reason_by: "final-review"
-reason_at: "2026-09-24T03:23:13Z"
-updated_at: "2026-09-24T03:23:13Z"
-pr: "https://github.com/willdoucet/todo-app/pull/60"
+implementation_status: "partially-shipped"
+shipped_parts: [{"part": "PR1a", "pr": "https://github.com/willdoucet/todo-app/pull/60", "shipped_at": "2026-09-23T16:07:56Z", "commit": "6f0a608"}, {"part": "PR1b", "pr": "https://github.com/willdoucet/todo-app/pull/62", "shipped_at": "2026-09-24T03:39:26Z", "commit": "394dccf"}]
+reason: "PR1b shipped as #62. Merge it, then run Between the PRs steps 7-11 before PR2. Step 7: deploy per infra/RUNBOOK.md, listing migration 1b6b462491fa as additive and reversible, with the rollback command already pasted. Step 8: run the full release-smoke; record PAUSE as PAUSE while infra/paused.json declares the worker and beat. Step 9: run rotate_password end to end. Step 10: dispatch ops-check.yml, then self_test; check its error annotations and record what the email showed. Step 11: rehearse GATE_BREAK_GLASS in local compose only. At the release, also verify the gate's logged ip is Fly's proxy hop. Then /execute-plan runs PR2."
+reason_by: "ship"
+reason_at: "2026-09-24T03:39:26Z"
+updated_at: "2026-09-24T03:39:26Z"
+pr: "https://github.com/willdoucet/todo-app/pull/62"
 ---
 # Design: M8 — `prod-launch-release`
 
