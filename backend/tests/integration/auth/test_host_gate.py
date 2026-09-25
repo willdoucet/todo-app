@@ -33,6 +33,7 @@ import logging
 import pytest
 
 from app import gate_logging
+from app.auth.logging_utils import IP_MAX_LENGTH
 from tests.integration.auth.test_log_hygiene import _record_strings
 
 # Test-only value. The production secret exists only as a Fly secret and in the
@@ -307,13 +308,13 @@ async def test_gate_logging_failure_does_not_change_response(
 
 
 @pytest.mark.asyncio
-async def test_gate_line_carries_no_secret_no_header_value_and_the_proxy_hop(
+async def test_gate_line_carries_no_secret_no_header_value_and_fly_client_ip(
     client, production_gate, gate_log
 ):
-    """The IP is the hop Fly's proxy saw, the LAST ``X-Forwarded-For`` entry — never
-    ``CF-Connecting-IP`` or the first ``X-Forwarded-For`` entry, which are
-    attacker-controlled on a request that went around the edge. Headers are logged by
-    presence and length only; the path is truncated."""
+    """The IP is ``Fly-Client-IP``, the address Fly's proxy accepted the connection from —
+    never ``CF-Connecting-IP`` or an ``X-Forwarded-For`` entry: on a request that went around
+    the edge the first two are attacker-controlled, and the last entry is Fly's own edge.
+    Headers are logged by presence and length only; the path is truncated."""
     presented = "attacker-presented-origin-value"
     long_path = "/auth/" + "x" * 300
     r = await client.get(
@@ -321,13 +322,14 @@ async def test_gate_line_carries_no_secret_no_header_value_and_the_proxy_hop(
         headers={
             "Host": "api.mealy.dev",
             "X-Origin-Verify": presented,
+            "Fly-Client-IP": "198.51.100.23",
             "CF-Connecting-IP": "203.0.113.66",
             "X-Forwarded-For": "198.51.100.77, 10.0.0.1",
         },
     )
     assert r.status_code == 421
     record = assert_one_rejection(gate_log, gate_logging.ORIGIN_VERIFY_MISMATCH)
-    assert record.ip == "10.0.0.1"  # the last hop, the one Fly's proxy writes
+    assert record.ip == "198.51.100.23"
     assert record.host_present is True
     assert record.host_length == len("api.mealy.dev")
     assert record.origin_verify_present is True
@@ -335,8 +337,23 @@ async def test_gate_line_carries_no_secret_no_header_value_and_the_proxy_hop(
     assert record.path == long_path[: gate_logging.PATH_MAX_LENGTH]
     assert record.request_id
     logged = " ".join(_record_strings(record))
-    for forbidden in (SECRET, presented, "203.0.113.66", "198.51.100.77"):
+    for forbidden in (SECRET, presented, "203.0.113.66", "198.51.100.77", "10.0.0.1"):
         assert forbidden not in logged
+
+
+@pytest.mark.asyncio
+async def test_gate_ip_is_the_last_fly_client_ip_copy_and_capped(client, production_gate, gate_log):
+    """Should a client-sent copy arrive beside Fly's, the last one is Fly's (a proxy that adds
+    a header appends it). Whether Fly overwrites a client-sent value is proven only in
+    production (TODOS.md). An oversized value is cut like every other logged IP."""
+    await client.get(
+        "/auth/status",
+        headers=[("Host", "api.mealy.dev"), ("Fly-Client-IP", "6.6.6.6"), ("Fly-Client-IP", "198.51.100.23")],
+    )
+    assert assert_one_rejection(gate_log, gate_logging.ORIGIN_VERIFY_ABSENT).ip == "198.51.100.23"
+    gate_log.clear()
+    await client.get("/auth/status", headers={"Host": "api.mealy.dev", "Fly-Client-IP": "1" * 300})
+    assert assert_one_rejection(gate_log, gate_logging.ORIGIN_VERIFY_ABSENT).ip == "1" * IP_MAX_LENGTH
 
 
 @pytest.mark.asyncio
@@ -345,11 +362,10 @@ async def test_gate_ip_without_a_forwarded_header_is_the_socket_peer(client, pro
     assert assert_one_rejection(gate_log, gate_logging.ORIGIN_VERIFY_ABSENT).ip == "127.0.0.1"
 
 
-@pytest.mark.asyncio
-async def test_gate_ip_is_not_forgeable_under_uvicorns_proxy_headers(production_gate, gate_log):
-    """Production runs uvicorn with ``--proxy-headers --forwarded-allow-ips=*``, which puts the
-    FIRST X-Forwarded-For entry (the sender's) into ``request.client.host``. The plain test
-    client skips that middleware, so this test adds it."""
+async def proxied_get(headers) -> tuple:
+    """GET /auth/status through uvicorn's ``ProxyHeadersMiddleware(trusted_hosts="*")``, as
+    production runs it; the plain test client skips that middleware. Returns the response and
+    the client host the middleware handed the app."""
     from httpx import ASGITransport, AsyncClient
     from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -364,15 +380,43 @@ async def test_gate_ip_is_not_forgeable_under_uvicorns_proxy_headers(production_
 
     transport = ASGITransport(app=ProxyHeadersMiddleware(spy, trusted_hosts="*"))
     async with AsyncClient(transport=transport, base_url="http://api.mealy.dev") as proxied:
-        r = await proxied.get(
-            "/auth/status",
-            headers={"Host": "api.mealy.dev", "X-Forwarded-For": "6.6.6.6, 203.0.113.9"},
-        )
+        return await proxied.get("/auth/status", headers=headers), seen
+
+
+@pytest.mark.asyncio
+async def test_gate_ip_is_fly_client_ip_never_a_forwarded_entry(production_gate, gate_log):
+    """Fly's proxy sends the address it accepted the connection from as ``Fly-Client-IP``.
+    Every ``X-Forwarded-For`` entry is the wrong answer: the first is the sender's, and the
+    last is Fly's own edge, the app's anycast address, the same on every request (seen in
+    production, release ``v1-20260924-f4a6814``)."""
+    r, seen = await proxied_get(
+        {"Host": "api.mealy.dev", "Fly-Client-IP": "198.51.100.23", "X-Forwarded-For": "6.6.6.6, 203.0.113.9"}
+    )
     assert r.status_code == 421
     assert seen == ["6.6.6.6"]  # negative control: uvicorn really handed the app the forged entry
     record = assert_one_rejection(gate_log, gate_logging.ORIGIN_VERIFY_ABSENT)
-    assert record.ip == "203.0.113.9"
-    assert "6.6.6.6" not in PRINTED.format(record)
+    assert record.ip == "198.51.100.23"
+    printed = PRINTED.format(record)
+    for forwarded in ("6.6.6.6", "203.0.113.9"):
+        assert forwarded not in printed
+
+
+@pytest.mark.asyncio
+async def test_gate_ip_without_fly_client_ip_is_not_forgeable_under_uvicorns_proxy_headers(
+    production_gate, gate_log
+):
+    """Production runs uvicorn with ``--proxy-headers --forwarded-allow-ips=*``, which puts the
+    FIRST X-Forwarded-For entry (the sender's) into ``request.client.host``, so once that
+    header is present the socket-peer fallback is the sender's choice too. Without
+    ``Fly-Client-IP`` the IP is then "unknown"."""
+    r, seen = await proxied_get({"Host": "api.mealy.dev", "X-Forwarded-For": "6.6.6.6, 203.0.113.9"})
+    assert r.status_code == 421
+    assert seen == ["6.6.6.6"]  # negative control: uvicorn really handed the app the forged entry
+    record = assert_one_rejection(gate_log, gate_logging.ORIGIN_VERIFY_ABSENT)
+    assert record.ip == "unknown"
+    printed = PRINTED.format(record)
+    for forwarded in ("6.6.6.6", "203.0.113.9"):
+        assert forwarded not in printed
 
 
 # The app installs no logging config, so under uvicorn `app.gate` reaches Python's

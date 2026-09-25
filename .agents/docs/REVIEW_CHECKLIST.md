@@ -59,7 +59,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - Production-only host or origin gate returns a distinct status (e.g. 421) and is disabled in dev and test.
 - A route gated by something OTHER than `get_current_user` (a cookie guard, a signed token) carries its own structural assertion that it still has that guard; an exemption in the auth-propagation test never stands alone.
 - No response header is built from an unvalidated path or query parameter. Starlette encodes header values as latin-1, so a non-latin-1 value is an unhandled 500 — validate first, then build headers from the already-allowlisted value.
-- Under `uvicorn --proxy-headers --forwarded-allow-ips=*`, `request.client.host` is the FIRST `X-Forwarded-For` entry, which the sender writes, not the socket peer. An address that must not be forgeable is the LAST entry (the hop the platform's proxy wrote), and its test runs through uvicorn's `ProxyHeadersMiddleware`, which the ASGI test transport skips.
+- Under `uvicorn --proxy-headers --forwarded-allow-ips=*`, `request.client.host` is the FIRST `X-Forwarded-For` entry, which the sender writes, not the socket peer. The LAST entry is no better: on Fly it is Fly's own edge, the app's anycast address, the same on every request. An address that must identify the sender comes from the platform proxy's own client-IP header (`Fly-Client-IP` on Fly), never an `X-Forwarded-For` entry. Its test runs through uvicorn's `ProxyHeadersMiddleware`, which the ASGI test transport skips, and one production request carrying a forged copy of the header proves the proxy overwrites it.
 
 ### Query efficiency
 - List endpoints eager-load every relationship the `response_model` touches; no lazy load fires during serialization.
@@ -402,6 +402,7 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 - A `concurrency` group cancels superseded runs; every job has `timeout-minutes`.
 - `timeout-minutes` covers the worst case of every attempt a job makes (each call at its own timeout, times the retries, plus any pause), and a long step streams its output (`python -u … | tee` under `set -o pipefail`) so a run the timeout kills still shows how far it got.
 - Actions are pinned to a major version or a SHA; `permissions` is minimal (`contents: read` unless a job needs more).
+- A step calls a CLI by the name its setup action installs, not the name a laptop has: `setup-flyctl` installs only `flyctl`, while Homebrew adds `fly` too (M8's `ops-check.yml` first dispatch exited 2 on it). A workflow that runs an operator script is dispatched once before anything relies on it.
 - Required checks have stable job names; new suites stay informational until they have soaked flake-free.
 - Test artifacts are uploaded on failure only.
 

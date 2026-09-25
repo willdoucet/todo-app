@@ -1,0 +1,19 @@
+{
+  "branch": "quickfix/ops-check-fly-path",
+  "commit": "fe743c5",
+  "completed": "2026-09-24",
+  "created_at": "2026-09-24T14:46:45Z",
+  "implementation_status": "shipped",
+  "key": "quickfix:ops-check-fly-path",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/63",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Expose flyctl as fly in ops-check.yml",
+  "updated_at": "2026-09-24T14:57:30Z",
+  "workflow_status": "shipped"
+}
