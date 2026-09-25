@@ -22,6 +22,27 @@ Edits to synced items still queue push jobs for when the worker returns. The ~59
 **Priority:** P1
 **Depends on:** The Upstash allowance resetting, or a plan upgrade.
 
+## P2 — Run the password-rotation CLI end to end in production (M8 criterion 6, skipped at the PR1b release)
+**What:** Rotate the household password once in production with the M8 CLI and confirm every session dies. This is M8's "Between the PRs" step 9 and success criterion 6, which the operator skipped at the PR1b release (`v1-20260924-f4a6814`, 2026-09-24).
+**Why:** `python -m app.cli.rotate_password` is the only way to change the household password (there is no self-service reset, PRD 5.7). Its tests run on the local stack only. Production has never run it, and neither has the `fly ssh console --select` TTY path the password prompt needs. The first time it runs should not be the day the password leaks.
+**Steps** (`infra/RUNBOOK.md` §6):
+1. Tell the household and give them the new password. Keep one other browser or tab signed in.
+2. Open a shell on the **web** machine (the worker and beat may be paused):
+   ```bash
+   fly ssh console -a mealy-app-prod --select
+   ```
+3. In that shell:
+   ```bash
+   cd /app && /app/.venv/bin/python -m app.cli.rotate_password <household email>
+   ```
+   Expect `rotated: user 1; N refresh token(s) revoked; session version is now M`. Exit `1`: refused, nothing written. Exit `2`: the rotation may or may not have landed; try the new password before retrying.
+4. At `https://mealy.dev`: the old password is refused, the new one signs in, and the tab kept signed in lands on the sign-in page with "Your session ended. Someone may have signed out on another device, or the household password changed." (A still-valid access JWT and an outstanding refresh token are both rejected.)
+5. Record the output line and the three results in the RUNBOOK execution log, then mark this entry done.
+**Context:** Skipped by the operator's decision at the PR1b release, 2026-09-24. Everything else in that release passed (smoke `exit 0: 11 passed, 0 skipped, 2 paused`). Until this runs, M8's criterion 6 is open; PR2 records it as deferred here.
+**Effort:** S (human: ~15 min / CC: ~5 min of guidance; the operator types the password)
+**Priority:** P2
+**Depends on:** Nothing. Any quiet hour; the household must sign in again afterwards.
+
 ## P2 — Env-gate `echo=True` on the SQLAlchemy async engine  ✅ DONE (M7 PR1, 2026-09-08)
 **Status:** ✅ DONE in M7 `prod-r2-storage` PR1 — `backend/app/database.py` now reads `SQLALCHEMY_ECHO` (default `false`). Kept as a record; safe to remove on the next TODOS.md prune.
 **What:** Replace the hardcoded `echo=True` in `backend/app/database.py` with `echo=os.getenv("SQLALCHEMY_ECHO", "false").lower() == "true"`. Default off in production; opt-in for local debugging via `SQLALCHEMY_ECHO=true` in compose env.

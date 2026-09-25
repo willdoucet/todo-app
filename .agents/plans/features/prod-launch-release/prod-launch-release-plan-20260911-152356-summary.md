@@ -967,3 +967,92 @@ DOC IMPACT: updated 10 docs
 - **Concern 3 (`FLY_API_TOKEN`):** the operator created it (19:44:07Z). RUNBOOK: created
   2026-09-23; rotate by 2027-09-23. The first dispatch waits for PR1b's merge.
 - **Concern 4 (375 px overflow):** added to TODOS.md as a P3.
+
+### Between the PRs 7–11 executed (2026-09-24, after PR1b merged as #62)
+
+Recorded for PR2. The agent guided each step. Auto mode blocked its first production command (`fly ssh console`), so the
+operator ran every production command, and the agent ran the local, GitHub, and public-URL reads.
+
+- **Step 7, release `v1-20260924-f4a6814`** (squash `f4a6814`).
+  - Fly v37 (`registry.fly.io/mealy-app-prod:deployment-01M38VT0SGJF6EHM9Q5J5CQYYT`). Vercel
+    `dpl_AoaGZKAo9i18SMP3vrQBZpxGcTh3`, promoted by SHA.
+  - Gates: CI `Tests` success (run 35953955035); doc-guard passed on #62; `ops-check` n/a (never
+    run); restore point `exit 0` (snapshot 5 h, WAL 11 h).
+  - Migration: production was at `b7e2c9a4f1d8`; this release applied `1b6b462491fa` (additive,
+    downgrade written and tested by migration-upgrade CI).
+  - Downtime ~6 s (04:47:45–04:47:50Z).
+  - `fly status`: web started with 1/1 checks passing; worker and beat stopped (the declared pause).
+  - The deploy's spinner pushed the `release_command` output out of the terminal scrollback. The
+    migration was confirmed from `/healthz`: `jobs.read: ok` can only happen once `job_heartbeats`
+    exists, and `version` read `f4a6814…`.
+  - A rollback worktree at the PR1a tag, with the §5.2 command pasted, was ready and not needed.
+- **Step 8.**
+  - Smoke: `exit 0: 11 passed, 0 skipped, 2 paused (beat, worker declared in infra/paused.json)`;
+    check 8 matched `f4a6814` on both tiers.
+  - The Cloudflare dashboard checks and the manual checks passed, as the operator reported.
+  - Tagged `v1-20260924-f4a6814`.
+  - **Finding: the gate's `ip` logs the app's own address, not the caller's.**
+    - Observed: the smoke probe logged `66.241.124.153`, and a `*.fly.dev` curl with a forged
+      `X-Forwarded-For: 203.0.113.9` logged `2a09:8280:1::10e:a0e0:0`. Those are the A and AAAA
+      records of `mealy-app-prod.fly.dev`. The forged value never appeared, and `reason` was right
+      on both lines.
+    - Cause: Fly's docs describe `X-Forwarded-For` as the client *followed by* the proxies, so its
+      last entry is Fly's edge. They recommend `Fly-Client-IP`, "always set by the Fly Proxy".
+    - Fixed by quickfix `gate-log-fly-client-ip` (#64, `56e0c39`): the gate logs `Fly-Client-IP`,
+      and the BACKEND_STRUCTURE gate paragraph, LESSONS Bug Log and REVIEW_CHECKLIST → FastAPI are
+      corrected. Not yet deployed.
+    - The next release proves it: a direct request carrying a forged `Fly-Client-IP` must log the
+      caller's real address. Fly's docs don't say whether they overwrite a client-sent value.
+      Tracked as TODOS.md P2 "Prove at the next release that Fly overwrites a client-sent
+      `Fly-Client-IP`" (added by #64).
+- **Step 9: skipped by the operator.** Recorded as TODOS.md P2 "Run the password-rotation CLI end to
+  end in production (M8 criterion 6, skipped at the PR1b release)", uncommitted on this branch. Until
+  it runs, criterion 6 is open; PR2 records it as deferred, not met.
+- **Step 10.**
+  - The first dispatch, run 36009722470, exited 2: `` `fly` is not on PATH `` on `[9]` and `[5]`.
+    `setup-flyctl` installs only `flyctl`. Fixed by quickfix #63 (`29f4b75`, the "Expose flyctl as
+    fly" step and `infra/tests/test_ops_check_workflow.py`).
+  - Branch proof, run 36017858233: green.
+  - Master dispatch, run 36058117263: green, `exit 0: 7 passed, 0 skipped, 1 paused`.
+  - Self-test, run 36058128975: failed as designed. Its annotations were
+    `FAIL [jobs] jobs-fresh: … → infra/incident-diagnostics.md#background-jobs-dead-worker-or-beat`
+    and `exit 1 production: [jobs] jobs-fresh (self-test: …)`. **The failure email showed both
+    annotations** (operator-verified), so criterion 17 is met.
+  - The first scheduled run, 36041300063, fired at 18:26:58Z, 4 h 10 min after its 14:17 slot. It
+    failed on the PATH bug, before #63 merged. Scheduled runs can be hours late.
+  - **Finding: the cron cannot see WAL backups.**
+    - `[9]` passes on the volume snapshot, with `also: fly pg backup list exited 1: Error: failed to
+      exec on VM 6835444b795398: unauthorized`. That read runs a command on the Postgres VM, which a
+      `fly tokens create readonly` token cannot do.
+    - Release-time smoke from a laptop still reads WAL backups.
+    - PR2: correct the RUNBOOK. Its first-run criterion ("no `also:` part") cannot hold with this
+      token. Its "drop the cron to its credential-free checks" sentence would remove `[9]` and `[5]`
+      for a gap in one sub-read.
+    - PR2: add a TODO to investigate `fly tokens create machine-exec` for that one read, linked to the
+      WAL-lag P2.
+- **Step 11: rehearsed locally** (criterion 15 met).
+  - Setup: a throwaway `docker-compose run` of the `api` service on :8099 with `APP_ENV=production`,
+    `PUBLIC_API_HOST=api.mealy.dev`, `CORS_ALLOW_ORIGINS=https://mealy.dev`, `STORAGE_BACKEND=local`,
+    and dummy hex secrets for `ORIGIN_VERIFY_SECRET`, `JWT_SECRET_KEY` and `HOUSEHOLD_ACCESS_KEY`.
+    Command `uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'`.
+    The dev api on :8000 was untouched.
+  - Flag `"0"`: `/healthz` false; a right Host with no origin header got 421 `origin_verify_absent`;
+    the right header got 200; `Host: mealy-app-prod.fly.dev` got 421 `host_mismatch`.
+  - Flag `"1"`: `/healthz` true; a right Host with no header got 200, logged `outcome="bypassed"`;
+    the right header got 200, also logged `bypassed`; the wrong Host still got 421 `host_mismatch`.
+  - Flag `"true"`: the same as `"0"`, because the parse is strict.
+  - PR2: put the rehearsal command in `infra/incident-diagnostics.md` → Break-glass ("Rehearse it").
+- **Procedure fixes for PR2's RUNBOOK.**
+  1. Write `${RELEASE:?}` wherever a command reads `$RELEASE`. §2 step 4's URL lookup ran in a fresh
+     shell without it and took the newest deployment. That happened to be the right one, and
+     `mealy.dev` then served `f4a6814`. The smoke refused an empty flag with exit 2.
+  2. Keep `fly deploy`'s output (for example `| tee`), or confirm the migration from `/healthz`
+     (`jobs.read: ok`), because the spinner scrolls the `release_command` lines away.
+  3. Scheduled `ops-check` runs can fire hours late; the "latest run under 48 h" gate still works.
+  4. In auto mode an agent cannot run production commands. The operator runs them, or grants narrow
+     rules and removes them afterwards.
+- **CI problems seen on #63, outside M8's code; separate sessions started for both:**
+  - the `BackgroundJobsSection` loading test races under `shouldAdvanceTime`;
+  - `mealcard-undo.spec.js` width fails deterministically since about 07:00Z on 2026-09-24
+    (5.497 px against a 5 px tolerance, locally and in CI). The Playwright HTML report server still
+    hangs a failed visual job until its 25-minute timeout.
