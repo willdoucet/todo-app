@@ -7,15 +7,16 @@ milestone: "M8"
 ui_scope: true
 risk_tags: ["infra", "security", "auth", "data", "migration"]
 ship_parts: ["PR1a", "PR1b", "PR2"]
-workflow_status: "ready-for-review"
+workflow_status: "shipped"
 review_status: ["ceo-reviewed", "eng-reviewed", "adversarial-reviewed", "design-reviewed", "impl-reviewed", "final-reviewed"]
-implementation_status: "ready-for-review"
-shipped_parts: [{"part": "PR1a", "pr": "https://github.com/willdoucet/todo-app/pull/60", "shipped_at": "2026-09-23T16:07:56Z", "commit": "6f0a608"}, {"part": "PR1b", "pr": "https://github.com/willdoucet/todo-app/pull/62", "shipped_at": "2026-09-24T03:39:26Z", "commit": "394dccf"}]
+implementation_status: "shipped"
+completed: "2026-09-26"
+shipped_parts: [{"part": "PR1a", "pr": "https://github.com/willdoucet/todo-app/pull/60", "shipped_at": "2026-09-23T16:07:56Z", "commit": "6f0a608"}, {"part": "PR1b", "pr": "https://github.com/willdoucet/todo-app/pull/62", "shipped_at": "2026-09-24T03:39:26Z", "commit": "394dccf"}, {"part": "PR2", "pr": "https://github.com/willdoucet/todo-app/pull/65", "shipped_at": "2026-09-26T21:12:37Z", "commit": "5a1a81f"}]
 reason: "Final review clean (PR2). Criterion 6 met 2026-09-26: RUNBOOK §6 ran in production (9 refresh tokens revoked, old password refused, new accepted; the access-token half rests on the integration test, since the kept tab was not reloaded first). PR2 also changes infra/release-smoke.py check 9 (exit 1 when a readable restore mechanism is stale and the other is unreadable), live at merge. Ready for /ship."
 reason_by: "operator"
 reason_at: "2026-09-26T20:04:07Z"
-updated_at: "2026-09-26T20:04:07Z"
-pr: "https://github.com/willdoucet/todo-app/pull/62"
+updated_at: "2026-09-26T21:12:37Z"
+pr: "https://github.com/willdoucet/todo-app/pull/65"
 ---
 # Design: M8 — `prod-launch-release`
 

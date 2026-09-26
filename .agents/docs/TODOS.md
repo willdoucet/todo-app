@@ -22,7 +22,7 @@ Edits to synced items still queue push jobs for when the worker returns. The ~59
 **Priority:** P1
 **Depends on:** The Upstash allowance resetting, or a plan upgrade.
 
-## P2 — Run the password-rotation CLI end to end in production (M8 criterion 6, skipped at the PR1b release)  ✅ DONE (2026-09-26)
+## P2 — Run the password-rotation CLI end to end in production (M8 criterion 6, skipped at the PR1b release)  ✅ DONE (M8 PR2, 2026-09-26, https://github.com/willdoucet/todo-app/pull/65)
 **Status:** ✅ DONE 2026-09-26 ~20:00Z (`infra/RUNBOOK.md` execution log): `rotated: user 1; 9 refresh token(s) revoked; session version is now 3`; old password refused, new accepted. The kept tab was not reloaded first (step 1), so production proved the refresh-token half only; the access-token half rests on `test_rotation_swaps_the_password_and_kills_every_session`. The steps below stay as the procedure for the next rotation. Kept as a record; safe to remove on the next TODOS.md prune.
 **What:** Rotate the household password once in production with the M8 CLI and confirm every session dies. This is M8's "Between the PRs" step 9 and success criterion 6, which the operator skipped at the PR1b release (`v1-20260924-f4a6814`, 2026-09-24).
 **Why:** `python -m app.cli.rotate_password` is the only way to change the household password (there is no self-service reset, PRD 5.7). Its tests run on the local stack only. Production has never run it, and neither has the `fly ssh console --select` TTY path the password prompt needs. The first time it runs should not be the day the password leaks.
