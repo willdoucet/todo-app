@@ -282,7 +282,8 @@ ones in `.agents/docs/development-commands.md`; the host-side `infra/tests` suit
 - The Postgres primary stopped when the refresher runs (open question 4) → `read: stale` for one
   or two cycles while the proxy wakes it, no probe failure, no alert if the last-known value is
   fresh; the 2-minute cap absorbs it. The refresher's 30-second read is a steady client, so expect
-  it to keep the primary from idle-stopping at all; PR2 records which happened.
+  it to keep the primary from idle-stopping at all; PR2 records which happened. Observed
+  (M8 PR2, 2026-09-25): it did; no stop since the PR1b release (incident-diagnostics).
   <!-- plan-eng-review · Eng review 4 · harness: claude-code · model: Opus 5 · 2026-09-21 -->
 - Concurrent operator login on `/auth/*` while the smoke script runs → no effect, because check 5
   uses a protected non-`/auth/` route.

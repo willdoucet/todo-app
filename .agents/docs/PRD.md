@@ -655,7 +655,7 @@ Push/PR → GitHub Actions
 - [ ] CD: Auto-deploy to staging on PR merge — **deferred to v1.1**; v1 ships via the M8 manual runbook
 - [ ] CD: Manual promotion to production — the M8 runbook is this step
 - [x] Hosting: Production environment live (2026-05-01)
-- [x] Hosting: Managed PostgreSQL (Fly Postgres)
+- [x] Hosting: PostgreSQL in production (Fly Postgres, the unmanaged Postgres Flex app `mealy-app-prod-db`)
 - [x] Hosting: File storage configured (Cloudflare R2, M7 — cutover 2026-09-11, PR2 #44)
 - [ ] Monitoring: Basic health checks
 - [ ] Monitoring: Error tracking (Sentry or equivalent)
@@ -1026,7 +1026,7 @@ class CalendarEventSource:
 ### v1.0 (Productionization — active)
 
 - [ ] First-party email + password auth for one shared household login (see plan at `.agents/plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md`, milestones M3-M5)
-- [ ] Production deployment on Vercel + Fly.io + Fly managed Postgres + Upstash Redis + Cloudflare R2 (same plan, milestones M2, M6-M8; M6 is residual cleanup and may be skipped)
+- [ ] Production deployment on Vercel + Fly.io + Fly Postgres (unmanaged Flex) + Upstash Redis + Cloudflare R2 (same plan, milestones M2, M6-M8; M6 is residual cleanup and may be skipped)
 
 ### v1.1 (Post-Launch Polish)
 

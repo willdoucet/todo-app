@@ -35,7 +35,10 @@ written; RUNBOOK.md and ops-check.yml name groups, never individual checks.
                                              "unknown", or not a commit SHA
                       jobs-fresh             a /healthz.jobs row stale, or the         healthz_jobs
                                              reading unusable (the contract, item 15)
-    recoverability  9 restore-point          no snapshot or WAL point under 48 h
+    recoverability  9 restore-point          no snapshot or WAL point under 48 h,
+                                             including when one of the two could not
+                                             be read and the other is stale or empty
+                                             (exit 2 only when neither could be read)
     edge            5 origin-lock            direct != 421, or Cloudflare != 401
                       break-glass-off        /healthz.gate_break_glass not false       healthz_gate_break_glass
                     7 vercel-cache-headers   index / SPA route / asset Cache-Control
@@ -976,8 +979,14 @@ def check_restore_point(ctx: Context) -> str:
     detail = "; ".join(notes)
     if any(recent):
         return detail + (f"; also: {'; '.join(tooling)}" if tooling else "")
+    if tooling and not notes:
+        raise Tooling(f"restore point unverified: {'; '.join(tooling)}")
     if tooling:
-        raise Tooling(f"restore point unverified: {'; '.join(tooling)}" + (f" ({detail})" if detail else ""))
+        # One mechanism was read and is stale, empty or off; the other could not be read.
+        # Nothing proves a restore point, so this is production, not tooling (exit 1 covers
+        # "could not be verified"). The cron's read-only token can never read the WAL
+        # listing, so as exit 2 a lost snapshot alerted as "tooling" (final review, M8 PR2).
+        raise CheckFailed(f"no restore point proven newer than 48 h: {detail}; unverified: {'; '.join(tooling)}")
     raise CheckFailed(f"no restore point newer than 48 h: {detail}")
 
 

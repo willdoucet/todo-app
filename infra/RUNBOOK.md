@@ -8,7 +8,7 @@ rollback. It covers only this one type of task. When something is broken, use
 | | |
 |---|---|
 | Owner | willdoucet (the operator; one operator by design) |
-| Last executed | 2026-09-23, `v1-20260923-f0a8d81` (M8 PR1a, with the rollback dry-run; see the execution log) |
+| Last executed | 2026-09-24, `v1-20260924-f4a6814` (M8 PR1b, the first release with a migration; see the execution log) |
 | Estimated duration | 30–45 min: deploy ~5, promote ~2, smoke ~2, manual checks ~10, log ~5 |
 | Risk | Medium. At `web=1` every deploy replaces the only web machine in place, so the API is down for a few seconds |
 | Minimum flyctl | v0.4.102 (`fly version`). The smoke script parses `--json` output that older releases shaped differently |
@@ -28,8 +28,8 @@ git log -1 --format=%cI origin/master
 anywhere (LESSONS.md):
 
 - `FLY_API_TOKEN`: GitHub Actions secret for `ops-check.yml`. It is a `fly tokens create
-  readonly` token (org-scoped, read-only) with a one-year expiry. Created 2026-09-23, before
-  PR1b merged; its first dispatch below still waits for the merge.
+  readonly` token (org-scoped, read-only) with a one-year expiry. Created 2026-09-23 and
+  first dispatched 2026-09-24, after PR1b merged (execution log).
   **Rotate by:** 2027-09-23, the day it expires. To create or rotate it, pipe
   it straight into the secret so it never prints:
   ```bash
@@ -42,21 +42,36 @@ anywhere (LESSONS.md):
   waiting for the schedule (scheduled workflows only fire from the default branch):
   ```bash
   gh workflow run ops-check.yml
-  gh run list --workflow=ops-check.yml --limit 1
+  gh run list --workflow=ops-check.yml --limit 1 --json databaseId,createdAt,status,conclusion
   gh workflow run ops-check.yml -f self_test=true
   ```
-  The first run must be green, and its `[9] restore-point` line must report a WAL backup
-  (`newest WAL backup …` or `WAL backups disabled`) with no `also:` part. Check 9 passes on a
-  recent volume snapshot alone and reports a refused `fly pg backup list` only as `also: …`,
-  so a green run by itself does not prove that read. With that, `[9]` and `[5] origin-lock`
-  prove the token can run `fly volumes snapshots list`, `fly pg backup list` and
-  `fly ips list`; the
-  self-test run must fail, and its run page's error annotations must name `[jobs] jobs-fresh`
-  and read `exit 1 production:` (`gh run view <run id>` lists them). GitHub's failure email
-  carries the run's status, never the log, and its docs do not say whether it includes
-  annotations: record in the execution log whether the email showed those two annotations or
-  only "Process completed with exit code 1", since that is what a real alert will look like. If a read is refused, the token lacks a scope: do not replace it with
-  a deploy-capable token; drop the cron to its credential-free checks instead.
+  A dispatch takes a few seconds to appear, so the listing can still show the previous run:
+  read it only once its `createdAt` is from the last minute, and its result once `status`
+  is `completed`. The first run must be green. Its `PASS [9] restore-point` line then ends in `also: fly pg
+  backup list exited 1: … unauthorized`, and on a **PASS** line with this token that is
+  expected: `fly pg backup list` runs a command on the Postgres VM, which a read-only token
+  cannot do (observed 2026-09-24, run 36058117263). Check 9 passes on a recent volume
+  snapshot alone, so the cron watches only the snapshots. The release smoke from your
+  laptop reads the WAL (base-backup) listing too, but check 9 passes when either mechanism
+  is recent, so nothing yet fails on a stalled WAL archive (TODOS.md → P2 "Continuous
+  backups: the newest recovery point trails by hours…", which also holds the cron-token
+  question). When the snapshot is old or missing, the same text ends a **FAIL** line
+  instead: `no restore point proven newer than 48 h: … unverified: … unauthorized` and
+  `exit 1 production:`, linked to
+  [incident-diagnostics.md → No recent restore point](./incident-diagnostics.md#no-recent-restore-point).
+  That is production, not the token (final review, M8 PR2: it was `exit 2 tooling`, the
+  alert a lost restore point would have sent). So `[9]` proves `fly volumes snapshots list` and `[5] origin-lock`
+  proves `fly ips list`. Any other `also:` text is a tooling failure
+  ([incident-diagnostics.md → Tooling failures](./incident-diagnostics.md#tooling-failures-exit-2)),
+  most likely the token. The self-test run must
+  fail, and its run page's error annotations must name `[jobs] jobs-fresh` and read
+  `exit 1 production:` (`gh run view <run id>` lists them). GitHub's failure email carries
+  the run's status, never the log, and its docs do not say whether it includes annotations.
+  On 2026-09-24 the email showed both annotations (operator-verified). Check that again after
+  a rotation, since the email is what a real alert looks like. If the snapshot read or
+  `fly ips list` is refused, the token lacks a scope: do not replace it with a deploy-capable
+  token; drop the cron to its credential-free checks instead. A refused WAL read alone is not
+  that case.
 - `CLOUDFLARE_API_TOKEN`: local shell only, read-only, used by `infra/cloudflare-drift.py`.
   Zone `mealy.dev` scopes: Zone WAF Read, Transform Rules Read, Zone Settings Read, Bot
   Management Read. Account scope: Access: Apps and Policies Read.
@@ -96,7 +111,23 @@ Every `fly` command needs `-a <app>` or must run from `backend/`. The repo root 
       is **on**. Merged with the first still on, the new frontend goes live ahead of the
       backend. Merged with the second off, the build is stamped with an empty commit and
       smoke check 8 fails. Both settings persist, so after the first release this is a
-      confirmation. If the first setting is unavailable, use §4 instead of step 2.4 below.
+      confirmation. **A toggle takes effect only after Save:** click it, reload the page,
+      and confirm it still reads off (or on). On 2026-09-23 the auto-assign toggle was
+      flipped but not saved, and #60's build went Current at merge. If the first setting is
+      unavailable, use §4 instead of step 2.4 below.
+- [ ] **Who runs the production commands.** If an AI coding agent is guiding the release, it
+      may not be allowed to run them: in auto mode Claude Code refused `fly ssh console`
+      against production on 2026-09-24. **You type every command that changes production**,
+      and paste the output back: `fly deploy` in any form, `fly secrets`, `fly ssh` (it runs
+      anything), `fly machine start`/`stop`/`update`, `vercel promote`, and `git push`. Even
+      an exact allow rule for a deploy ships whatever the working tree holds when it runs,
+      and the agent can edit the tree (for example `GATE_BREAK_GLASS = "1"` in `fly.toml`);
+      a command that reads `$RELEASE` or `$URL` acts on whatever the agent set them to
+      (/final-review, M8 PR2, user decision; it replaces exact rules for these commands).
+      Allow rules are only for named read-only commands (`fly status`, `fly releases`,
+      `fly machines list`, `gh run list`), one exact rule each, never a prefix, removed when
+      the release is logged. After logging it, open the settings file the rules went into
+      and check that they are gone.
 - [ ] Tools: `fly version` ≥ v0.4.102, `gh auth status` ok, `python3 --version` ≥ 3.11,
       `curl`. The Vercel CLI is optional. Its local token has expired before, so run
       `vercel login` first if you use it.
@@ -110,6 +141,12 @@ Every `fly` command needs `-a <app>` or must run from `backend/`. The repo root 
       and untracked files included, while `/healthz` reports whatever `$RELEASE` says, so a
       dirty checkout ships unreviewed code that check 8 then passes as the release. Deploy from
       a clean checkout (a fresh `git worktree add` of `master` if this one holds other work).
+      A new terminal does not have `$RELEASE`, so every command below writes `${RELEASE:?}`
+      and stops with an error instead of running on an empty value. On 2026-09-24 §2 step 4's
+      deployment lookup ran in a fresh shell without it and took the newest deployment, which
+      happened to be the right one. Set it again in each terminal you open, to the SHA this
+      block printed (`RELEASE=<that sha>`). Do not re-run the block there: its `git pull`
+      can move the checkout past the release.
 - [ ] **Tell the household before it feels the release.** Pick a quiet hour. At `web=1` the
       single web machine is replaced in place, and a save made during that window fails with
       an error toast (the change is reverted, not lost silently). If someone is using the
@@ -130,7 +167,7 @@ Stop at the first gate that fails.
 - [ ] **CI is green on the release commit.** A squash merge creates a new commit on
       `master`, and `test.yml` runs again on that push:
       ```bash
-      gh run list --commit "$RELEASE" --json databaseId,workflowName,status,conclusion
+      gh run list --commit "${RELEASE:?}" --json databaseId,workflowName,status,conclusion
       ```
       Expected: `Tests` `completed` / `success`. `cancelled` means a later push to `master`
       superseded the run (the workflow cancels in-progress runs per ref): rerun it with
@@ -143,12 +180,19 @@ Stop at the first gate that fails.
 - [ ] **The most recent `ops-check` run is green and under 48 h old**, if the workflow has
       ever run:
       ```bash
-      gh run list --workflow=ops-check.yml --branch master --limit 1 --json conclusion,createdAt
+      gh run list --workflow=ops-check.yml --branch master --limit 5 --json databaseId,event,status,conclusion,createdAt
       ```
       If `gh` reports that no workflow is named `ops-check.yml`, record
-      `n/a — workflow not yet on default branch` in the log and continue. That is the state
-      until PR1b merges. Once it has run, a red or older run blocks the release: open it,
-      read which check failed, and fix that first. The release is what watches the watcher.
+      `n/a — workflow not yet on default branch` in the log and continue. That was the state
+      until PR1b merged (2026-09-24). Once it has run, a red or older run blocks the release:
+      open it, read which check failed, and fix that first. The release is what watches the
+      watcher. A scheduled run can start hours after its 14:17 UTC slot (the first one ran
+      4 h 10 min late), so go by the newest run's age, not by whether today's has appeared.
+      One red run is not a failure: a `self_test` dispatch (after a token rotation, say) fails
+      by design, and its `exit 1 production:` annotation ends `(self-test: forced failure
+      against a built-in fixture)` (`gh run view <databaseId>`; `event` cannot tell it from a
+      plain dispatch). Skip it, skip a run whose `status` is not `completed`, and judge the
+      newest remaining run.
 - [ ] **List the migrations this release applies, each with its reversibility.** The exact
       list is production's current revision up to the release's head. Production first; this
       prints a revision id and no connection string:
@@ -190,13 +234,26 @@ Stop at the first gate that fails.
    The build argument puts the commit into `/healthz` (from PR1b on; before that the image
    ignores it harmlessly):
    ```bash
-   (cd backend && fly deploy -a mealy-app-prod --build-arg GIT_COMMIT="$RELEASE")
+   : "${RELEASE:?}" && [ "$(git rev-parse HEAD)" = "$RELEASE" ] && [ -z "$(git status --porcelain)" ] \
+     && (cd backend && fly deploy -a mealy-app-prod --build-arg GIT_COMMIT="$RELEASE") 2>&1 | tee -a "${TMPDIR:-/tmp}/fly-deploy-${RELEASE:0:7}.log" \
+     || echo "STOP: this checkout is not a clean \$RELEASE (§0)"
    ```
    The subshell keeps your shell at the repo root, where step 5 runs the smoke script.
+   `tee` keeps the output outside the checkout: the deploy's progress spinner can scroll the
+   `release_command` lines out of the terminal (it did on 2026-09-24). `-a` appends, so a
+   retry keeps the failed attempt's output. The pipeline's exit
+   status is `tee`'s, so read the output, not `$?`. The leading `: "${RELEASE:?}" &&` stops
+   the whole line when `RELEASE` is unset; a `${RELEASE:?}` inside a subshell or `$(…)`
+   stops only that part. The two tests print `STOP` when HEAD is not `$RELEASE` or the tree
+   is not clean: `fly deploy` uploads the working tree while `/healthz` reports `$RELEASE`,
+   so either would ship other code that check 8 then passes as the release (final review,
+   M8 PR2).
    `release_command` runs `alembic upgrade head` against the new image before web takes
    traffic. **If it fails**, the previous image keeps serving: stop here and follow
    [incident-diagnostics.md → Migration failure mid-release](./incident-diagnostics.md#migration-failure-mid-release).
-   Do not roll back. Nothing was released.
+   Do not roll back. Nothing was released. **If §1 listed a migration, prove it landed**
+   rather than reading it off the scrollback: run §1's `alembic current` command again. It
+   must print the release's head, the newest revision you listed.
 3. **Every process group is started.** A deploy updates an already-stopped machine without
    starting it, which is how the worker stayed dead for 103 days:
    ```bash
@@ -205,17 +262,21 @@ Stop at the first gate that fails.
    Expected: every `web`, `worker` and `beat` machine `started`, and every one on the new
    version. Smoke check 2 asserts this again from JSON.
 4. **Promote the frontend.** Vercel built the merge and left it **Staged**. Promote the
-   staged deployment **whose commit SHA equals `$RELEASE`** (`echo ${RELEASE:0:7}`), and
-   only once it is **Ready**. Never "the latest staged": that can be an older leftover, or
+   staged deployment **whose commit SHA equals `$RELEASE`**
+   (`git rev-parse --short=7 "${RELEASE:?}"`), and only once it is **Ready**. Never
+   "the latest staged": that can be an older leftover, or
    a build still running. Dashboard: Deployments → the `master` row with that commit and
    status Ready → ⋯ → **Promote**. Domains move instantly, with no rebuild. Or from the
    CLI (after `vercel login`), taking the deployment's URL from the record Vercel writes to
    GitHub for that commit:
    ```bash
-   URL=$(gh api "repos/willdoucet/todo-app/deployments/$(gh api "repos/willdoucet/todo-app/deployments?sha=$RELEASE" -q '.[0].id')/statuses" -q '.[0].environment_url'); echo "$URL"
-   vercel inspect "$URL" --scope willdoucets-projects     # status must read Ready
-   vercel promote "$URL" --scope willdoucets-projects --yes
+   : "${RELEASE:?}" && URL=$(gh api "repos/willdoucet/todo-app/deployments/$(gh api "repos/willdoucet/todo-app/deployments?sha=$RELEASE" -q '.[0].id')/statuses" -q '.[0].environment_url') || URL=; echo "$URL"
+   vercel inspect "${URL:?}" --scope willdoucets-projects     # status must read Ready
+   vercel promote "${URL:?}" --scope willdoucets-projects --yes
    ```
+   An empty line means GitHub has no Vercel deployment for this commit. A failed lookup's
+   404 body would otherwise land in `URL`; `|| URL=` empties it, so the two `${URL:?}`
+   lines stop.
    A promotion you forget leaves production on the previous bundle. Smoke check 8 catches
    that whenever the release changed `frontend/`: it compares the deployed build's
    `frontend/` with the release's. If Vercel made no deployment for `$RELEASE` (a build
@@ -223,13 +284,13 @@ Stop at the first gate that fails.
    step, and check 8 passes on the previous build.
 5. **Run the smoke script** from the repo root, on the host:
    ```bash
-   python3 infra/release-smoke.py --release-commit="$RELEASE"
+   python3 infra/release-smoke.py --release-commit="${RELEASE:?}"
    ```
    First execution only (PR1a, before PR1b's `/healthz` fields exist), use the skip list.
    Skipped assertions print `skipped`, never `pass`, and check 1 still runs:
    ```bash
    python3 infra/release-smoke.py --only=release,liveness,recoverability,edge \
-     --skip=healthz_jobs,healthz_version,healthz_gate_break_glass --release-commit="$RELEASE"
+     --skip=healthz_jobs,healthz_version,healthz_gate_break_glass --release-commit="${RELEASE:?}"
    ```
    - `exit 0`: continue.
    - `exit 2 tooling:`: the laptop is the problem (flyctl missing, token expired, no
@@ -293,11 +354,14 @@ Stop at the first gate that fails.
          cleanly, on this real route and not only on `/index.html`. That HTML now sits in
          Cloudflare's cache under the old chunk's name, which is why §5.1 purges the cache
          (TODOS.md → "A missing `/assets/*` chunk is answered with a year-cached HTML page").
+   - [ ] **Once, at the first release that includes #64:** run the three-command check in
+         TODOS.md → "Prove at the next release that Fly overwrites a client-sent
+         `Fly-Client-IP`", and record its result in the log row. Then delete this line.
 8. **Tag the release.** The scheme is `v1-<UTC date>-<short sha>`, so releases are
    greppable in `git tag`:
    ```bash
-   TAG="v1-$(date -u +%Y%m%d)-$(git rev-parse --short=7 "$RELEASE")"
-   git tag -a "$TAG" -m "Release $TAG" "$RELEASE" && git push origin "$TAG"
+   TAG="v1-$(date -u +%Y%m%d)-$(git rev-parse --short=7 "${RELEASE:?}")"
+   git tag -a "$TAG" -m "Release $TAG" "${RELEASE:?}" && git push origin "$TAG"
    ```
 9. **Stop the downtime loop, and log the release** in the table at the bottom: date, you,
    the tag, the migration lines from §1, the outcome, the observed downtime in seconds, and
@@ -403,13 +467,16 @@ listing). The rollback is a deploy of the previous image:
    and the deploy aborts on exactly the case it exists for.
 4. Smoke the rolled-back state from the release checkout, not the previous one: the
    previous commit may not carry the script (M8 PR1a's parent does not), and an older copy
-   checks less. The previous image may lack `/healthz` fields, so skip only what it lacks:
+   checks less. The previous image may lack `/healthz` fields, so skip only what it lacks.
+   An image from `v1-20260924-f4a6814` (M8 PR1b) on has all three, so skip nothing:
    ```bash
    git checkout master
-   python3 infra/release-smoke.py --only=liveness,edge --skip=healthz_jobs,healthz_gate_break_glass
+   python3 infra/release-smoke.py --only=liveness,edge
    ```
-   A pre-PR1b image (PR1a's) lacks all three `/healthz` fields, so rolling back to one skips
-   `healthz_version` too: `--skip=healthz_jobs,healthz_version,healthz_gate_break_glass`.
+   A pre-PR1b image (PR1a's `v1-20260923-f0a8d81` or older) lacks all three, so rolling back
+   to one adds `--skip=healthz_jobs,healthz_version,healthz_gate_break_glass`. (Review-implementation,
+   M8 PR2: the default here skipped `jobs` and `gate_break_glass`, which matches no image, and
+   would have skipped the break-glass-off check on every rollback from now on.)
    While the rolled-back image lacks `jobs`, the daily `ops-check` fails naming the missing
    key. That is a correct signal. Roll forward soon, or disable the workflow for the
    duration. Never teach the script to pass on a missing key.
@@ -463,4 +530,6 @@ unsaved form is lost.
 
 | Date (UTC) | Operator | Release | Migrations (id · reversibility) | Outcome | Deploy downtime (s) | Notes |
 |---|---|---|---|---|---|---|
-| 2026-09-23 | willdoucet (run by Claude Code) | `v1-20260923-f0a8d81`: Fly v34, rolled back to v33's image as v35, forward as v36; Vercel `dpl_Gzqsu1SKbRJnVCKGWQKMLUj3uZUD` | none (production at `b7e2c9a4f1d8`, the head) | Pass. Smoke exit 0: 8 passed, 4 skipped (the PR1a list), 1 paused (worker and beat, declared). Cloudflare dashboard 3/3; drift `exit 0: no drift`; manual checks 4/4. Rollback dry-run: rolled-back smoke (liveness, edge) exit 0, 4 passed, 3 skipped; after the roll forward the same result as the release | ~4 each: release 19:50:08–19:50:12, rollback 20:13:45–20:13:49, roll forward 21:50:19–21:50:23 | **CI gate:** `visual-tests` on `f0a8d81` hit its 25-min timeout twice (a Playwright report-server hang after a flaky failure, fixed separately); the operator accepted equivalence: `frontend/`, `backend/`, `infra/`, `.github/` are identical to `91edffa`, green on all five jobs. **Vercel:** #60's merge build went Current at merge (the auto-assign toggle had not been saved), so PR1a's frontend led the backend ~3 h, harmlessly (a meta tag and the build command). **Smoke** ran from the PR1b branch's script, which reads `infra/paused.json`; master's copy fails checks 2 and 4 on the declared pause. `ops-check`: n/a, not yet on the default branch. **R2 upload** read back with boto3 1.43.90 (default checksums). **Procedure fixes (this row's pull request):** the previous release was `91edffa^` = `1087f30`, not `$RELEASE^`, because the release spanned two merges (#60, #61), so the tag, not `^`, names it from now on; Instant Rollback refused `1087f30`'s build (402, Hobby) while `vercel promote` worked both ways, so §5.1 and §5.2 now say Promote; the roll forward needs a second purge; §2 step 4 gained the CLI commands. The backup-restore drill is logged in its own file. |
+| 2026-09-23 | willdoucet (run by Claude Code) | `v1-20260923-f0a8d81`: Fly v34, rolled back to v33's image as v35, forward as v36; Vercel `dpl_Gzqsu1SKbRJnVCKGWQKMLUj3uZUD` | none (production at `b7e2c9a4f1d8`, the head) | Pass. Smoke exit 0: 8 passed, 4 skipped (the PR1a list), 1 paused (worker and beat, declared). Cloudflare dashboard 3/3; drift `exit 0: no drift`; manual checks 4/4. Rollback dry-run: rolled-back smoke (liveness, edge) exit 0, 4 passed, 3 skipped; after the roll forward the same result as the release | ~4 each: release 19:50:08–19:50:12, rollback 20:13:45–20:13:49, roll forward 21:50:19–21:50:23 | **CI gate:** `visual-tests` on `f0a8d81` hit its 25-min timeout twice (a Playwright report-server hang after a flaky failure; not fixed on `master`, TODOS.md P2, corrected in M8 PR2 where this row said "fixed separately"); the operator accepted equivalence: `frontend/`, `backend/`, `infra/`, `.github/` are identical to `91edffa`, green on all five jobs. **Vercel:** #60's merge build went Current at merge (the auto-assign toggle had not been saved), so PR1a's frontend led the backend ~3 h, harmlessly (a meta tag and the build command). **Smoke** ran from the PR1b branch's script, which reads `infra/paused.json`; master's copy fails checks 2 and 4 on the declared pause. `ops-check`: n/a, not yet on the default branch. **R2 upload** read back with boto3 1.43.90 (default checksums). **Procedure fixes (this row's pull request):** the previous release was `91edffa^` = `1087f30`, not `$RELEASE^`, because the release spanned two merges (#60, #61), so the tag, not `^`, names it from now on; Instant Rollback refused `1087f30`'s build (402, Hobby) while `vercel promote` worked both ways, so §5.1 and §5.2 now say Promote; the roll forward needs a second purge; §2 step 4 gained the CLI commands. The backup-restore drill is logged in its own file. |
+| 2026-09-24 | willdoucet (guided by Claude Code; the operator ran every production command) | `v1-20260924-f4a6814` (M8 PR1b, squash of #62): Fly v37 (`registry.fly.io/mealy-app-prod:deployment-01M38VT0SGJF6EHM9Q5J5CQYYT`); Vercel `dpl_AoaGZKAo9i18SMP3vrQBZpxGcTh3`, promoted from a lookup that ran without `$RELEASE` and so took the newest deployment, which was this commit's (check 8 confirmed it) | `1b6b462491fa` (`job_heartbeats`) · additive; `downgrade()` written and tested (`migration-upgrade` CI). Production was at `b7e2c9a4f1d8` | Pass. Smoke `exit 0: 11 passed, 0 skipped, 2 paused (beat, worker declared in infra/paused.json)`; check 8 matched `f4a6814` on both tiers. Cloudflare dashboard and manual checks passed (operator-reported). §6 password rotation not run at the release (the operator's decision); it gets its own row | ~6: 04:47:45–04:47:50Z | **Gates:** CI `Tests` success (run 35953955035); doc-guard passed on #62; `ops-check` n/a (never run); restore point `exit 0` (snapshot 5 h, WAL 11 h). **Deploy:** `fly status` showed web started with 1/1 checks passing, worker and beat stopped (the declared pause). The spinner scrolled the `release_command` lines out of the terminal, so the migration was confirmed from `/healthz` instead: `jobs.read: ok` needs `job_heartbeats` to exist, and `version` read `f4a6814…`. A rollback worktree at the PR1a tag, with the §5.2 command pasted, was ready and not needed. **Finding, the gate's `ip`:** the smoke's direct probe logged `66.241.124.153`, and a `*.fly.dev` curl with a forged `X-Forwarded-For` logged `2a09:8280:1::10e:a0e0:0`, the app's own A and AAAA records; `reason` was right on both. Fixed by #64 (log `Fly-Client-IP`), not yet deployed; §2 step 7 carries its one-time proof. **`ops-check`, first dispatches:** run 36009722470 exited 2 (`fly` not on PATH; fixed by #63); master run 36058117263 green, `exit 0: 7 passed, 0 skipped, 1 paused`; self-test run 36058128975 failed as designed, its annotations naming `[jobs] jobs-fresh` and reading `exit 1 production:`, and **the failure email showed both annotations** (operator-verified, criterion 17). The first scheduled run (36041300063) started 4 h 10 min after its slot and failed on the PATH bug before #63 merged. The master run's `[9]` passed on the snapshot with `also: fly pg backup list exited 1: … unauthorized`: the read-only token cannot exec on the DB VM. **Break-glass** rehearsed in a local `APP_ENV=production` run (criterion 15; incident-diagnostics → Break-glass). **Procedure fixes (M8 PR2):** `${RELEASE:?}` in every command that reads it; `tee` the deploy and confirm the migration with `alembic current`; scheduled runs can be hours late; who runs production commands; §0 Save-then-reload; the `FLY_API_TOKEN` first-run rule for the WAL read. |
+| 2026-09-26 | willdoucet (guided by Claude Code; the operator ran the command) | §6 password rotation only, no deploy (production at `v1-20260924-f4a6814`); web machine `2861e54f9dee48` over `fly ssh console --select` | none | Pass. `rotated: user 1; 9 refresh token(s) revoked; session version is now 3`, then `all sessions revoked; the household must sign in with the new password` (exit 0). Old password refused, new password signs in (operator-reported). M8 criterion 6 | n/a (no deploy) | ~20:00Z (13:00 PDT). **Proven in production:** the `--select` TTY path and the doubled prompt, the absolute interpreter path, 9 live refresh tokens revoked with the session version bumped, and the refresh half: the kept tab was signed out (operator-reported). **Not proven in production:** a still-valid access token's rejection. The kept tab was not reloaded just before the rotation, so its in-memory access token may already have expired. That half rests on `test_rotation_swaps_the_password_and_kills_every_session` (`backend/tests/integration/auth/test_rotate_password.py:42`, a pre-rotation access token gets 401). Next time, follow TODOS.md's steps: reload the kept tab first, then open a new page in it without reloading. |

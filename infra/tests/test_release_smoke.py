@@ -718,6 +718,63 @@ def test_restore_point_unverifiable_is_exit_2_never_pass(smoke):
     routes["fly pg backup"] = done(smoke, "", 1, "Error: unauthorized")
     code, out, _ = run(smoke, routes, "--only=recoverability")
     assert code == 2 and "restore point unverified" in out
+    assert line_for(out, "[9] restore-point").endswith("#tooling-failures-exit-2")
+
+
+# The ops-check token's refused WAL read, as run 36058117263 printed it (2026-09-24).
+CRON_WAL_REFUSED = "Error: failed to exec on VM 6835444b795398: unauthorized"
+
+
+def test_cron_token_a_stale_snapshot_is_production_not_tooling(smoke):
+    """The cron's read-only token can never read the WAL listing. A stale snapshot must still
+    alert as exit 1 linked to No recent restore point, not as exit 2 tooling, or a lost
+    restore point emails as a laptop problem (final review, M8 PR2)."""
+    code, out, _ = recoverability(
+        smoke, [{"id": "vs_1", "status": "created", "created_at": "2026-09-15T08:00:00Z"}],
+        done(smoke, "", 1, CRON_WAL_REFUSED),
+    )
+    assert code == 1
+    line = line_for(out, "[9] restore-point")
+    assert line.startswith("FAIL") and "volume snapshot 6 days old" in line and "unverified" in line
+    assert "unauthorized" in line and line.endswith("#no-recent-restore-point")
+    assert "exit 1 production: [9] restore-point" in out
+
+
+def test_cron_token_no_snapshot_at_all_is_production(smoke):
+    code, out, _ = recoverability(smoke, [], done(smoke, "", 1, CRON_WAL_REFUSED))
+    assert code == 1
+    assert "no volume snapshot" in line_for(out, "[9] restore-point")
+
+
+def test_cron_token_a_fresh_snapshot_passes_and_names_the_refused_read(smoke):
+    code, out, _ = recoverability(
+        smoke, [{"id": "vs_1", "status": "created", "created_at": "2026-09-21T08:00:00Z"}],
+        done(smoke, "", 1, CRON_WAL_REFUSED),
+    )
+    assert code == 0
+    line = line_for(out, "[9] restore-point")
+    assert line.startswith("PASS") and "volume snapshot 9 h old" in line
+    assert "; also: `fly pg backup list` exited 1:" in line and "unauthorized" in line
+
+
+def test_unreadable_snapshots_beside_a_stale_wal_point_is_production(smoke):
+    routes = healthy_routes(smoke)
+    routes["fly volumes list"] = done(smoke, "", 1, "Error: unauthorized")
+    routes["fly pg backup"] = done(smoke, "ID  STATUS  START\n20260914T040000  completed  2026-09-14 04:00:00\n")
+    code, out, _ = run(smoke, routes, "--only=recoverability")
+    assert code == 1
+    line = line_for(out, "[9] restore-point")
+    assert "WAL backup 7 days old" in line and "unverified" in line
+
+
+def test_unreadable_snapshots_with_wal_backups_off_is_production(smoke):
+    routes = healthy_routes(smoke)
+    routes["fly volumes list"] = done(smoke, "", 1, "Error: unauthorized")
+    routes["fly pg backup"] = done(smoke, "", 1, "Error: backups are not enabled")
+    code, out, _ = run(smoke, routes, "--only=recoverability")
+    assert code == 1
+    line = line_for(out, "[9] restore-point")
+    assert "WAL backups disabled" in line and "unverified" in line
 
 
 def test_a_failed_wal_backup_is_not_a_restore_point(smoke):

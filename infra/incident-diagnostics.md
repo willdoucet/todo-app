@@ -8,7 +8,7 @@ the files it links, not here. Releasing is [`RUNBOOK.md`](./RUNBOOK.md). The res
 | | |
 |---|---|
 | Owner | willdoucet |
-| Last reviewed | 2026-09-21 (written for M8 PR1a; never executed, because it is a lookup table) |
+| Last reviewed | 2026-09-25, against the M8 PR1b release `v1-20260924-f4a6814` (written 2026-09-21 for PR1a; never executed, because it is a lookup table) |
 | Plan | `.agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md` (M8) |
 
 Never run a bare `env` or `printenv` while diagnosing, on any machine (LESSONS.md). Filter on
@@ -60,8 +60,9 @@ a scanner hitting the origin IP can fill that short window with noise. This is a
      beat.
   2. `worker` and `beat` carry `[[restart]] policy = "always"`. If one stopped anyway, read
      why before starting it: `fly machine status <id> -a mealy-app-prod` (its events).
-  3. Re-run `python3 infra/release-smoke.py --only=liveness` and confirm it exits 0. Until
-     PR1b is live, `/healthz` has no `jobs` key, so add `--skip=healthz_jobs`.
+  3. Re-run `python3 infra/release-smoke.py --only=liveness` and confirm it exits 0. On an
+     image older than `v1-20260924-f4a6814` (after a rollback), `/healthz` has no `jobs` or
+     `version` key, so add `--skip=healthz_jobs,healthz_version`.
 
 ## Machine counts drifted
 
@@ -223,7 +224,7 @@ tell the checks apart.
   | `origin_verify_secret_empty` | empty `ORIGIN_VERIFY_SECRET` at request time | **no.** Production refuses to boot below 32 characters. Tests only |
 
   Do not wait for `origin_verify_secret_empty`; it cannot appear. `host_absent` only
-  appears for a malformed `Host`. Before PR1b the gate logs
+  appears for a malformed `Host`. An image older than `v1-20260924-f4a6814` logs
   nothing, and the two drift cases look identical from outside.
 - **Recovery:** the ordered steps in
   [`cloudflare-state.md` → Transform Rules — origin lock](./cloudflare-state.md#transform-rules--origin-lock-modify-request-header).
@@ -247,8 +248,9 @@ either: it also disables fail-closed secret validation and re-derives CORS.
 - **Mode A: Cloudflare's proxy or WAF is degraded, and DNS still resolves.** Grey-clouding
   the records sends traffic straight to Fly and Vercel. There is then no Transform Rule, so
   no `X-Origin-Verify`, and the gate 421s everything unless the flag is on.
-  - **Status: not available until PR1b is deployed.** The `GATE_BREAK_GLASS` flag ships in
-    PR1b. Against a PR1a image, `-e GATE_BREAK_GLASS=1` is a no-op.
+  - **Status: available since `v1-20260924-f4a6814` (2026-09-24).** The flag shipped in
+    M8 PR1b. After a rollback to an older image (PR1a's `v1-20260923-f0a8d81` or earlier),
+    `-e GATE_BREAK_GLASS=1` is a no-op.
   - **Blast radius while it is on.** There is no WAF rate limit on `/auth/*`, so argon2 on a
     1 GB web VM can be DoS'd by anyone who finds the origin. And `resolve_client_ip` trusts
     the attacker-supplied `CF-Connecting-IP`, so auth logs can be forged. Keep the flag's
@@ -275,9 +277,11 @@ either: it also disables fail-closed secret validation and re-derives CORS.
     git checkout <running-release-tag>
     (cd backend && fly deploy -a mealy-app-prod --image <current-ref>)
     ```
-    **The last step is always** to confirm the flag is off and the lock holds:
+    **The last step is always** to confirm the flag is off and the lock holds, from
+    `master`: the tag's copy of the script may be older and check less (RUNBOOK §5.2 step 4):
     ```bash
     curl -s https://api.mealy.dev/healthz        # expect "gate_break_glass": false
+    git checkout master
     python3 infra/release-smoke.py --only=edge   # expect exit 0; check 5 direct = 421
     ```
     If `gate_break_glass` is still `true`, the `-e` value stuck as a machine-level env. Do
@@ -293,6 +297,41 @@ either: it also disables fail-closed secret validation and re-derives CORS.
     `/healthz.gate_break_glass` is false *and* that the direct-to-origin probe still 421s.
     `fly secrets list -a mealy-app-prod` must never show `GATE_BREAK_GLASS`.
   - **Rehearse it** only in a local `APP_ENV=production` compose run, never in production.
+    A throwaway `api` container on port 8099 with throwaway secrets; the dev API on 8000 is
+    untouched. From `backend/`, one block runs all three flag values. It removes a leftover
+    container first, because one would keep answering on 8099 with its own flag:
+    ```bash
+    for FLAG in 0 1 true; do
+      echo "== GATE_BREAK_GLASS=$FLAG"; OV=$(openssl rand -hex 32)
+      docker rm -f bg-rehearsal >/dev/null 2>&1
+      docker-compose run -d --name bg-rehearsal -p 8099:8000 \
+        -e APP_ENV=production -e PUBLIC_API_HOST=api.mealy.dev -e CORS_ALLOW_ORIGINS=https://mealy.dev \
+        -e STORAGE_BACKEND=local -e GATE_BREAK_GLASS="$FLAG" -e ORIGIN_VERIFY_SECRET="$OV" \
+        -e JWT_SECRET_KEY="$(openssl rand -hex 32)" -e HOUSEHOLD_ACCESS_KEY="$(openssl rand -hex 32)" \
+        api uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*' >/dev/null
+      n=0; until curl -s -o /dev/null localhost:8099/healthz; do   # uvicorn takes a few seconds
+        n=$((n+1)); [ "$n" -gt 30 ] && { docker logs bg-rehearsal 2>&1 | tail -20; break; }; sleep 1
+      done
+      curl -s localhost:8099/healthz; echo                              # "gate_break_glass"
+      curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: api.mealy.dev' localhost:8099/auth/status
+      curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: api.mealy.dev' -H "X-Origin-Verify: $OV" localhost:8099/auth/status
+      curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: mealy-app-prod.fly.dev' localhost:8099/auth/status
+      docker logs bg-rehearsal 2>&1 | grep '"event": "host_gate"'
+      docker rm -f bg-rehearsal >/dev/null
+    done
+    ```
+    A container that does not answer within 30 s prints its last log lines, and its `curl`
+    lines then read `000`. Expected, per flag, in the order of the three `curl` status lines:
+
+    | Flag | `gate_break_glass` | No header | Right header | `*.fly.dev` Host |
+    |---|---|---|---|---|
+    | `0` | `false` | 421, `origin_verify_absent` | 200 | 421, `host_mismatch` |
+    | `1` | `true` | 200, logged `outcome="bypassed"` | 200, also `bypassed` | 421, `host_mismatch` |
+    | `true` | `false` (the parse is strict) | 421 | 200 | 421 |
+
+    Last rehearsed 2026-09-24 (M8 criterion 15) and again 2026-09-25, with those results
+    (all three flags re-run from this block by review-implementation, M8 PR2; the block
+    became one loop in /final-review, M8 PR2, and was re-run with the same results).
 - **Mode B: Cloudflare DNS itself is down. Accepted risk for v1.** Neither hostname
   resolves, and grey-clouding does not help, because the records are still Cloudflare's
   DNS. The only reachable name is `mealy-app-prod.fly.dev`, which the `Host` check rejects.
@@ -312,8 +351,8 @@ limit on `/auth/*`.
 - **The trap:** the documented fallback, grey-clouding the proxy so traffic goes straight to
   Fly and Vercel, **defeats itself on its own**. It removes the Transform Rule, so the gate
   421s every request, and it removes the `/auth/*` rate limit. Grey-cloud only together
-  with the break-glass flag, and only in Mode A (previous entry). Before PR1b is deployed,
-  there is no working fallback for the API. Wait.
+  with the break-glass flag, and only in Mode A (previous entry). On an image older than
+  `v1-20260924-f4a6814` there is no working fallback for the API. Wait.
 
 ## No recent restore point
 
@@ -328,17 +367,28 @@ limit on `/auth/*`.
   Always pass `-a mealy-app-prod-db`. From `backend/`, flyctl infers `mealy-app-prod` from
   `fly.toml` and fails with "volume does not belong to app". `fly volumes list` hides
   detached volumes; add `--all` to see an outgoing one.
+- **Not this entry: a passing `[9]` in `ops-check` that ends in `also: fly pg backup list
+  exited 1: … unauthorized`.** That is expected on every scheduled run. `fly pg backup list`
+  runs a command on the Postgres VM, which the cron's read-only `FLY_API_TOKEN` cannot do, so
+  the cron sees only the volume snapshots, and only a smoke run from your laptop reads the
+  WAL backups (RUNBOOK header → `FLY_API_TOKEN`). The consequence: if the snapshots stop,
+  the cron fails `[9]` (`no restore point proven newer than 48 h: … unverified: …
+  unauthorized`, exit 1) without knowing whether the WAL backups are still recent. **That
+  line is this entry.** Read `fly pg backup list -a mealy-app-prod-db` from your laptop
+  before assuming both are gone. Any other `also:` text is a real tooling failure. And no
+  check yet fails on a stalled WAL archive
+  beside a fresh snapshot, not even at release: check 9 passes when either mechanism is
+  recent (TODOS.md → P2 "Continuous backups: the newest recovery point trails by hours…").
 - **The usual cause: the database moved hosts, and the snapshot history did not follow.**
   A Fly host migration creates a new volume in a new zone, marks the old one
   `pending_destroy`, keeps the data, and resets the snapshot timeline to zero. Nothing warns
   you. `Scheduled snapshots: true` means only that the daily cycle will begin again. Found
   2026-09-12, when production was running with no restore point at all.
 - **Recovery:**
-  1. Confirm continuous backups are on. If `fly pg backup list` says they are not enabled,
-     enable them:
-     ```bash
-     fly pg backup enable -a mealy-app-prod-db
-     ```
+  1. Confirm continuous backups are on. If `fly pg backup list -a mealy-app-prod-db` says
+     they are not enabled, enable them with the three steps in
+     [`backup-restore-drill.md` §0](./backup-restore-drill.md#0-before-the-drill-is-there-anything-to-restore-item-12):
+     `fly pg backup enable` alone leaves the archive secrets staged and not applied.
   2. Wait for the first scheduled snapshot (daily) or the first WAL backup, and re-run
      `python3 infra/release-smoke.py --only=recoverability`.
   3. Treat "the volume id changed" as a backup incident. Record the gap, meaning the time
@@ -459,10 +509,29 @@ applies. It is the one path in this milestone that can lose real data.
   10 minutes later, `start starting proxy`, every hour. The Fly proxy wakes a machine that
   idled out. It is not yet known whether this is deliberate or a default that arrived with
   the host migration.
+- **Observed 2026-09-23 to 2026-09-25: it no longer happens, because the app keeps the
+  primary busy.** On 2026-09-23 the machine still stopped about an hour after each wake: it
+  started at 21:50:03Z with that day's roll-forward deploy and stopped at 22:50:05Z
+  (`exit_code=0`, `requested_stop=false`). The M8 PR1b release woke it at 2026-09-24T04:45:25Z,
+  and it has not stopped since. Read on 2026-09-25 at 03:17Z, it was still `started` with no
+  later event:
+  ```bash
+  fly machines list -a mealy-app-prod-db                  # the machine id; a host migration changes it
+  fly machine status <id> -a mealy-app-prod-db            # the Event Logs table. Not -d, which prints the config
+  ```
+  The web process's 30-second `job_heartbeats` read (from PR1b) is the only new steady
+  client, because the worker and beat were paused throughout, so it is what holds the
+  primary awake. The 512 MB database machine now runs around the clock: that is the cost of
+  the reading. Whether the idle stop was a deliberate default no longer matters while web
+  reads every 30 s, so it was not investigated further.
+- **If the hourly stop comes back,** first check whether web has stopped reading, the
+  likeliest cause: web is down, or it runs an image older than `v1-20260924-f4a6814` (a
+  rollback). `curl -s https://api.mealy.dev/healthz` and look at `jobs.read`. What stops
+  the machine is not confirmed (the proxy's idle stop, or Postgres Flex scaling to zero),
+  so if web is reading, read the machine's events above before assuming either.
 - **What it can cause:** connection errors that look like something else. `pool_pre_ping`
   (PR #30) absorbs most of them. Smoke check 4 can time out while the primary wakes: wait
-  and retry once. From PR1b the web process reads `job_heartbeats` every 30 s, which will
-  probably keep the primary awake; PR2 records which happened.
+  and retry once.
 
 ## Tooling failures (exit 2)
 
@@ -480,8 +549,11 @@ applies. It is the one path in this milestone that can lose real data.
 - "did not print JSON" or "shape changed?": flyctl's output changed. Capture the new
   output, redact it, update `infra/tests/fixtures/`, and fix the parser. Never loosen a
   check until it passes.
-- "restore point unverified": at least one restore mechanism could not be queried. It is
-  never a pass.
+- "restore point unverified": neither restore mechanism could be queried, most likely the
+  token (RUNBOOK header → `FLY_API_TOKEN`). It is never a pass. When one could be read and
+  is stale, empty or off, check 9 fails instead (exit 1, No recent restore point), even if
+  the other could not be read: the cron's token can never read the WAL listing (final
+  review, M8 PR2).
 - Cloudflare drift script: `CLOUDFLARE_API_TOKEN` is unset, or lacks a scope listed in the
   RUNBOOK header.
 - `infra/paused.json` does not parse, declares a group other than worker or beat, or an
