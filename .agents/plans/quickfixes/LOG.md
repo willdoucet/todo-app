@@ -125,3 +125,12 @@
 - Tests: test_host_gate.py::test_gate_ip_is_fly_client_ip_never_a_forwarded_entry (red first: logged `203.0.113.9`), plus the `"unknown"` fallback, last-copy and 128-cap tests; full backend suite 1059 passed, 3 skipped; two mutation checks each red on their own test; real uvicorn with `--proxy-headers --forwarded-allow-ips=*` printed the `Fly-Client-IP` value while its access line showed the forged `6.6.6.6`. Unproven until the next release: that Fly overwrites a client-sent `Fly-Client-IP` (TODOS.md P2 check, also in the PR body)
 - Docs: updated 4 docs (BACKEND_STRUCTURE Production host gate, REVIEW_CHECKLIST FastAPI, LESSONS Bug Log + host-header rule bullet, TODOS release check)
 - Branch: quickfix/gate-log-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/64
+
+## 2026-09-28 — release-20260928-fly-client-ip
+- Source: free text (the first release to include #64, and TODOS.md P2 "Prove at the next release that Fly overwrites a client-sent `Fly-Client-IP`")
+- What: record release `v1-20260928-5825531` in the RUNBOOK execution log, close the `Fly-Client-IP` P2, drop the "unproven" sentences, and warn that a doubled paste of the deploy line deploys twice
+- Why: #64 was merged but undeployed; the release ran today and the forged-`Fly-Client-IP` probe logged the caller's real address, so Fly overwrites a client-sent copy
+- Files: infra/RUNBOOK.md, .agents/docs/TODOS.md, .agents/docs/BACKEND_STRUCTURE.md, .agents/docs/LESSONS.md, the v1-productionization epic
+- Tests: `python3 -m pytest infra/tests -q` 170 passed (RUNBOOK anchor links); release smoke `exit 0: 11 passed, 0 skipped, 2 paused`, check 8 at `5825531` on both tiers after the promote; the doubled-paste behavior checked with a stand-in in bash and zsh
+- Docs: updated 3 docs (BACKEND_STRUCTURE Production host gate, LESSONS host-header rule, TODOS P2); every path exempt from the doc map
+- Branch: quickfix/release-20260928-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/66
