@@ -1,0 +1,16 @@
+{
+  "branch": "quickfix/release-20260928-fly-client-ip",
+  "created_at": "2026-09-28T20:22:35Z",
+  "implementation_status": "implementing",
+  "key": "quickfix:release-20260928-fly-client-ip",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Record release v1-20260928-5825531 and the Fly-Client-IP proof",
+  "updated_at": "2026-09-28T20:22:35Z",
+  "workflow_status": "implementing"
+}

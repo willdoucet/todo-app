@@ -109,8 +109,9 @@ The criteria above are kept as written. This records what met each one, per the 
   before M8.
 - **The host gate records which check rejected a request.** One `app.gate` WARNING per
   rejection names one of six reasons, never the secret, and the 421 body is byte-identical
-  across them (PR1b). The logged `ip` is `Fly-Client-IP` since #64, which is not yet
-  deployed; TODOS.md P2 proves it at the next release.
+  across them (PR1b). The logged `ip` is `Fly-Client-IP` since #64, deployed with release
+  `v1-20260928-5825531`, where a forged copy was shown to be overwritten by Fly's proxy
+  (2026-09-28, RUNBOOK execution log).
 
 ## v1.1 (ops) scope contract
 
