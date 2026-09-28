@@ -1,8 +1,9 @@
 {
   "branch": "prod-launch-release",
-  "commit": "394dccf",
+  "commit": "5a1a81f",
+  "completed": "2026-09-26",
   "created_at": "2026-09-11T22:37:41Z",
-  "implementation_status": "partially-shipped",
+  "implementation_status": "shipped",
   "key": "plan:prod-launch-release",
   "kind": "plan",
   "milestone": "M8",
@@ -10,10 +11,10 @@
   "parent_epic": "v1-productionization",
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md",
-  "pr": "https://github.com/willdoucet/todo-app/pull/62",
-  "reason": "PR1b shipped as #62. Merge it, then run Between the PRs steps 7-11 before PR2. Step 7: deploy per infra/RUNBOOK.md, listing migration 1b6b462491fa as additive and reversible, with the rollback command already pasted. Step 8: run the full release-smoke; record PAUSE as PAUSE while infra/paused.json declares the worker and beat. Step 9: run rotate_password end to end. Step 10: dispatch ops-check.yml, then self_test; check its error annotations and record what the email showed. Step 11: rehearse GATE_BREAK_GLASS in local compose only. At the release, also verify the gate's logged ip is Fly's proxy hop. Then /execute-plan runs PR2.",
-  "reason_at": "2026-09-24T03:39:26Z",
-  "reason_by": "ship",
+  "pr": "https://github.com/willdoucet/todo-app/pull/65",
+  "reason": "Final review clean (PR2). Criterion 6 met 2026-09-26: RUNBOOK §6 ran in production (9 refresh tokens revoked, old password refused, new accepted; the access-token half rests on the integration test, since the kept tab was not reloaded first). PR2 also changes infra/release-smoke.py check 9 (exit 1 when a readable restore mechanism is stale and the other is unreadable), live at merge. Ready for /ship.",
+  "reason_at": "2026-09-26T20:04:07Z",
+  "reason_by": "operator",
   "registry_version": 3,
   "review_status": [
     "ceo-reviewed",
@@ -35,10 +36,16 @@
       "part": "PR1b",
       "pr": "https://github.com/willdoucet/todo-app/pull/62",
       "shipped_at": "2026-09-24T03:39:26Z"
+    },
+    {
+      "commit": "5a1a81f",
+      "part": "PR2",
+      "pr": "https://github.com/willdoucet/todo-app/pull/65",
+      "shipped_at": "2026-09-26T21:12:37Z"
     }
   ],
   "task_id": null,
   "title": "M8 — prod-launch-release",
-  "updated_at": "2026-09-24T03:39:26Z",
-  "workflow_status": "partially-shipped"
+  "updated_at": "2026-09-26T21:12:37Z",
+  "workflow_status": "shipped"
 }

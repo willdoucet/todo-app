@@ -104,11 +104,16 @@ state and procedure in the repo rather than in someone's memory.
       through on it: `curl -sS https://mealy-app-prod.fly.dev/healthz`.
 - [x] `fly scale show -a mealy-app-prod` lists exactly one `beat` machine (the
       `fly.toml` singleton invariant).
-- [ ] `fly status -a mealy-app-prod` shows **every** process group `started`.
+- ~~`fly status -a mealy-app-prod` shows **every** process group `started`.
       A deploy updates a machine that was already stopped without starting it,
       so `web` can look perfectly healthy while `worker` or `beat` is dead.
       Added after the 2026-09-11 run, where this check would have caught a
-      worker that had been stopped since at least the end of May.
+      worker that had been stopped since at least the end of May.~~
+      **Struck, not ticked (2026-09-25, M8 PR2).** `git log -S` places this
+      box in `651ff27` (#49, 15:07 PDT), after this runbook's only execution
+      (`3f14222`, #45, 13:12 PDT), so it never had a run to belong to. Its
+      substance lives on as `infra/release-smoke.py` check 2 and
+      `infra/RUNBOOK.md` §2 step 3.
 - [x] **Smoke freeze:** do NOT create real household uploads until the checks
       below pass. Use one throwaway image you are willing to delete.
 
@@ -199,7 +204,8 @@ If you must roll back by image, add the flag explicitly:
       `Abandoned-upload sweep: deleted N unreferenced assets` line only appears
       when there is something to reclaim (`sweep_abandoned_uploads` in
       `app/services/asset_lifecycle.py` returns early otherwise), so its
-      absence proves nothing.
+      absence proves nothing. **Still open, re-recorded 2026-09-25** (execution
+      log).
 
 ---
 
@@ -207,4 +213,4 @@ If you must roll back by image, add the flag explicitly:
 
 | Date | Operator | Outcome | Notes |
 |---|---|---|---|
-| 2026-09-11 | willdoucet | Pass | Cutover 10:49 PDT (17:49 UTC), PR #44 merged 10:48 PDT. Every pre-cutover gate and smoke check passed; private media arrived as `cache-control: private, no-cache` with `cf-cache-status: BYPASS`. Browser Cache TTL changed from 4 hours to "Respect Existing Headers" before the deploy. Access Application 1 removed the same day; post-teardown checks passed. `fly scale show` confirmed one beat machine. **The sweep check found the `worker` machine stopped** — only beat's scheduling line appeared at 20:07 UTC. It had been stopped since at least the end of May (32,136 scheduled jobs queued in Upstash, ~103 days), and the cutover deploy updated it without starting it. Queue cleared and the machine started the same day; hardening in quickfix `worker-outage-hardening`. Still open: the sweep's worker `succeeded` line. |
+| 2026-09-11 | willdoucet | Pass | Cutover 10:49 PDT (17:49 UTC), PR #44 merged 10:48 PDT. Every pre-cutover gate and smoke check passed; private media arrived as `cache-control: private, no-cache` with `cf-cache-status: BYPASS`. Browser Cache TTL changed from 4 hours to "Respect Existing Headers" before the deploy. Access Application 1 removed the same day; post-teardown checks passed. `fly scale show` confirmed one beat machine. **The sweep check found the `worker` machine stopped** — only beat's scheduling line appeared at 20:07 UTC. It had been stopped since at least the end of May (32,136 scheduled jobs queued in Upstash, ~103 days), and the cutover deploy updated it without starting it. Queue cleared and the machine started the same day; hardening in quickfix `worker-outage-hardening`. Still open: the sweep's worker `succeeded` line. **Re-recorded 2026-09-25 (M8 PR2): still open.** No release since has been able to close it: the worker and beat have been paused on purpose since 2026-09-23 at the Upstash request cap, so no sweep runs. It closes with TODOS.md → P1 "Resume the Celery worker and beat", whose step 5 checks a `succeeded` line for every beat task, this sweep included. The unchecked `fly status` box above is struck, not ticked: it postdates this run. |

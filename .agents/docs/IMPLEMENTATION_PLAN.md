@@ -46,7 +46,7 @@
    - Notifications/reminders
 
 2. **Active work**
-   - **Phase 2 — v1 Productionization** (epic `v1-productionization`): M7 private object storage on Cloudflare R2 shipped 2026-09-11 (PR1 #41, PR2 #44; cutover the same day); M8 launch runbook is next. The mealboard overhaul that used to sit here shipped in April (Phases 3.5–3.9 below).
+   - **Phase 2 — v1 Productionization** (epic `v1-productionization`): M7 private object storage on Cloudflare R2 shipped 2026-09-11 (PR1 #41, PR2 #44; cutover the same day). M8, the launch release, shipped 2026-09-26 in three parts: PR1a (#60, runbooks and smoke tooling) and PR1b (#62, gate logging, rotation CLI, job health), released 2026-09-23 and 2026-09-24, and PR2 (#65, evidence, corrections, the v1.1 (ops) scope contract). What remains is the [v1.1 (ops) scope](#v11-ops-scope-in-gated-out) below. The mealboard overhaul that used to sit here shipped in April (Phases 3.5–3.9 below).
 
 3. **Polish Items**
    - Loading states
@@ -144,7 +144,7 @@
 
 ## 3. Phase 2: v1 Productionization
 
-**Status:** in-progress (6 of 8 milestones shipped, 1 subsumed) · **Epic:** [v1-productionization](../plans/epics/v1-productionization/v1-productionization-epic-20260421-182714.md) · **Rationale and reviews:** [prod-contract-freeze plan](../plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md)
+**Status:** shipped 2026-09-26 (7 of 8 milestones shipped, 1 subsumed) · **Epic:** [v1-productionization](../plans/epics/v1-productionization/v1-productionization-epic-20260421-182714.md) · **Rationale and reviews:** [prod-contract-freeze plan](../plans/features/prod-contract-freeze/prod-contract-freeze-plan-20260421-182714.md)
 
 **Goal:** Take the repo from local-only `docker-compose` dev state to a secure v1 production deployment.
 
@@ -155,7 +155,7 @@
 
 - Frontend: Vercel SPA at `mealy.dev`
 - Backend: Fly.io with `web` + `worker` + `beat` process groups at `api.mealy.dev`
-- Database: Fly managed Postgres
+- Database: Fly Postgres, the unmanaged Postgres Flex app `mealy-app-prod-db` (`flyio/postgres-flex:17.2`). Corrected in M8 PR2: it was never Fly's Managed Postgres product
 - Broker/result backend: Upstash Redis (TLS: `rediss://`)
 - File storage: Cloudflare R2 (single provider — no S3 fallback)
 - Tenancy: single-tenant per household (one deployment per family)
@@ -173,16 +173,15 @@
 | M5 | Auth enforcement: `protected` APIRouter + frontend route protection behind the edge gate (PR1), remove `/plumbing-test*` and the CF bypass application (PR2). The StaticFiles `/uploads` mount cannot be gated by the router, so CF Access Application 1 stays load-bearing until M7. | plan | shipped | `prod-auth-enforcement` | [plan](../plans/features/prod-auth-enforcement/prod-auth-enforcement-plan-20260504-213635.md) · [plain-English summary](../../todo-app-notes/DevOps/Learning/M5%20Auth%20Enforcement%20-%20Plain%20English%20Summary.md) | 2026-05-15 (#34, #36) |
 | M6 | Config health: residual localhost cleanup | quickfix | subsumed | `prod-config-health` | none; M4's API-client centralization and M2's env-driven CORS made it empty. One hardening shipped: `apiBase.js` throws on a production build with `VITE_API_BASE_URL` unset. | 2026-05-18 (#38) |
 | M7 | R2 storage: storage abstraction, backend-proxied uploads with compensating R2+DB write, UUID-keyed objects, private reads with first-party cookie auth, stock icons through the same proxy, `/uploads` StaticFiles mount removed. PR1 (foundation: storage seam, assets manifest, upload hardening, lifecycle hooks, sweep) #41; PR2 (R2 enablement, cookie read-proxy, ETag/304, mount removal, fail-closed boot, cutover runbook) #44 — stacked on the docs audit #43. Exit item done 2026-09-11: the cutover smoke checks passed and the operator tore down Cloudflare Access Application 1 (`infra/r2-cutover-runbook.md` execution log). | plan | shipped | `prod-r2-storage` | [plan](../plans/features/prod-r2-storage/prod-r2-storage-plan-20260715-201232.md) · [plain-English summary](../../todo-app-notes/DevOps/Learning/M7%20R2%20Storage%20-%20Plain%20English%20Summary.md) | PR1 2026-09-09 (#41) · PR2 2026-09-11 (#44) |
-| M8 | Launch release: manual release runbook committed (`infra/RUNBOOK.md`); smoke + rollback checklists; operator password-rotation CLI (via `fly ssh console`); backup-restore dry-run against a scratch Fly Postgres. **CEO review 2026-09-12 (SELECTIVE EXPANSION) added four items:** a scheduled `ops-check.yml` that runs the smoke script's liveness/recoverability subset between releases (both real incidents fell through the gap between releases); `/healthz` reports the deployed commit so the backend deploy is verifiable like the frontend; the release doc is named `RUNBOOK.md` so REVIEW_CHECKLIST's two existing citations resolve, and each release lists its migration with its reversibility; and background-job staleness is surfaced in Settings next to the iCloud dot — which flips `ui_scope` to true and makes a design review a required gate. Two criteria added 2026-09-11 from the origin-lock rollout: (a) **process-group counts reconciled, not just checked** — `fly scale show` must agree with `fly.toml` and the docs, and production runs `web=2` today rather than the assumed `web=1` (`worker=1`, `beat=1` correct; nothing pins the count, since `min_machines_running = 1` is a floor not a cap), so M8 either scales web back to 1 or adopts 2 deliberately and updates `fly.toml` + TECH_STACK; `beat=1` stays invariant or the iCloud sync double-fires. (b) **the production host gate logs which check rejected a request** (host vs origin-verify, absent vs mismatched) — never the secret value, 421 response body unchanged; today a drifted secret and a mis-deployed Cloudflare rule are indistinguishable to the operator, which cost a production experiment during the rollout | plan | implementing | `prod-launch-release` | [plan](../plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md) · PR1a: https://github.com/willdoucet/todo-app/pull/60 · PR1b: https://github.com/willdoucet/todo-app/pull/62 | — |
+| M8 | Launch release: manual release runbook committed (`infra/RUNBOOK.md`); smoke + rollback checklists; operator password-rotation CLI (via `fly ssh console`); backup-restore dry-run against a scratch Fly Postgres. **CEO review 2026-09-12 (SELECTIVE EXPANSION) added four items:** a scheduled `ops-check.yml` that runs the smoke script's liveness/recoverability subset between releases (both real incidents fell through the gap between releases); `/healthz` reports the deployed commit so the backend deploy is verifiable like the frontend; the release doc is named `RUNBOOK.md` so REVIEW_CHECKLIST's two existing citations resolve, and each release lists its migration with its reversibility; and background-job staleness is surfaced in Settings next to the iCloud dot — which flips `ui_scope` to true and makes a design review a required gate. Two criteria added 2026-09-11 from the origin-lock rollout: (a) **process-group counts reconciled, not just checked** — `fly scale show` must agree with `fly.toml` and the docs, and production runs `web=2` today rather than the assumed `web=1` (`worker=1`, `beat=1` correct; nothing pins the count, since `min_machines_running = 1` is a floor not a cap), so M8 either scales web back to 1 or adopts 2 deliberately and updates `fly.toml` + TECH_STACK; `beat=1` stays invariant or the iCloud sync double-fires. (b) **the production host gate logs which check rejected a request** (host vs origin-verify, absent vs mismatched) — never the secret value, 421 response body unchanged; today a drifted secret and a mis-deployed Cloudflare rule are indistinguishable to the operator, which cost a production experiment during the rollout | plan | shipped | `prod-launch-release` | [plan](../plans/features/prod-launch-release/prod-launch-release-plan-20260911-152356.md) · PR1a: https://github.com/willdoucet/todo-app/pull/60 · PR1b: https://github.com/willdoucet/todo-app/pull/62 · PR2: https://github.com/willdoucet/todo-app/pull/65 | PR1a 2026-09-23 (#60) · PR1b 2026-09-24 (#62) · PR2 2026-09-26 (#65) |
 
-### Explicitly deferred to v1.1
+### v1.1 (ops) scope: in, gated, out
 
-- `.github/workflows/deploy.yml` as an approval-gated release workflow — v1 uses the manual runbook from M8 instead. Running the runbook 2-3 times by hand surfaces real procedure gaps that a YAML workflow would otherwise hide.
-- Vercel PR preview deployments — preview URLs run on `*.vercel.app`, which cannot receive the `__Host-refresh` cookie scoped to `api.mealy.dev`. Previews would degrade to unauthenticated CSS smoke-checks only.
-- `visual-tests` promoted to a required check on `master` (stays informational until soaked).
-- Sentry / structured JSON logging / app-layer rate limiting beyond the M2 Cloudflare edge rule. (M8's single host-gate rejection log line is operability on an existing security gate, not this broader story.)
-- Password-rotation CLI exposed as a `workflow_dispatch` action (M8 ships the CLI; `fly ssh console` is enough for v1).
-- Any other hardening the first few releases reveal is actually necessary.
+Decided in M8 PR2 (2026-09-25) as the epic's [v1.1 (ops) scope contract](../plans/epics/v1-productionization/v1-productionization-epic-20260421-182714.md#v11-ops-scope-contract), which holds each row's reason and where it is tracked. "v1.1 (ops)" is not PRD §11's product v1.1.
+
+- **In:** app-layer rate limiting on `/auth/login` with the `/auth/login` burst test; structured logs for `/auth/*` and protected-route 401s; the continuous-backup recovery-point lag and a real WAL check (`archive_timeout`, check 9 asserting continuous backups on their own, then a cron that can read them); the `vercel.json` fix for a missing chunk served as year-cached HTML.
+- **Gated:** `.github/workflows/deploy.yml` as an approval-gated release workflow, once one release runs the manual runbook with no procedure fix; `visual-tests` as a required check on `master`, once its two known flakes are fixed and ten runs pass in a row.
+- **Out:** Vercel PR preview deployments (`*.vercel.app` cannot receive the `__Host-refresh` cookie); the password-rotation CLI as a `workflow_dispatch` action; Sentry; scheduling the Cloudflare drift script.
 
 ### Explicitly out of scope for v1
 
@@ -534,7 +533,7 @@ function RecipeCardSkeleton() {
 2. ~~**Phase 1.4** - iCloud Calendar Integration~~ ✅ Complete (CalDAV + Celery + two-way sync + 57 new tests)
 3. ~~**Phase 1.6** - Task Model Enhancement~~ ✅ Complete (priority, subtasks, sections, sync metadata)
 4. ~~**Phase 1.7** - iCloud Reminders Sync~~ ✅ Complete (CalDAV VTODO + Celery + two-way sync + 26 new tests)
-5. **Phase 2** - v1 Productionization (deployed since M2, 2026-05-01; auth live since M5; M7 storage shipped 2026-09-11; M8 launch runbook remaining)
+5. ~~**Phase 2** - v1 Productionization~~ ✅ Complete (deployed since M2, 2026-05-01; auth live since M5; M7 storage shipped 2026-09-11; M8 launch release shipped 2026-09-26, #60, #62, #65)
 
 ### High Priority (v1 Polish)
 

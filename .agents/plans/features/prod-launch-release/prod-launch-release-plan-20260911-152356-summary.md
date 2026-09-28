@@ -35,6 +35,22 @@ own steps.
   smoke script and `ops-check.yml` read, because production's worker and beat are paused on
   purpose at the Upstash request cap (TODOS.md P1).
 
+## Scope of this run: PR2
+
+- Started: 2026-09-25T03:01:22Z (the start sync), after PR1b merged as #62 (squash `f4a6814`,
+  `MERGED` 2026-09-24T04:02:36Z); `origin/master` (`56e0c39`, with #63 and #64) already merged
+  into the branch as `f72e3f3`. Local `master` was behind (`29f4b75`) and was fast-forwarded to
+  `56e0c39` so every `$BASE_BRANCH` diff is against the real base.
+- Metadata: {"implementation_status":"partially-shipped","milestone":"M8","parent_epic":"v1-productionization","plan_kind":"feature","plan_mode":"feature","pr":"https://github.com/willdoucet/todo-app/pull/62","registry_key":"plan:prod-launch-release","review_status":["ceo-reviewed","eng-reviewed","adversarial-reviewed","design-reviewed","impl-reviewed","final-reviewed"],"risk_tags":["infra","security","auth","data","migration"],"ship_parts":["PR1a","PR1b","PR2"],"shipped_parts":[{"commit":"6f0a608","part":"PR1a","pr":"https://github.com/willdoucet/todo-app/pull/60","shipped_at":"2026-09-23T16:07:56Z"},{"commit":"394dccf","part":"PR1b","pr":"https://github.com/willdoucet/todo-app/pull/62","shipped_at":"2026-09-24T03:39:26Z"}],"ui_scope":true,"workflow_status":"partially-shipped"}
+- Gate: `workflow-state --next --json` named `/execute-plan`, `unreadable == 0`. #62 `MERGED`.
+- Design source of truth: mockup present; `design-sync-check --pin-sha` printed
+  `394dccf02ea348e66d02b512c1c0536aec97be81`, not the plan's `628891f…` (PR1b's own commit
+  touched a watched file). PR2 changes no UI, so the warning has nothing to act on.
+- Scope (plan § PR2 — evidence and corrections): the Between the PRs 7–11 evidence recorded
+  above folded into the runbooks, every correction the execution revealed, the M7 runbook's two
+  open items, the v1.1 scope contract (parent plan open item 8), and the epic, roadmap and
+  TODOS reconciliation. Documentation only: no application code, no migration.
+
 ## Steps
 - [✓] Step 1 — Pin the scale: `infra/fly-scale.json` `{"web": 1, "worker": 1, "beat": 1}` and the `backend/fly.toml` comment pointing at it (item 7) (2026-09-21T23:06:20Z)
 - [✓] Step 2 — `infra/release-smoke.py` (nine checks, four groups, exit 0/1/2, `--only`, `--skip`, `--release-commit`, `--self-test`, the `/healthz.jobs` contract reader) with `infra/tests/test_release_smoke.py` (item 4; Eng 2.3, 2.4, 3A) (2026-09-21T23:15:05Z)
@@ -59,6 +75,13 @@ own steps.
 - [✓] Step 21 — PR1b: `BackgroundJobsSection.jsx`, `BackgroundJobsAlert.jsx`, Settings page header and mount, MSW `/healthz` default handler (item 15a) (2026-09-23T18:59:31Z)
 - [✓] Step 22 — PR1b: sign-in bounce banner copy with the likely causes (item 6, Design review 10) (2026-09-23T19:00:04Z)
 - [✓] Step 23 — PR1b: runbooks for the PR1b surfaces: RUNBOOK password rotation, `FLY_API_TOKEN`, break-glass availability, the pause; diagnostics entries for gate reasons, the jobs card and cron, the pause (items 1, 2, 13) (2026-09-23T19:02:30Z)
+- [✓] Step 24 — PR2: `infra/RUNBOOK.md`: the `v1-20260924-f4a6814` execution-log row and "Last executed"; the procedure fixes from steps 7–10 (`${RELEASE:?}`, keep or verify the migration output, late scheduled runs, who runs production commands, §0 "Save, then reload"); the `FLY_API_TOKEN` first-run criterion rewritten for the read-only token's WAL gap (2026-09-25T03:17:27Z)
+- [✓] Step 25 — PR2: `infra/incident-diagnostics.md`: break-glass available since `v1-20260924-f4a6814` and its local rehearsal command (step 11); the Cloudflare-down entry; the `also: … unauthorized` WAL line; open question 4 recorded as observed (2026-09-25T03:20:05Z)
+- [✓] Step 26 — PR2: `infra/backup-restore-drill.md` §0: the corrections from enabling backups (the 512 MB floor, the interactive Tigris terms prompt, `fly secrets deploy` after enable) (2026-09-25T03:20:53Z)
+- [✓] Step 27 — PR2: `infra/r2-cutover-runbook.md`: strike the `fly status` box citing `git log -S`; re-record the sweep's `succeeded` line as open behind the worker pause (2026-09-25T03:21:26Z)
+- [✓] Step 28 — PR2: the v1.1 scope contract (parent plan open item 8): written into the epic, the parent plan's item 8 closed with a pointer, IMPLEMENTATION_PLAN's deferred list aligned (2026-09-25T03:22:38Z)
+- [✓] Step 29 — PR2: epic and roadmap reconciliation: epic status line and M8 Done-when matched to what shipped, "Fly managed Postgres" corrected to unmanaged Flex 17.2 (epic, IMPLEMENTATION_PLAN, PRD), IMPLEMENTATION_PLAN Phase 2 text (2026-09-25T03:23:53Z)
+- [✓] Step 30 — PR2: TODOS.md and LESSONS.md reconciliation: the `machine-exec` token TODO linked to the WAL-lag P2, M8 entries closed or re-pointed, the 2026-09-23 worker incident in the Bug Log (2026-09-25T03:25:13Z)
 
 ## Step notes
 
@@ -637,6 +660,170 @@ during implementation (assumption 5).
   `test_runbook_links.py` (every new anchor link resolves). `fly tokens create readonly --help`
   confirmed `-o`, `-n` and `-x` (flyctl v0.4.102); no token was created.
 
+### Step 24 — PR2: `infra/RUNBOOK.md` (the PR1b release's evidence and corrections)
+- Files: `infra/RUNBOOK.md` only.
+  - Header: "Last executed" is now `v1-20260924-f4a6814`; `FLY_API_TOKEN` "first dispatched
+    2026-09-24".
+  - `FLY_API_TOKEN` first-run rule rewritten: with a read-only token `[9]` always ends in
+    `also: fly pg backup list exited 1: … unauthorized` (the read execs on the DB VM), so the
+    cron watches snapshots and only the laptop smoke reads WAL. "Drop to credential-free
+    checks" now applies only to a refused snapshot or `fly ips list` read. The email result
+    (both annotations shown) is recorded, with "check again after a rotation".
+  - §0: Vercel toggles "take effect only after Save; reload and confirm" (the #60
+    auto-promote); a new "Who runs the production commands" item (auto mode refused
+    `fly ssh console`; operator runs them, or narrow rules removed afterwards); the `$RELEASE`
+    bullet explains `${RELEASE:?}`.
+  - Every command that reads `$RELEASE` now writes `${RELEASE:?}` (8 sites: §1 CI gate, §2
+    steps 2, 4 ×2, 5 ×2, 8 ×2). The prose `${RELEASE:0:7}` in §1's Staged check stays prose.
+  - §1 ops-check gate: past tense for the n/a state; scheduled runs can be hours late, so the
+    gate is the newest run's age.
+  - §2 step 2: the deploy is `tee`d to `${TMPDIR:-/tmp}` (outside the checkout, so the clean
+    tree stays clean), and a migration release re-runs §1's `alembic current` to prove the
+    head landed, instead of reading the scrolled-away `release_command` lines.
+  - §2 step 7: a one-time item pointing at the TODOS `Fly-Client-IP` proof for the first
+    release that includes #64 (the TODO said it was kept out of the RUNBOOK only because PR2
+    was rewriting it; step 30 updates that sentence).
+  - Execution log: the 2026-09-24 row (gates, migration listing, smoke line, downtime, the
+    gate-`ip` finding, the four `ops-check` runs and the email, break-glass, the fixes).
+- Decisions: the rotation (§6) gets its own row when the operator runs it (the user chose
+  option A: run it before `/ship`), rather than being folded into the release row.
+- Not changed: §0's and §2 step 5's "first execution only (PR1a)" notes. They are historic
+  now, but removing them is a removal, and they still describe a rebuild from a pre-PR1b tag.
+- Verification: `${RELEASE:?}` stops with an error when unset in both bash (`parameter null
+  or not set`, exit 127) and zsh (`parameter not set`, exit 1), and expands normally when set.
+  Both execution-log rows have 7 cells. `python3 -m pytest infra/tests -q` → 165 passed
+  (including the RUNBOOK anchor-link test).
+
+### Step 25 — PR2: `infra/incident-diagnostics.md` (break-glass, the WAL line, open question 4)
+- Files: `infra/incident-diagnostics.md`; one resolution paragraph under the plan's open
+  question 4; one observed line on the test artifact's matching edge case.
+  - "Last reviewed" is now 2026-09-25, against `v1-20260924-f4a6814`.
+  - The four sentences that described PR1b as not yet deployed now name the release
+    instead (Status of Mode A, the Cloudflare-down "no fallback", the gate logging nothing,
+    the `--skip=healthz_jobs` hint). They stay useful after a rollback to an older image. The
+    other "(from PR1b)" markers are still true and were left alone.
+  - Break-glass → "Rehearse it": the local command, three `curl` probes, the log grep, and an
+    expected-results table for flags `0`, `1` and `true` (step 11, criterion 15).
+  - No recent restore point: a "not this entry" bullet for the cron's expected
+    `also: fly pg backup list … unauthorized`, and what the cron reports if snapshots stop
+    while WAL continues (exit 2 `restore point unverified`, per `check_restore_point`).
+  - Postgres primary (open question 4): the observed answer, the command to re-read it (the id
+    from `fly machines list`, `fly machine status` without `-d`), and what a returning stop
+    means.
+- Evidence, open question 4 (read-only, run by the agent in this session; the classifier
+  allowed it): `fly machine status 6835444b795398 -a mealy-app-prod-db` at 2026-09-25T03:17Z
+  → `State: started`, `Updated 2026-09-24T04:45:25Z`, Memory 512, image
+  `flyio/postgres-flex:17.2`. Event log, newest first: `started` 04:45:25Z (proxy wake at
+  04:45:23Z, two minutes before the PR1b deploy), `stopped exit_code=0 requested_stop=false`
+  2026-09-23 22:50:05Z, `started` 21:50:03Z. So about 22.5 h with no stop, against a
+  one-hour idle stop the day before.
+- Evidence, break-glass: re-ran the rehearsal (throwaway `bg-rehearsal` container on :8099,
+  secrets from `openssl rand`, never printed). Flag `0`: `/healthz` false; 421
+  `origin_verify_absent`; 200 with the header; 421 `host_mismatch`. Flag `1`: true; 200
+  `outcome="bypassed"` twice; 421 `host_mismatch`. Flag `true`: identical to `0`. Matches
+  step 11. The container was stopped and removed (`--rm`).
+- Verification: `python3 -m pytest infra/tests -q` → 165 passed (anchor links resolve).
+
+### Step 26 — PR2: `infra/backup-restore-drill.md` §0 (enabling continuous backups)
+- Files: `infra/backup-restore-drill.md`: §0's first item now gives the three steps that
+  enabling took on 2026-09-23. (1) Resize the DB machine to 512 MB first
+  (`fly machine update <id> --vm-memory 512`, which restarts Postgres). (2) Run
+  `fly pg backup enable` in your own terminal, because of the Tigris terms prompt.
+  (3) `fly secrets deploy -a mealy-app-prod-db`, then expect a base backup in
+  `fly pg backup list`. The restore-point log's 2026-09-23 row gains the secrets-deploy fact.
+- Sources: the resize and the terms are in the repo already (the restore-point log row). The
+  `fly secrets deploy` step and "a restart did not apply them" come from the agent's session
+  notes of Between the PRs step 0a (2026-09-23T16:46Z), and nothing in the repo recorded them.
+  **The operator should confirm that detail in review.** The notes also do not say why 512 MB
+  was needed, so the text says only that enabling ran after the resize, not that a smaller
+  machine fails.
+- Verification: `fly pg backup enable --help` (flyctl v0.4.107) has no flag to accept the
+  terms, so the step is interactive by construction. `fly secrets deploy --help` and
+  `fly machine update --help` (`--vm-memory`) confirm the commands. The DB machine reads
+  `Memory 512` today (step 25's status read). `infra/tests` → 165 passed.
+
+### Step 27 — PR2: `infra/r2-cutover-runbook.md` (M7's two open items)
+- Files: `infra/r2-cutover-runbook.md`.
+  - The `fly status` box is **struck, not ticked**. Its checkbox is gone, and its text is
+    struck through with a dated note citing `git log -S` and pointing at smoke check 2 and
+    RUNBOOK §2 step 3.
+  - The sweep box stays open with "Still open, re-recorded 2026-09-25".
+  - The execution log row says why it is still open (the deliberate worker and beat pause)
+    and what closes it (TODOS P1's resume step 5).
+- Verification: `git log -S 'shows **every** process group' -- infra/r2-cutover-runbook.md`
+  → only `651ff27` (#49, 2026-09-11T15:07:30-07:00); `git log -S '| 2026-09-11 | willdoucet | Pass |'`
+  → only `3f14222` (#45, 13:12:22-07:00). So the box postdates the only run, as the plan said.
+  `infra/tests` → 165 passed.
+
+### Step 28 — PR2: the v1.1 (ops) scope contract (parent plan open item 8)
+- Files:
+  - The epic's `## Deferred to v1.1` became `## v1.1 (ops) scope contract`: a ten-row table
+    (candidate, In, Gated or Out, why, and where it is tracked), a note that it is not PRD §11's
+    product v1.1, and that resuming the paused worker comes first.
+  - `prod-contract-freeze` plan → open item 8 is struck and resolved, with a link and the
+    one-line outcome. The original text is kept.
+  - `IMPLEMENTATION_PLAN.md` → "Explicitly deferred to v1.1" is now a short In, Gated, Out
+    summary that links to the contract, so the reasons live in one place. Its closing bullet
+    ("any other hardening the first few releases reveal") is dropped, because the contract
+    is that reckoning.
+- Decisions (assumption 5, not corrected):
+  - In: the `/auth/login` rate limit and burst test, structured `/auth/*` and 401 logs, the
+    recovery-point lag, and the stale-chunk fix.
+  - Gated: `deploy.yml` (after a fix-free release) and `visual-tests` required (after its two
+    flakes are fixed and ten runs pass in a row).
+  - Out: previews, rotation as `workflow_dispatch`, Sentry, and a scheduled drift script.
+  - The WAL-reading cron token is P3 (step 30), since the laptop smoke reads WAL every release.
+- Verification: no anchor links pointed at either renamed section (grep). The contract's
+  anchor `#v11-ops-scope-contract` follows GitHub's slug rule, and both links to it use it.
+
+### Step 29 — PR2: epic and roadmap reconciliation
+- Files:
+  - The epic:
+    - the `Status:` line (M8 in its last part, not "not started");
+    - Locked architecture's Database line: unmanaged Flex 17.2, with the reason the restore
+      commands differ;
+    - a new "What M8 shipped against these" block under Done when, one bullet per criterion
+      with its evidence. The criteria keep their original wording, per the plan's
+      "PR2 updates the epic text to match what shipped".
+  - `IMPLEMENTATION_PLAN.md`: Known Gaps → Active work, and Prioritization item 5 (M8 is in
+    its last part); Locked architecture's Database line.
+  - `PRD.md` §11 v1.0: "Fly Postgres (unmanaged Flex)".
+- Left for `/ship`: the M8 milestone row's status and the Phase 2 milestone count.
+  `/ship`'s second `/update-docs` owns both (ship SKILL "Then the roadmap").
+- Left, deliberately: the M8 plan's "Locked decisions (from the epic, verbatim)" item 3 still
+  quotes "Fly managed Postgres", because it is a verbatim quote of the epic at the time.
+  PRD §11's unticked v1.0 boxes (auth shipped in M3–M5) are `/update-docs`' factual-drift call.
+- **Open in the epic until the operator runs it:** the rotation bullet reads "pending"
+  (option A). The step that records the run turns it to met.
+- Verification: `grep -rn 'managed Postgres'` over `.agents/docs`, the epic and AGENTS.md now
+  finds only the two correction sentences. TECH_STACK already said `Fly Postgres Flex
+  (unmanaged)` and `web=1` (PR1a). The epic's link targets `#success-criteria`, which exists
+  in the plan (line 2110).
+
+### Step 30 — PR2: TODOS.md and LESSONS.md reconciliation
+- `TODOS.md`:
+  - New **P3 "Let the daily cron read WAL backups"**, placed after the WAL-lag P2. It holds
+    the `unauthorized` evidence, what goes unwatched, a `machine-exec` token restricted to
+    one command as the next step (flags from `fly tokens create machine-exec --help`,
+    v0.4.107), and the "never a deploy-capable token" constraint. P3, not P2, because the
+    laptop smoke reads the WAL backups every release.
+  - `Fly-Client-IP` P2: "deliberately not in the RUNBOOK" becomes "RUNBOOK §2 step 7 points
+    here".
+  - P1 resume, step 5: the sweep's `succeeded` line also closes the M7 runbook's last item.
+  - Rotation P2: records the operator's 2026-09-25 choice (run before PR2 ships).
+  - Already reconciled by earlier parts, and left as they are: both Cloudflare drift items
+    (DONE and SUPERSEDED, PR1a), the background-job health signal (DONE, PR1b), and boto3
+    checksums (DONE, PR1a release).
+- `LESSONS.md`:
+  - Bug Log row for 2026-09-23 (the host-migration stop, #49 merged but never deployed,
+    `on-failure`, the Upstash cap). It carries the "To write up: LESSONS Bug Log" item from
+    the agent's 2026-09-23 notes.
+  - Canonical rule "Merged is not deployed" in the `fly deploy` section.
+  - `${RELEASE:?}` rule in "Runbook checks must be runnable". Both are rules the codebase
+    taught, not user corrections, so there is no Corrections Log row.
+- Verification: the new Bug Log row has the table's 4 cells. The RUNBOOK's reference
+  "Let the daily cron read WAL backups" matches the new TODO's heading exactly.
+
 ## Doc impact
 
 - Step 1: TECH_STACK → Infrastructure / Production Deployment: state the counts
@@ -685,6 +872,20 @@ during implementation (assumption 5).
 - Step 21 (PR1b): APP_FLOW → Settings (the Background jobs card and the top alert, their states and copy) and the screen inventory; FRONTEND_STRUCTURE → Settings (`BackgroundJobsSection`, `BackgroundJobsAlert`, the page header); FRONTEND_GUIDELINES → §5 patterns (the freshness dot, the inline status alert).
 
 - Step 22 (PR1b): APP_FLOW → §4 Error Handling (the redirect is not silent: the bounce banner, now with its likely causes; the "silent one-shot redirect" note is stale — stale audit).
+
+- Step 24 (PR2): none outside `infra/` (exempt from the doc map: `infra/*.md`). The RUNBOOK is itself the owning doc for the release procedure.
+
+- Step 25 (PR2): none outside `infra/`. The plan's open question 4 and the test artifact's edge case now point at the diagnostics entry.
+
+- Step 26 (PR2): none outside `infra/`.
+
+- Step 27 (PR2): none outside `infra/`; TODOS P1's step 5 gains a pointer to the M7 sweep item (step 30).
+
+- Step 28 (PR2): IMPLEMENTATION_PLAN → Phase 2 "Explicitly deferred to v1.1" (applied in the step, since the contract is the step's deliverable); the epic body; the parent plan's open item 8.
+
+- Step 29 (PR2): IMPLEMENTATION_PLAN (Known Gaps, Prioritization, Locked architecture), PRD §11 (applied in the step); the M8 row and Phase 2 count are `/ship`'s.
+
+- Step 30 (PR2): TODOS.md and LESSONS.md (applied in the step).
 
 ## Update-docs conclusion
 
@@ -781,6 +982,58 @@ Questions: 0 asked
 Unmapped: none
 
 DOC IMPACT: updated 10 docs
+```
+
+### PR2
+
+```
+DOC SYNC REPORT — default — prod-launch-release vs master — 2026-09-25
+
+| Doc | Section | Action | Summary |
+|---|---|---|---|
+| (doc map) | every changed path | no change | all 15 paths are exempt (`.agents/docs/**`, `.agents/plans/**`, `.agents/state/**`, `infra/*.md`); no code, route, schema, dependency, env var, command or CI job changed |
+| TECH_STACK.md | Environment Variables (operator-only) | updated | the Cloudflare drift script stays unscheduled per the v1.1 (ops) contract (was "a v1.1 item") |
+| TECH_STACK.md | Infrastructure (Database row) | updated | continuous WAL backups enabled 2026-09-23; the `ops-check` token reads only snapshots (TODOS P3) |
+| IMPLEMENTATION_PLAN.md | Phase 2 (Known Gaps, Locked architecture, Explicitly deferred to v1.1, Prioritization) | updated | applied in execute-plan steps 28–29: M8 in its last part; unmanaged Flex 17.2; deferred list points at the v1.1 (ops) contract. M8 row status left `implementing` for `/ship` |
+| PRD.md | 11. Future Roadmap | updated | "Fly Postgres (unmanaged Flex)" (step 29); v1.0 boxes left for `/ship`'s roadmap pass |
+| TODOS.md | — | updated | step 30: new P3 WAL cron token; P1, P2 rotation and P2 `Fly-Client-IP` pointers |
+| LESSONS.md | Bug Log; `fly deploy` section; Runbook checks | updated | step 30: the 2026-09-23 worker incident; "Merged is not deployed"; `${RELEASE:?}` |
+| AGENTS.md | — | no change | no command, structure, dependency or env var changed |
+| config.json | doc_map | no change | no unmapped area |
+
+Guard: doc-guard --staged --dry-run -> staged changes touch no documented areas
+Questions: 0 asked
+Unmapped: none
+
+DOC IMPACT: updated 5 docs
+```
+
+### PR2, at `/ship` (2026-09-26)
+
+Re-run after `/review-implementation` and `/final-review` changed `infra/release-smoke.py`
+(check 9) and the docs, and after criterion 6 was recorded. Every owning section already
+described those changes; this run made no edits. The count is the docs this commit carries.
+
+```
+DOC SYNC REPORT — default — prod-launch-release vs master — 2026-09-26
+
+| Doc | Section | Action | Summary |
+|---|---|---|---|
+| TECH_STACK.md | Infrastructure (Operator tooling: `release-smoke.py`) | updated | check 9 passes when either restore mechanism is under 48 h; one unreadable and the other stale, empty or off is exit 1; exit 2 only when neither is read (the only mapped path on the branch: `infra/release-smoke.py`) |
+| TECH_STACK.md | Infrastructure (Database row; Environment Variables) | updated | WAL backups enabled 2026-09-23 and the `ops-check` token reads only snapshots (TODOS P2); the drift script stays unscheduled per the v1.1 (ops) contract. The `ops-check.yml` row carries no stale exit-class claim |
+| IMPLEMENTATION_PLAN.md | Phase 2 (Known Gaps, Locked architecture, deferred list, Prioritization) | updated | execute-plan steps 28–29; the M8 row stays `implementing` with PR1a/PR1b links until `ship-record` |
+| PRD.md | 5.12 Hosting; 11. Future Roadmap | updated | "Fly Postgres (unmanaged Flex)" in both places |
+| REVIEW_CHECKLIST.md | Operations (health checks … CI parity) | updated | three review-added checks: a stamped deploy asserts HEAD and a clean tree, a log proof greps its own marked request, a multi-mechanism check exits as production when something it read fails |
+| LESSONS.md | Bug Log; `fly deploy`; Runbook checks | updated | the 2026-09-23 worker incident, "Merged is not deployed", `${RELEASE:?}` and its nested-subshell caveat, the access-token proof rule |
+| TODOS.md | P1; P2 rotation; P2 continuous backups; P2 `Fly-Client-IP`; two visual-tests P2s | updated | the rotation P2 added at the PR1b release and marked done 2026-09-26 (criterion 6); the continuous-backups P2 retitled with the WAL cron-token note folded in; `visual-tests` timeout hang and `mealcard-undo.spec.js` width added (review decisions) |
+| AGENTS.md | Development Commands | no change | no command, structure, dependency or env var changed |
+| config.json | doc_map | no change | no unmapped area |
+
+Guard: doc-guard --staged --dry-run -> would pass
+Questions: 0 asked
+Unmapped: none
+
+DOC IMPACT: updated 6 docs
 ```
 
 ## Completion
@@ -967,3 +1220,165 @@ DOC IMPACT: updated 10 docs
 - **Concern 3 (`FLY_API_TOKEN`):** the operator created it (19:44:07Z). RUNBOOK: created
   2026-09-23; rotate by 2027-09-23. The first dispatch waits for PR1b's merge.
 - **Concern 4 (375 px overflow):** added to TODOS.md as a P3.
+
+### Between the PRs 7–11 executed (2026-09-24, after PR1b merged as #62)
+
+Recorded for PR2. The agent guided each step. Auto mode blocked its first production command (`fly ssh console`), so the
+operator ran every production command, and the agent ran the local, GitHub, and public-URL reads.
+
+- **Step 7, release `v1-20260924-f4a6814`** (squash `f4a6814`).
+  - Fly v37 (`registry.fly.io/mealy-app-prod:deployment-01M38VT0SGJF6EHM9Q5J5CQYYT`). Vercel
+    `dpl_AoaGZKAo9i18SMP3vrQBZpxGcTh3`, promoted by SHA.
+  - Gates: CI `Tests` success (run 35953955035); doc-guard passed on #62; `ops-check` n/a (never
+    run); restore point `exit 0` (snapshot 5 h, WAL 11 h).
+  - Migration: production was at `b7e2c9a4f1d8`; this release applied `1b6b462491fa` (additive,
+    downgrade written and tested by migration-upgrade CI).
+  - Downtime ~6 s (04:47:45–04:47:50Z).
+  - `fly status`: web started with 1/1 checks passing; worker and beat stopped (the declared pause).
+  - The deploy's spinner pushed the `release_command` output out of the terminal scrollback. The
+    migration was confirmed from `/healthz`: `jobs.read: ok` can only happen once `job_heartbeats`
+    exists, and `version` read `f4a6814…`.
+  - A rollback worktree at the PR1a tag, with the §5.2 command pasted, was ready and not needed.
+- **Step 8.**
+  - Smoke: `exit 0: 11 passed, 0 skipped, 2 paused (beat, worker declared in infra/paused.json)`;
+    check 8 matched `f4a6814` on both tiers.
+  - The Cloudflare dashboard checks and the manual checks passed, as the operator reported.
+  - Tagged `v1-20260924-f4a6814`.
+  - **Finding: the gate's `ip` logs the app's own address, not the caller's.**
+    - Observed: the smoke probe logged `66.241.124.153`, and a `*.fly.dev` curl with a forged
+      `X-Forwarded-For: 203.0.113.9` logged `2a09:8280:1::10e:a0e0:0`. Those are the A and AAAA
+      records of `mealy-app-prod.fly.dev`. The forged value never appeared, and `reason` was right
+      on both lines.
+    - Cause: Fly's docs describe `X-Forwarded-For` as the client *followed by* the proxies, so its
+      last entry is Fly's edge. They recommend `Fly-Client-IP`, "always set by the Fly Proxy".
+    - Fixed by quickfix `gate-log-fly-client-ip` (#64, `56e0c39`): the gate logs `Fly-Client-IP`,
+      and the BACKEND_STRUCTURE gate paragraph, LESSONS Bug Log and REVIEW_CHECKLIST → FastAPI are
+      corrected. Not yet deployed.
+    - The next release proves it: a direct request carrying a forged `Fly-Client-IP` must log the
+      caller's real address. Fly's docs don't say whether they overwrite a client-sent value.
+      Tracked as TODOS.md P2 "Prove at the next release that Fly overwrites a client-sent
+      `Fly-Client-IP`" (added by #64).
+- **Step 9: skipped by the operator.** Recorded as TODOS.md P2 "Run the password-rotation CLI end to
+  end in production (M8 criterion 6, skipped at the PR1b release)", uncommitted on this branch. Until
+  it runs, criterion 6 is open; PR2 records it as deferred, not met.
+- **Step 10.**
+  - The first dispatch, run 36009722470, exited 2: `` `fly` is not on PATH `` on `[9]` and `[5]`.
+    `setup-flyctl` installs only `flyctl`. Fixed by quickfix #63 (`29f4b75`, the "Expose flyctl as
+    fly" step and `infra/tests/test_ops_check_workflow.py`).
+  - Branch proof, run 36017858233: green.
+  - Master dispatch, run 36058117263: green, `exit 0: 7 passed, 0 skipped, 1 paused`.
+  - Self-test, run 36058128975: failed as designed. Its annotations were
+    `FAIL [jobs] jobs-fresh: … → infra/incident-diagnostics.md#background-jobs-dead-worker-or-beat`
+    and `exit 1 production: [jobs] jobs-fresh (self-test: …)`. **The failure email showed both
+    annotations** (operator-verified), so criterion 17 is met.
+  - The first scheduled run, 36041300063, fired at 18:26:58Z, 4 h 10 min after its 14:17 slot. It
+    failed on the PATH bug, before #63 merged. Scheduled runs can be hours late.
+  - **Finding: the cron cannot see WAL backups.**
+    - `[9]` passes on the volume snapshot, with `also: fly pg backup list exited 1: Error: failed to
+      exec on VM 6835444b795398: unauthorized`. That read runs a command on the Postgres VM, which a
+      `fly tokens create readonly` token cannot do.
+    - Release-time smoke from a laptop still reads WAL backups.
+    - PR2: correct the RUNBOOK. Its first-run criterion ("no `also:` part") cannot hold with this
+      token. Its "drop the cron to its credential-free checks" sentence would remove `[9]` and `[5]`
+      for a gap in one sub-read.
+    - PR2: add a TODO to investigate `fly tokens create machine-exec` for that one read, linked to the
+      WAL-lag P2.
+- **Step 11: rehearsed locally** (criterion 15 met).
+  - Setup: a throwaway `docker-compose run` of the `api` service on :8099 with `APP_ENV=production`,
+    `PUBLIC_API_HOST=api.mealy.dev`, `CORS_ALLOW_ORIGINS=https://mealy.dev`, `STORAGE_BACKEND=local`,
+    and dummy hex secrets for `ORIGIN_VERIFY_SECRET`, `JWT_SECRET_KEY` and `HOUSEHOLD_ACCESS_KEY`.
+    Command `uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'`.
+    The dev api on :8000 was untouched.
+  - Flag `"0"`: `/healthz` false; a right Host with no origin header got 421 `origin_verify_absent`;
+    the right header got 200; `Host: mealy-app-prod.fly.dev` got 421 `host_mismatch`.
+  - Flag `"1"`: `/healthz` true; a right Host with no header got 200, logged `outcome="bypassed"`;
+    the right header got 200, also logged `bypassed`; the wrong Host still got 421 `host_mismatch`.
+  - Flag `"true"`: the same as `"0"`, because the parse is strict.
+  - PR2: put the rehearsal command in `infra/incident-diagnostics.md` → Break-glass ("Rehearse it").
+- **Procedure fixes for PR2's RUNBOOK.**
+  1. Write `${RELEASE:?}` wherever a command reads `$RELEASE`. §2 step 4's URL lookup ran in a fresh
+     shell without it and took the newest deployment. That happened to be the right one, and
+     `mealy.dev` then served `f4a6814`. The smoke refused an empty flag with exit 2.
+  2. Keep `fly deploy`'s output (for example `| tee`), or confirm the migration from `/healthz`
+     (`jobs.read: ok`), because the spinner scrolls the `release_command` lines away.
+  3. Scheduled `ops-check` runs can fire hours late; the "latest run under 48 h" gate still works.
+  4. In auto mode an agent cannot run production commands. The operator runs them, or grants narrow
+     rules and removes them afterwards.
+- **CI problems seen on #63, outside M8's code; separate sessions started for both:**
+  - the `BackgroundJobsSection` loading test races under `shouldAdvanceTime`;
+  - `mealcard-undo.spec.js` width fails deterministically since about 07:00Z on 2026-09-24
+    (5.497 px against a 5 px tolerance, locally and in CI). The Playwright HTML report server still
+    hangs a failed visual job until its 25-minute timeout.
+
+### PR2
+
+- Completed: 2026-09-25T03:28:29Z. Scope: **PR2** of M8 (steps 24–30), the last declared part. No
+  application code and no migration.
+- **What was built.**
+  - The runbooks now record the PR1b release (`v1-20260924-f4a6814`) and every correction it
+    revealed:
+    - RUNBOOK: the execution-log row, `${RELEASE:?}` on every command that reads it, a
+      `tee`d deploy plus an `alembic current` check after a migration release, late scheduled
+      runs, who runs production commands, Vercel's Save-then-reload, and a `FLY_API_TOKEN`
+      first-run rule that expects the cron's refused WAL read;
+    - diagnostics: break-glass is available, with a local rehearsal (re-run in this session,
+      same results as step 11), and the cron's `also:` line is explained;
+    - drill §0: the three steps it takes to enable backups.
+  - Open question 4 is answered by a production read: the DB primary has not idle-stopped
+    since the PR1b release. The M7 runbook's `fly status` box is struck, and its sweep item
+    is re-recorded as open behind the worker pause.
+  - The v1.1 (ops) scope contract is written in the epic: 4 In, 2 Gated, 4 Out. The parent
+    plan's item 8 is closed, and IMPLEMENTATION_PLAN points at the contract.
+  - The epic records what M8 shipped against each Done-when criterion.
+  - "Fly managed Postgres" is corrected in three docs.
+  - TODOS gains the WAL cron-token P3. LESSONS gains the 2026-09-23 worker incident and two
+    rules: "Merged is not deployed" and `${VAR:?}`.
+- **Test results** (commands from development-commands.md, 2026-09-25):
+  - backend `docker-compose exec api uv run pytest` → **1059 passed, 3 skipped**;
+  - frontend `npm run test:run` → **632 passed (61 files)**; `npm run lint` → 0 errors,
+    7 warnings (none in files this branch touches: PR2 touches no frontend file);
+  - `python3 -m pytest infra/tests -q` → **165 passed**;
+  - `python3 -m pytest .agents/tests -q` → **636 passed**;
+  - `release-smoke.py --self-test` → the expected `exit 1 production: [3] scale-reconciled`;
+  - `doc-guard --staged --dry-run` → "staged changes touch no documented areas";
+    `--worktree` → pass.
+  - The visual suite was not run. PR2 changes no frontend or backend file (assumption 8).
+- **Test-artifact gaps.** Critical path 5 (rotation over SSH) has not been run. The operator
+  will run it before `/ship` (option A). The worker-side halves of critical paths 4 and 8 stay
+  unproven in production while the worker is paused (assumption 3; TODOS P1): check 4's round
+  trip, the first `job_heartbeats` rows, and the card's "All running on schedule".
+- **Deviations from the plan.**
+  1. The runbooks gained two items that no step 7–11 note named. RUNBOOK §2 step 7 has a
+     one-time pointer to the `Fly-Client-IP` proof, so the next release does not miss it.
+     The epic has a "What M8 shipped" block, which carries "PR2 updates the epic text"
+     without rewriting the criteria.
+  2. Open question 4 was answered from an agent-run production read. It was read-only and
+     not blocked, unlike step 7's `fly ssh console`.
+  3. The WAL cron-token TODO is P3, not P2 (step 28's reasoning).
+- **Status: DONE_WITH_CONCERNS.**
+  1. **M8 criterion 6 is still open.** Run RUNBOOK §6 in production before `/ship` (the
+     operator chose option A). Then record: a RUNBOOK execution-log row (the CLI's output
+     line, old password refused, new accepted, a signed-in tab bounced with the banner); the
+     epic's rotation bullet turned from "pending" to met; TODOS P2 marked done. The last part
+     must not ship with it pending.
+  2. **One detail comes only from the agent's notes:** drill §0 step 3 (`fly secrets deploy`
+     after enabling, "a restart did not apply them"). The operator should confirm it in
+     review.
+  3. **Known and accepted:** #64 (`Fly-Client-IP`) is merged but not deployed. The next
+     release proves it (RUNBOOK §2 step 7, TODOS P2). The worker-side evidence waits for the
+     resume (TODOS P1).
+- State synced 2026-09-25T03:28:50Z: plan and registry `implementation_status=ready-for-review`, `reason_by=execute-plan` (the concerns above).
+- **Superseded after this run** (recorded by `/final-review`, 2026-09-25): the WAL cron-token
+  P3 named in steps 28 and 30, the PR2 doc-sync table, "What was built" and deviation 3 no
+  longer exists. `/review-implementation` folded it into TODOS.md P2 "Continuous backups:
+  the newest recovery point trails by hours, and no check asserts them on their own", and
+  the RUNBOOK header and TECH_STACK's Database row cite that P2.
+- **Concern 1 closed 2026-09-26:** the operator ran RUNBOOK §6 in production. It revoked 9
+  refresh tokens and set the session version to 3; the old password was refused and the new
+  one accepted. It is recorded in the RUNBOOK log, the epic and TODOS P2 (done). The
+  access-token half was not exercised in production; the integration test covers it.
+- **No longer documentation only** (`/final-review`, 2026-09-25, user decision):
+  `infra/release-smoke.py` check 9 fails as exit 1 when a restore mechanism it could read is
+  stale, empty or off and the other could not be read (exit 2 only when it reads neither),
+  with five new tests in `infra/tests/test_release_smoke.py` (170 passed). `ops-check.yml`
+  runs `master`'s script, so the change is live when PR2 merges; no deploy carries it.

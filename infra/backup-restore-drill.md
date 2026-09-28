@@ -15,7 +15,7 @@ operator's memory is not enough.
 | Owner | willdoucet |
 | Last executed | 2026-09-23, both paths, at the M8 PR1a release. See the execution log |
 | Estimated duration | 60–90 min for both paths. Most of it is waiting for `fly pg create` |
-| Risk | Low for production (read-only against it). Scratch clusters cost money until destroyed |
+| Risk | Low for production (read-only against it), except §0's enable path when backups are off: it can resize the database machine and restarts Postgres. Scratch clusters cost money until destroyed |
 | Cadence | Every 3 months as a starting point. The operator sets the real interval at the first execution (open question 2) and records it in the log. The re-run triggers below matter more than the interval |
 | Minimum flyctl | v0.4.102 |
 | Builds on | the `pg_dump` → restore-probe → count-verify sequence in `.agents/plans/features/mealboard-main-page-updates/ROLLOUT.md` |
@@ -64,11 +64,31 @@ watches this at every release and daily.
       ```bash
       fly pg backup list -a mealy-app-prod-db
       ```
-      ```bash
-      fly pg backup enable -a mealy-app-prod-db
-      ```
-      Record in the log whether enabling reported a cost (it creates a Tigris bucket), and
-      whether it restarted the database machine (`fly status -a mealy-app-prod-db`).
+      Enabling takes three steps, each learned on 2026-09-23 (restore-point log). Step 3
+      restarts Postgres, and so does step 1 when it is needed, so tell the household before
+      you start:
+      1. **The database machine has 512 MB.** The first enable ran only after the machine
+         was resized to 512 MB. If `fly machines list -a mealy-app-prod-db` shows less,
+         resize it first (a restart):
+         ```bash
+         fly machine update <id> --vm-memory 512 -a mealy-app-prod-db
+         ```
+      2. **Enable it in your own terminal.** It asks you to accept Tigris's terms at an
+         interactive prompt, and it has no flag to pre-accept them, so it cannot run
+         unattended or through an agent:
+         ```bash
+         fly pg backup enable -a mealy-app-prod-db
+         ```
+      3. **Deploy the staged secrets.** Enabling stages the archive configuration as
+         secrets. A machine restart did not apply them; this did. It restarts Postgres
+         (the household notice above covers it):
+         ```bash
+         fly secrets deploy -a mealy-app-prod-db
+         ```
+      Then `fly pg backup list -a mealy-app-prod-db` must list a base backup. The first
+      appeared within minutes, at 16:46:33Z. Record in the log whether enabling reported a
+      cost (it creates a Tigris bucket), and whether it restarted the database machine
+      (`fly status -a mealy-app-prod-db`).
 - [ ] **A scheduled snapshot has landed on the current volume.** The volume id comes from the
       listing each time, because a host migration changes it:
       ```bash
@@ -237,4 +257,4 @@ or the first snapshot seen on a volume each get a row.
 | Date (UTC) | Event | Volume | Observation |
 |---|---|---|---|
 | 2026-09-12 | Host migration found: machine `6835444b795398` created 2026-09-11T23:31:01Z in zone `d2a4`; the previous volume `pending_destroy` in zone `76a8` | `vol_4qlnz9q037wl2qwr` | "No snapshots available"; `fly pg backup` disabled. **No restore point existed.** |
-| 2026-09-23 | Continuous backups enabled (the DB machine resized to 512 MB first; the operator accepted the Tigris terms); first base backup `20260923T164629` at 16:46:33Z | `vol_4qlnz9q037wl2qwr` | Daily volume snapshots land at ~23:41Z (newest 2026-09-22T23:42:29Z, restored by the drill). `flyio/postgres-flex:17.2` reports an image update available; applying it is a drill re-run trigger. |
+| 2026-09-23 | Continuous backups enabled (the DB machine resized to 512 MB first; the operator accepted the Tigris terms; `fly secrets deploy -a mealy-app-prod-db` applied the staged archive secrets after a machine restart had not); first base backup `20260923T164629` at 16:46:33Z | `vol_4qlnz9q037wl2qwr` | Daily volume snapshots land at ~23:41Z (newest 2026-09-22T23:42:29Z, restored by the drill). `flyio/postgres-flex:17.2` reports an image update available; applying it is a drill re-run trigger. |
