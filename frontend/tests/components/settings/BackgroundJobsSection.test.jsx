@@ -138,13 +138,18 @@ describe('BackgroundJobsSection', () => {
 
   describe('loading', () => {
     beforeEach(() => {
-      vi.useFakeTimers({ shouldAdvanceTime: true })
+      // No shouldAdvanceTime: it lets real time push the fake clock past 200 ms before the
+      // 199 ms check on a slow runner. Nothing here uses waitFor, so real time never needs to move.
+      vi.useFakeTimers()
       server.use(http.get(HEALTHZ, () => new Promise(() => {}))) // never answers
     })
     afterEach(() => vi.useRealTimers())
 
     it('nothing in the body for 200 ms, then "Checking…"; the heading renders at once', async () => {
       renderSettingsPieces()
+      // Block 30 ms of real time, like a slow CI render, so real time leaking into the fake
+      // clock fails here every run instead of now and then.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30)
       expect(screen.getByRole('heading', { name: 'Background jobs' })).toBeInTheDocument()
       expect(screen.queryByText('Checking…')).not.toBeInTheDocument()
       await act(() => vi.advanceTimersByTimeAsync(199))

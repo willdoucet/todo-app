@@ -134,3 +134,12 @@
 - Tests: `framework doctor` 0 failures, 0 warnings (helper tests pass); every upgraded file byte-identical to the v1.6.2 payload (cmp); nothing outside .agents/, no local /Users/ path in the diff
 - Docs: no doc impact (framework tooling only; every path doc-map exempt)
 - Branch: chore/framework-1.6.2 · PR: https://github.com/willdoucet/todo-app/pull/68
+
+## 2026-09-29 — background-jobs-loading-flake
+- Source: free text ("drop shouldAdvanceTime so real time can't push the fake clock past the 200 ms delay"); `frontend-tests` failed at the 199 ms assert on master `56e0c39` (run 36070813494) and PR #67's `17b15b8` (run 36631016338)
+- What: the Background jobs "loading" test uses plain `vi.useFakeTimers()` instead of `{ shouldAdvanceTime: true }`, and blocks 30 ms of real time after render as a deterministic guard
+- Why: `shouldAdvanceTime`'s real 20 ms interval adds to the fake clock at each event-loop turn, so after a slow render `advanceTimersByTimeAsync(199)` ended past 200 ms and the "not yet" assert found "Checking…"
+- Files: frontend/tests/components/settings/BackgroundJobsSection.test.jsx
+- Tests: BackgroundJobsSection.test.jsx › loading › "nothing in the body for 200 ms, then Checking…"; with the 30 ms stall, master's `shouldAdvanceTime` setup failed 5/5 and the fix passed 10/10; full frontend suite 632 passed; lint 0 errors
+- Docs: updated 1 docs (LESSONS Bug Log + Test isolation gotchas rule); the test file is doc-guard exempt
+- Branch: quickfix/background-jobs-loading-flake · PR: https://github.com/willdoucet/todo-app/pull/69

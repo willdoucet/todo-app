@@ -334,6 +334,7 @@ Datetime columns are `timestamp without time zone` holding UTC, and Pydantic ser
 | 2026-09-24 | `app/gate_logging.py` `ip` (M8 PR1b, after release `v1-20260924-f4a6814`) | The fix two rows up logged the LAST `X-Forwarded-For` entry as "the hop Fly's proxy wrote". In production the smoke's direct-to-Fly-IP probe logged `66.241.124.153` and a `*.fly.dev` curl with a forged `X-Forwarded-For` logged `2a09:8280:1::10e:a0e0:0`: the A and AAAA records of `mealy-app-prod.fly.dev`, the app's own anycast addresses. Fly documents `X-Forwarded-For` as the client plus the proxies the request passed through, so the last entry is Fly's edge, the same on every request. The forged value never appeared and `reason` was right, but `ip` named no sender. The rule came from an assumption about the platform, and the test replayed the header chain that assumption predicted | Log `Fly-Client-IP` (the last copy), the client address Fly's proxy saw; without it, the socket peer when there is no `X-Forwarded-For` either, else `"unknown"`. The regression test sends it with a forged `X-Forwarded-For` through `ProxyHeadersMiddleware`, and a real uvicorn run printed it while uvicorn's access line showed the forged entry. Fly does not document whether it overwrites a client-sent `Fly-Client-IP`: TODOS.md holds the production check for the next release. REVIEW_CHECKLIST → FastAPI rewritten. Before writing down what a platform's proxy puts in a header, read its docs and one production line; a test only replays the header you assumed. Found by the operator reading `fly logs` after the release (quickfix `gate-log-fly-client-ip`) |
 | 2026-09-23 | Fly `worker` and `beat` (`mealy-app-prod`); PR #49 merged but never deployed | The worker had been stopped since a Fly host migration on 2026-09-21 22:33Z (`launch … migrated=true`, then `stopped` 13 s later), and nothing restarted it. #49, which set `[[restart]] policy = "always"` and the `--without-gossip/mingle/heartbeat` worker flags, merged 2026-09-11 22:07Z, but the last `fly deploy` (v33) had run at 21:30Z, so every machine still ran `on-failure`. Nothing compared production with `master`. Started again at 16:57Z, it crash-looped on Upstash's monthly cap (`max requests limit exceeded. Limit: 500000`), which the old flags' idle Redis polling probably used up (not proven). Found during M8's `fly scale count web=1` step | The M8 PR1a release (v34, 2026-09-23) deployed #49 for the first time. Worker and beat are paused on purpose and declared in `infra/paused.json` (TODOS.md P1). Since PR1b, `/healthz.version` and smoke check 8 compare the deployed code with the release. Rule: `fly deploy` section, "Merged is not deployed" |
 | 2026-09-23 | framework `tests/test_skill_lint.py::bash_blocks` (1.4.1; found while executing `human-docs`) | The fence pattern matched a ```` ```bash ```` line only at column 0, so every bash block indented inside a numbered list item was invisible to the lints built on it, 1.4.1's array-completeness lint among them. Three existing blocks (`update-docs/SKILL.md`, `execute-plan/SKILL.md`, `_shared/dashboard.md`) had never been checked; none passes an array, so nothing hid there. It surfaced only because a new test found 0 blocks in `ship/references/human-docs.md`, whose lookup block is indented | `bash_blocks` reads indented fences and strips the fence's own indent (framework 1.5.0, https://github.com/willdoucet/framework/pull/13). Rule: Test isolation gotchas, "A lint that selects its input by pattern" |
+| 2026-09-29 | `frontend/tests/components/settings/BackgroundJobsSection.test.jsx` "loading" (M8 PR1b, added 2026-09-23 in `f4a6814`) | The "nothing for 200 ms, then Checking…" test used `vi.useFakeTimers({ shouldAdvanceTime: true })`. Its real 20 ms interval adds 20 ms to the fake clock whenever it gets an event-loop turn, so when render took more than ~20 ms of real time, `advanceTimersByTimeAsync(199)` ended at 219 ms and the "not yet" assert found "Checking…". It failed `frontend-tests` at that assert on master `56e0c39` (run 36070813494, 2026-09-24) and on PR #67's `17b15b8` (run 36631016338), and passed locally. A 30 ms real stall after render reproduced it every run | Plain `vi.useFakeTimers()`: nothing in the test uses `waitFor`, so real time never needed to move. The 30 ms `Atomics.wait` stall stays in the test as the regression guard: with `shouldAdvanceTime` put back it fails 5 of 5 runs, and the fixed file passed 10 of 10. Rule: Test isolation gotchas, "A fake-timer 'not yet' check" (quickfix `background-jobs-loading-flake`) |
 
 ## Fly Postgres + asyncpg setup
 
@@ -629,6 +630,23 @@ Discovered 2026-04-30 during M2 prod-deploy-skeleton Slice 2 (Fly).
   negative controls above.
 - Discovered 2026-09-23 (UTC) while executing `human-docs` (framework 1.5.0): see the Bug Log row
   for `test_skill_lint.py::bash_blocks`.
+
+### A fake-timer "not yet" check needs a clock only the test moves
+
+- `vi.useFakeTimers({ shouldAdvanceTime: true })` starts a real 20 ms `setInterval` that calls
+  `clock.tick(20)` whenever the event loop is free (vitest 2.1.9). `advanceTimersByTimeAsync`
+  yields to the real event loop as it goes, so after a render that took more than ~20 ms of real
+  time, the fake clock moves further than the test asked.
+- A test that asserts something has **not** happened just before a deadline ("nothing at
+  199 ms") then fails on a slow CI runner and passes on a laptop.
+- **Rule:** a test that checks a timing boundary uses plain `vi.useFakeTimers()`. Keep
+  `shouldAdvanceTime` for tests that need real time to pass, such as `waitFor` (its polling
+  runs on the faked timers), and whose asserts are "at least", never "not yet".
+- To make such a flake deterministic, block real time synchronously after render:
+  `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30)`. Fake timers do not touch
+  it. Negative control: the test must fail with `shouldAdvanceTime` put back.
+- Discovered 2026-09-29 (UTC) in quickfix `background-jobs-loading-flake`: see the Bug Log row
+  for `BackgroundJobsSection.test.jsx`.
 
 ## Domain Notes
 
