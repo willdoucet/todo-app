@@ -125,3 +125,12 @@
 - Tests: test_host_gate.py::test_gate_ip_is_fly_client_ip_never_a_forwarded_entry (red first: logged `203.0.113.9`), plus the `"unknown"` fallback, last-copy and 128-cap tests; full backend suite 1059 passed, 3 skipped; two mutation checks each red on their own test; real uvicorn with `--proxy-headers --forwarded-allow-ips=*` printed the `Fly-Client-IP` value while its access line showed the forged `6.6.6.6`. Unproven until the next release: that Fly overwrites a client-sent `Fly-Client-IP` (TODOS.md P2 check, also in the PR body)
 - Docs: updated 4 docs (BACKEND_STRUCTURE Production host gate, REVIEW_CHECKLIST FastAPI, LESSONS Bug Log + host-header rule bullet, TODOS release check)
 - Branch: quickfix/gate-log-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/64
+
+## 2026-09-29 — background-jobs-loading-flake
+- Source: free text ("drop shouldAdvanceTime so real time can't push the fake clock past the 200 ms delay"); `frontend-tests` failed at the 199 ms assert on master `56e0c39` (run 36070813494) and PR #67's `17b15b8` (run 36631016338)
+- What: the Background jobs "loading" test uses plain `vi.useFakeTimers()` instead of `{ shouldAdvanceTime: true }`, and blocks 30 ms of real time after render as a deterministic guard
+- Why: `shouldAdvanceTime`'s real 20 ms interval adds to the fake clock at each event-loop turn, so after a slow render `advanceTimersByTimeAsync(199)` ended past 200 ms and the "not yet" assert found "Checking…"
+- Files: frontend/tests/components/settings/BackgroundJobsSection.test.jsx
+- Tests: BackgroundJobsSection.test.jsx › loading › "nothing in the body for 200 ms, then Checking…"; with the 30 ms stall, master's `shouldAdvanceTime` setup failed 5/5 and the fix passed 10/10; full frontend suite 632 passed; lint 0 errors
+- Docs: updated 1 docs (LESSONS Bug Log + Test isolation gotchas rule); the test file is doc-guard exempt
+- Branch: quickfix/background-jobs-loading-flake · PR: https://github.com/willdoucet/todo-app/pull/69

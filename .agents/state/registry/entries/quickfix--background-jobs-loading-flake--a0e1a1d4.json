@@ -1,16 +1,19 @@
 {
   "branch": "quickfix/background-jobs-loading-flake",
+  "commit": "72f1e0b",
+  "completed": "2026-09-29",
   "created_at": "2026-09-29T22:10:12Z",
-  "implementation_status": "implementing",
+  "implementation_status": "shipped",
   "key": "quickfix:background-jobs-loading-flake",
   "kind": "quickfix",
   "note_path": null,
   "plan_mode": "quickfix",
   "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/69",
   "registry_version": 3,
   "review_status": [],
   "task_id": null,
   "title": "Fix flaky BackgroundJobsSection loading test",
-  "updated_at": "2026-09-29T22:10:12Z",
-  "workflow_status": "implementing"
+  "updated_at": "2026-09-29T22:16:40Z",
+  "workflow_status": "shipped"
 }
