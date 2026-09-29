@@ -1,12 +1,15 @@
 {
   "branch": "human-docs",
+  "commit": "17b15b8",
+  "completed": "2026-09-29",
   "created_at": "2026-09-21T23:40:41Z",
-  "implementation_status": "ready-for-review",
+  "implementation_status": "shipped",
   "key": "plan:human-docs",
   "kind": "plan",
   "note_path": null,
   "plan_mode": "feature",
   "plan_path": ".agents/plans/features/human-docs/human-docs-plan-20260921-233505.md",
+  "pr": "https://github.com/willdoucet/todo-app/pull/67",
   "reason": "Final review 2 clean: companion-PNG .gitignore exception and the 1.6.1 log title applied; 11 framework 1.6.x findings deferred to willdoucet/framework#16 (none blocks PR-T)",
   "reason_at": "2026-09-29T20:53:09Z",
   "reason_by": "final-review",
@@ -18,6 +21,6 @@
   ],
   "task_id": null,
   "title": "Human-readable docs after every ship — docs/human/ (framework 1.6.1)",
-  "updated_at": "2026-09-29T20:53:09Z",
-  "workflow_status": "ready-for-review"
+  "updated_at": "2026-09-29T21:06:26Z",
+  "workflow_status": "shipped"
 }
