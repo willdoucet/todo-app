@@ -2,7 +2,8 @@
 
 Loaded by `init-project` steps A1 and A3. The survey produces facts with file paths. Opinions
 and gaps go in a separate "Uncertain" list that becomes interview questions. Delegate to a
-subagent when the harness has one; otherwise do it inline in a clearly separated section.
+subagent when the harness has one, ending its prompt with the subagent boundary from
+`_shared/tool-map.md`; otherwise do it inline in a clearly separated section.
 
 ## What to look at
 

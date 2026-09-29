@@ -126,6 +126,15 @@
 - Docs: updated 4 docs (BACKEND_STRUCTURE Production host gate, REVIEW_CHECKLIST FastAPI, LESSONS Bug Log + host-header rule bullet, TODOS release check)
 - Branch: quickfix/gate-log-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/64
 
+## 2026-09-29 — framework-1-6-2
+- Source: free text (framework 1.6.2 release, willdoucet/framework#22)
+- What: `framework upgrade` from a detached v1.6.2 worktree (1b36dac): 8 payload files under `.agents/skills/`, the manifest hashes, and config.json's framework_version 1.6.2
+- Why: brings in framework#22, so every subagent prompt now carries the .gitignore boundary from `_shared/tool-map.md`; a subagent starts without AGENTS.md and cannot ask the user
+- Files: .agents/skills/{CONVENTIONS.md,_shared/tool-map.md,design-review/SKILL.md,init-project/SKILL.md,init-project/references/codebase-survey.md,office-hours/SKILL.md,review-implementation/SKILL.md,review-implementation/references/adversarial-prompts.md}, .agents/manifest.json, .agents/config.json
+- Tests: `framework doctor` 0 failures, 0 warnings (helper tests pass); every upgraded file byte-identical to the v1.6.2 payload (cmp); nothing outside .agents/, no local /Users/ path in the diff
+- Docs: no doc impact (framework tooling only; every path doc-map exempt)
+- Branch: chore/framework-1.6.2 · PR: https://github.com/willdoucet/todo-app/pull/68
+
 ## 2026-09-29 — background-jobs-loading-flake
 - Source: free text ("drop shouldAdvanceTime so real time can't push the fake clock past the 200 ms delay"); `frontend-tests` failed at the 199 ms assert on master `56e0c39` (run 36070813494) and PR #67's `17b15b8` (run 36631016338)
 - What: the Background jobs "loading" test uses plain `vi.useFakeTimers()` instead of `{ shouldAdvanceTime: true }`, and blocks 30 ms of real time after render as a deterministic guard

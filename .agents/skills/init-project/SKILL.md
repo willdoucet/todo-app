@@ -235,7 +235,8 @@ Write no application code, even a hello-world. Tell the user the first feature i
 #### A1. Survey the codebase
 
 Read `references/codebase-survey.md`. Delegate the survey to a subagent when the harness has
-one (fall back to doing it inline in a clearly separated section): directory tree, manifests
+one, with the subagent boundary from `_shared/tool-map.md` (fall back to doing it inline in a
+clearly separated section): directory tree, manifests
 and lockfiles, entrypoints, routers or controllers, models and migrations, pages and routes,
 background jobs, CI, container files, env examples, existing README and docs, test layout and
 runners, scripts. The survey returns facts with file paths, not opinions.

@@ -186,7 +186,7 @@
       }
     ]
   },
-  "framework_version": "1.6.1",
+  "framework_version": "1.6.2",
   "layout": {
     "backend_dir": "backend",
     "frontend_dir": "frontend"
