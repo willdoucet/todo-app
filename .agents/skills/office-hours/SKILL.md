@@ -414,11 +414,11 @@ Treat `$EPIC_FILE` as `_PLAN_FILE` for steps 14 through 16 and for completion, w
 
 ### 14. Spec review loop
 
-Before presenting the document, dispatch an independent reviewer as a subagent. It gets the
-file path only, never the conversation; that independence is the point. If the harness has no
-subagent, use the tool-map fallback: review in a clearly separated section and say it lacks
-fresh context. If the subagent errors out, say "Spec review unavailable, presenting unreviewed
-doc" and continue; the review is a quality bonus, not a gate.
+Before presenting the document, dispatch an independent reviewer as a subagent. It gets the file
+path and the tool map's subagent boundary, never the conversation; that independence is the
+point. If the harness has no subagent, use the tool-map fallback: review in a clearly separated
+section and say it lacks fresh context. If the subagent errors out, say "Spec review
+unavailable, presenting unreviewed doc" and continue; the review is a quality bonus, not a gate.
 
 Reviewer prompt: read the file and score five dimensions, each PASS or a numbered list of
 issues with a fix, then one overall score out of 10:
