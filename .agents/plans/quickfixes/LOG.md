@@ -126,6 +126,15 @@
 - Docs: updated 4 docs (BACKEND_STRUCTURE Production host gate, REVIEW_CHECKLIST FastAPI, LESSONS Bug Log + host-header rule bullet, TODOS release check)
 - Branch: quickfix/gate-log-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/64
 
+## 2026-09-28 — release-20260928-fly-client-ip
+- Source: free text (the first release to include #64, and TODOS.md P2 "Prove at the next release that Fly overwrites a client-sent `Fly-Client-IP`")
+- What: record release `v1-20260928-5825531` in the RUNBOOK execution log, close the `Fly-Client-IP` P2, drop the "unproven" sentences, and warn that a doubled paste of the deploy line deploys twice
+- Why: #64 was merged but undeployed; the release ran today and the forged-`Fly-Client-IP` probe logged the caller's real address, so a client-sent copy never arrives as the last one
+- Files: infra/RUNBOOK.md, .agents/docs/TODOS.md, .agents/docs/BACKEND_STRUCTURE.md, .agents/docs/LESSONS.md, the v1-productionization epic
+- Tests: `python3 -m pytest infra/tests -q` 170 passed (RUNBOOK anchor links); release smoke `exit 0: 11 passed, 0 skipped, 2 paused`, check 8 at `5825531` on both tiers after the promote; the doubled-paste behavior checked with a passing and a failing stand-in deploy in bash and zsh
+- Docs: updated 3 docs (BACKEND_STRUCTURE Production host gate, LESSONS host-header rule, TODOS P2); every path exempt from the doc map
+- Branch: quickfix/release-20260928-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/66
+
 ## 2026-09-29 — framework-1-6-2
 - Source: free text (framework 1.6.2 release, willdoucet/framework#22)
 - What: `framework upgrade` from a detached v1.6.2 worktree (1b36dac): 8 payload files under `.agents/skills/`, the manifest hashes, and config.json's framework_version 1.6.2
