@@ -125,3 +125,12 @@
 - Tests: test_host_gate.py::test_gate_ip_is_fly_client_ip_never_a_forwarded_entry (red first: logged `203.0.113.9`), plus the `"unknown"` fallback, last-copy and 128-cap tests; full backend suite 1059 passed, 3 skipped; two mutation checks each red on their own test; real uvicorn with `--proxy-headers --forwarded-allow-ips=*` printed the `Fly-Client-IP` value while its access line showed the forged `6.6.6.6`. Unproven until the next release: that Fly overwrites a client-sent `Fly-Client-IP` (TODOS.md P2 check, also in the PR body)
 - Docs: updated 4 docs (BACKEND_STRUCTURE Production host gate, REVIEW_CHECKLIST FastAPI, LESSONS Bug Log + host-header rule bullet, TODOS release check)
 - Branch: quickfix/gate-log-fly-client-ip · PR: https://github.com/willdoucet/todo-app/pull/64
+
+## 2026-09-29 — framework-1-6-2
+- Source: free text (framework 1.6.2 release, willdoucet/framework#22)
+- What: `framework upgrade` from a detached v1.6.2 worktree (1b36dac): 8 payload files under `.agents/skills/`, the manifest hashes, and config.json's framework_version 1.6.2
+- Why: brings in framework#22, so every subagent prompt now carries the .gitignore boundary from `_shared/tool-map.md`; a subagent starts without AGENTS.md and cannot ask the user
+- Files: .agents/skills/{CONVENTIONS.md,_shared/tool-map.md,design-review/SKILL.md,init-project/SKILL.md,init-project/references/codebase-survey.md,office-hours/SKILL.md,review-implementation/SKILL.md,review-implementation/references/adversarial-prompts.md}, .agents/manifest.json, .agents/config.json
+- Tests: `framework doctor` 0 failures, 0 warnings (helper tests pass); every upgraded file byte-identical to the v1.6.2 payload (cmp); nothing outside .agents/, no local /Users/ path in the diff
+- Docs: no doc impact (framework tooling only; every path doc-map exempt)
+- Branch: chore/framework-1.6.2 · PR: https://github.com/willdoucet/todo-app/pull/68
