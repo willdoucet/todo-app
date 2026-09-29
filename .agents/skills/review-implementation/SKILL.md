@@ -269,7 +269,8 @@ DIFF_TOTAL=$((DIFF_INS + DIFF_DEL)); echo "DIFF_SIZE: $DIFF_TOTAL"
   leave `--next` naming this review with no way out. If the subagent is unavailable then,
   stop with `BLOCKED` instead of continuing without it.
 
-Dispatch a subagent with the tier's prompt from `references/adversarial-prompts.md`. It has
+Dispatch a subagent with the tier's prompt from `references/adversarial-prompts.md` and the
+subagent boundary from `_shared/tool-map.md`. It has
 fresh context and no bias from the structured review; that independence is the point. Without
 a subagent tool, follow the tool map: do the pass yourself in a clearly separated section and
 say it lacks fresh context, or prefer switching harness.

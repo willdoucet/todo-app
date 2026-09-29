@@ -8,9 +8,10 @@ description: >-
   passed; pushes; opens the pull request with the review dashboard, test evidence, and doc
   sync report in its body; records shipped in the plan, registry, note box, and roadmap row,
   or, for a declared part of a plan that ships in parts, partially-shipped with no box
-  checked; logs the ship. Never merges, never deletes branches, never force-pushes; no version
-  bump, no changelog, no external review services. Use when asked to "ship", "ship it", "land
-  this", "open the PR", "create the pull request", or "push and open a PR".
+  checked; logs the ship; writes the human-readable feature page and log entry. Never merges,
+  never deletes branches, never force-pushes; no version bump, no release changelog, no
+  external review services. Use when asked to "ship", "ship it", "land this", "open the PR",
+  "create the pull request", or "push and open a PR".
 disable-model-invocation: true
 metadata:
   version: "1.0.0"
@@ -44,7 +45,8 @@ longer count, so the next part runs its own.
 - `_shared/dashboard.md`
 
 References in this directory, loaded when the procedure reaches them:
-`references/commit-plan.md`, `references/pr-body.md`, `references/learning-summary.md`.
+`references/commit-plan.md`, `references/pr-body.md`, `references/learning-summary.md`,
+`references/human-docs.md`.
 
 ## Use when
 
@@ -64,8 +66,8 @@ References in this directory, loaded when the procedure reaches them:
 - The plan is `partially-shipped`. That part is recorded: merge its pull request, then
   `/execute-plan` continues with the next part.
 - The reviews have not run. Run them; the gate here is not negotiable outside a hotfix.
-- The user wants the pull request merged, the branch deleted, a version bumped, or a changelog
-  written. None of those happen here.
+- The user wants the pull request merged, the branch deleted, a version bumped, or a release
+  changelog written. None of those happen here.
 
 ## Procedure
 
@@ -172,10 +174,23 @@ git diff "$BASE_BRANCH" --stat | tail -1
 
 A clean tree with no commits ahead of the base is nothing to ship: stop with `NEEDS_CONTEXT`.
 
+Then the human docs. Read the flag; only JSON `true` turns them on:
+
+```bash
+python3 -c 'import json, sys
+m = json.load(open(sys.argv[1], encoding="utf-8")).get("modules")
+print("HUMAN DOCS: " + ("on" if isinstance(m, dict) and m.get("human_docs") is True else "off; nothing is written"))' "$REPO_ROOT/.agents/config.json"
+```
+
+When it is off, that line is all there is, here and at step 8. When it is on, follow
+`references/human-docs.md` → "Step 1: the proposal": list the feature pages, propose one of
+update, new page, or log-only, and find the log entry's path. Every ship gets one, each part of
+a plan that ships in parts included.
+
 Finally write the `ASSUMPTIONS I'M MAKING` block from the preamble and stop for correction:
-the plan and branch, the part (the `PARTS:` line), the sync convention you found (step 2), the
-test commands you will run (step 3), the intended commit split (step 6), and the pull request
-title.
+the plan and branch, the part (the `PARTS:` line), the human-docs line, the sync convention you
+found (step 2), the test commands you will run (step 3), the intended commit split (step 6),
+and the pull request title.
 
 ### 2. Sync with the base branch
 
@@ -358,6 +373,13 @@ plain-English summary from `references/learning-summary.md` to
 `$VAULT_DIR/Learning/<plan-name> - Plain English Summary.md`, where `<plan-name>` is
 `$(basename "$_PLAN_FILE" .md)`. Vault files are not committed by this skill.
 
+On every ship, a part that does not complete the plan included, if `modules.human_docs` is
+`true`, read `references/human-docs.md` and write the feature page (unless the step 1 decision
+was log-only) and the log entry. Both are committed by step 9. A failure here (template
+missing, folder that cannot be created, a page whose headings a person removed) never stops the
+ship: keep going through step 9 and report `DONE_WITH_CONCERNS` naming the file that was not
+written. When the flag is off, print the step 1 line again and write nothing.
+
 If any command in this step fails, keep going through the rest, then report
 `DONE_WITH_CONCERNS` naming exactly which state did not sync. The code is landed either way.
 
@@ -383,7 +405,7 @@ yet run, and the next part runs them on its own diff. Until it is logged, `workf
 refuses to move on and prints this command.
 
 This commit holds the plan frontmatter, the registry entry, the review log, the roadmap row,
-and the TODOS pull request links. It touches no mapped code, so the guard passes without a
+the TODOS pull request links, and the human-docs files (`docs/human/**` is doc-map exempt). It touches no mapped code, so the guard passes without a
 trailer; if it does not, something from step 6 was left unstaged. Find it; do not bypass.
 
 ### 10. Finish
@@ -400,7 +422,8 @@ Report one status per the completion protocol, with the change description:
   `partially-shipped` after a part that does not complete the plan), note boxes checked when
   there were any and the plan is complete, roadmap row current, ship logged.
 - **DONE_WITH_CONCERNS**: landed, but the pull request was not opened by this skill, a state
-  sync failed, a TODOS decision was declined, or the hotfix override was used. List each.
+  sync failed, a TODOS decision was declined, the hotfix override was used, or a human-docs
+  file was not written, or was written with `PR pending`. List each.
 - **BLOCKED**: a test suite failed, or a sync conflict was aborted. The branch is left as it
   was before the failing step; say exactly where.
 - **NEEDS_CONTEXT**: refused at step 1. Nothing was written.
@@ -419,6 +442,7 @@ PR: <PR_URL>
 PART: <label> (partial; next: <label>) | <label> (completes the plan) | whole plan
 RECORDED: plan, registry, note box (<n> tasks | n/a | not yet: partial), roadmap row, review log
 TODOS: completed [titles] | none
+HUMAN DOCS: features/<slug>.md, log/<file> | log-only: log/<file> | off | PR pending in: <files> | not written: <file>
 CONCERNS: [list or none]
 ```
 

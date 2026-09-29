@@ -29,5 +29,20 @@ Fallback rules:
 - Helpers in `.agents/bin` are host-side tools. Run them directly, never through a container,
   regardless of the project's command policy for application code.
 
+## Subagent boundary
+
+A subagent starts without `AGENTS.md` and cannot ask the user anything, so the rule to respect
+`.gitignore` does not reach it unless the prompt carries it. End every subagent prompt with this
+paragraph, verbatim:
+
+> Do not open, search inside, or print any file that git ignores (`git check-ignore -q <path>`
+> succeeds for it): local settings, env files, credentials, caches, scratch directories. This
+> holds for the shell as much as for file tools; search with `git grep`, or `rg`, which skips
+> ignored paths by default. You cannot ask the user for permission, so treat those files as out
+> of bounds. When a finding depends on one, name the path and what you would check in it, and
+> leave the reading to the user.
+
+The fallback, doing the subagent's task yourself, keeps the same boundary.
+
 Harness detection is best effort. `ctx` exports `HARNESS`; if it says `unknown`, ask the user
 once and remember for the session.

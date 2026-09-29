@@ -1,0 +1,19 @@
+{
+  "branch": "chore/framework-1.6.2",
+  "commit": "34599a5",
+  "completed": "2026-09-29",
+  "created_at": "2026-09-29T22:04:43Z",
+  "implementation_status": "shipped",
+  "key": "quickfix:framework-1-6-2",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "pr": "https://github.com/willdoucet/todo-app/pull/68",
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Upgrade the framework to 1.6.2",
+  "updated_at": "2026-09-29T22:05:28Z",
+  "workflow_status": "shipped"
+}

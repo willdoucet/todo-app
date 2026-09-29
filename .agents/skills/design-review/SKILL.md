@@ -226,7 +226,8 @@ a finding with both pages named.
 Dispatch a subagent with fresh context to audit the frontend source for consistency patterns
 only: is spacing systematic across files, is there one color system or several, do breakpoints
 follow one set, is accessibility handled consistently. Ask for file:line and severity per
-finding. Tag its results `[subagent]`; it reads source so you do not have to. Without a
+finding, and end the prompt with the subagent boundary from `_shared/tool-map.md`. Tag its
+results `[subagent]`; it reads source so you do not have to. Without a
 subagent tool, follow the tool map's fallback and say the pass lacks fresh context. If it fails,
 print "Second voice unavailable, continuing with the primary audit" and go on.
 

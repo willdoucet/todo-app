@@ -500,6 +500,16 @@ cutover failure; this TODO is the actual fix. Also confirm the preview origin is
 **Priority:** P3
 **Depends on:** `workflow-rereview-utc` shipped (its Rollback section references this item); its own framework minor release.
 
+## P3 — `/quickfix` writes to `docs/human/` (feature page "What changed" and a log entry)
+**What:** Framework 1.5.0 (`human-docs`; 1.4.0 at office-hours, renumbered by eng review 2 because 1.4.0 and 1.4.1 shipped first) makes `/ship` write `docs/human/features/<slug>.md` and `docs/human/log/<utc-date>-<safe-branch>.md` after every feature ship; `/quickfix`, which commits and opens its own pull request without passing through `/ship`, writes nothing there. A quickfix that changes what a feature does leaves its page stale until the next feature ship rewrites it. Extend `/quickfix` so that, under the same `modules.human_docs` flag, its commit step writes a log entry and, when the fix touches a capability that has a page, rewrites that page's `## What changed in this ship` list and "As of" line (never the summary: a quickfix has no plan to retell from).
+**Why:** Quickfixes are the main source of rot in v1 of the human docs. The v1 design makes rot visible ("As of `<date>`" on every page) rather than preventing it; this closes the gap. Deferred by the user at office-hours on 2026-09-21 (UTC) to keep v1 to one skill.
+**Pros:** (a) Every landed change gets a human-readable line, so the log is complete rather than feature-only; (b) the feature page's "As of" line stops lying after a quickfix; (c) reuses `ship/references/human-docs.md` and the templates; no new mechanism.
+**Cons:** (a) A quickfix has no plan, summary or reviews to retell from, so the page's "What it does" summary cannot be rewritten honestly; only the change list can, and the design has to say so; (b) `/quickfix` step 1 gains the update/new/log-only decision that `/ship` puts in its assumptions block, one more line on a skill meant to be fast; (c) two writers of one page.
+**Context:** Design in `.agents/plans/features/human-docs/human-docs-plan-20260921-233505.md` (§3 for the ship hook this would mirror, Deferred for the decision). Start from `payload/skills/quickfix/SKILL.md`'s commit step and `ship/references/human-docs.md` `## Rules`; the log-entry lookup by pull request URL transfers unchanged. Trigger to revisit: the first time a feature page is found stale because of a quickfix, or when 1.5.0 has been in use for a few ships. Same mechanism, second case (eng review 1 of `human-docs`, 2026-09-22 UTC, user decision): a feature ship that changes two capabilities updates one page at ship step 1 and leaves the other page's "As of" line stale until its own next ship; the change-list-only rewrite this item designs is exactly what a second page needs, so it is covered here rather than as its own entry.
+**Effort:** S (human: ~half a day / CC: ~1 h)
+**Priority:** P3
+**Depends on:** framework 1.5.0 (`human-docs`) shipped and upgraded into this repo.
+
 ---
 
 # Completed

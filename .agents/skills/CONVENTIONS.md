@@ -59,4 +59,8 @@ so must stay model-invocable.
   `--plan "$(basename "$_PLAN_FILE")"` (`review-read --all` takes none). Left out, both follow
   the branch's current plan, which is not the file a skill was handed by path.
 - Mutating skills refuse to run on the base branch.
+- Every prompt that hands work to a subagent ends with the subagent boundary from
+  `_shared/tool-map.md`, and the text that dispatches it says so. A subagent starts without
+  `AGENTS.md` and cannot ask the user, so it will read gitignored files unless told not to. The
+  lint fails on a dispatch or delegation to a subagent in a file that never names the boundary.
 - Every question is one decision, in the shared format.

@@ -45,3 +45,15 @@ frontend/test-results/
 
 # migration backups of the pre-framework rules files (kept locally for comparison)
 *.pre-framework
+
+# Obsidian workspace state (docs/human/ opened as a vault; framework 1.5.0 installer)
+.obsidian/
+
+# A brief's companion folder moves in beside its plan on approval and is committed with it;
+# keep its images, which the *.png rule above would drop (final review 2, human-docs)
+!.agents/plans/**/sources/**/*.png
+
+# Parked /office-hours briefs stay local until committed on purpose (`git add -f`); the
+# workflow's `git add -A` steps would otherwise sweep them into the next ship
+docs/human/briefs/*
+!docs/human/briefs/.gitkeep
