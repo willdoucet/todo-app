@@ -1,7 +1,8 @@
 # Adversarial subagent prompts
 
-The subagent gets fresh context on purpose. Give it the prompt below and nothing from the
-structured review: no findings, no summary, no hints. Its independence is what catches the
+The subagent gets fresh context on purpose. Give it the prompt below, followed by the subagent
+boundary from `_shared/tool-map.md`, and nothing from the structured review: no findings, no
+summary, no hints. Its independence is what catches the
 things the primary reviewer is blind to.
 
 Substitute the base branch and the docs directory before dispatch; the subagent does not share
@@ -52,5 +53,6 @@ findings are reported as informational with the suggested line of inquiry.
 ## No subagent tool
 
 Per `_shared/tool-map.md`: do the pass yourself under a heading that says it lacks fresh
-context, after finishing the structured review and before re-reading your own findings. For a
-genuinely independent pass, switch harness or model and run `/final-review`.
+context, after finishing the structured review and before re-reading your own findings. The
+subagent boundary still holds. For a genuinely independent pass, switch harness or model and run
+`/final-review`.
