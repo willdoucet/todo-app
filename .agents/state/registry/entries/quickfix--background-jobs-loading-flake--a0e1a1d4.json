@@ -1,0 +1,16 @@
+{
+  "branch": "quickfix/background-jobs-loading-flake",
+  "created_at": "2026-09-29T22:10:12Z",
+  "implementation_status": "implementing",
+  "key": "quickfix:background-jobs-loading-flake",
+  "kind": "quickfix",
+  "note_path": null,
+  "plan_mode": "quickfix",
+  "plan_path": null,
+  "registry_version": 3,
+  "review_status": [],
+  "task_id": null,
+  "title": "Fix flaky BackgroundJobsSection loading test",
+  "updated_at": "2026-09-29T22:10:12Z",
+  "workflow_status": "implementing"
+}
