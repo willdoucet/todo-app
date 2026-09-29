@@ -160,12 +160,12 @@ on the declarer's entry) reads `stale` and blocks until it runs again; see
 
 ## Artifacts at completion
 
-| Work | Plan file | Summary | Quickfix log | Registry | Roadmap row | Note box | Commit and PR |
-|---|---|---|---|---|---|---|---|
-| Feature plan | yes | yes | no | yes | phase row | if from a note | yes |
-| Milestone via plan | yes | yes | no | yes, with parent | milestone row | no | yes |
-| Milestone via quickfix | no | no | yes | yes, with parent | milestone row | no | yes |
-| Standalone quickfix | no | no | yes | yes | no | if from a note | yes |
+| Work | Plan file | Summary | Quickfix log | Registry | Roadmap row | Note box | Human docs | Commit and PR |
+|---|---|---|---|---|---|---|---|---|
+| Feature plan | yes | yes | no | yes | phase row | if from a note | log entry, plus a feature page unless log-only | yes |
+| Milestone via plan | yes | yes | no | yes, with parent | milestone row | no | log entry, plus a feature page unless log-only | yes |
+| Milestone via quickfix | no | no | yes | yes, with parent | milestone row | no | no | yes |
+| Standalone quickfix | no | no | yes | yes | no | if from a note | no | yes |
 
 `workflow-state --history` lists recent completions across all of them.
 
@@ -184,6 +184,19 @@ Every code area has exactly one owning doc section, declared in `config.json` un
 Docs: n/a - internal rename, no documented surface changed
 Docs: later                                   # feature branches only; the PR must resolve it
 ```
+
+## Human docs
+
+Plain-English pages for people live in `docs/human/`, committed with the code; `.agents/` stays
+the agents' own. `features/<slug>.md` is one page per capability, what it does now, rewritten by
+`/ship` on every ship that touches it. `log/<utc-date>-<safe-branch>.md` is one entry per pull
+request, written by `/ship` and never rewritten after merge; each part of a plan that ships in
+parts writes its own. `briefs/<slug>.md` holds office-hours prompts a person parked from
+`templates/human/brief.md`, with an optional companion folder `briefs/<slug>/` for the files it
+links; `/office-hours docs/human/briefs/<slug>.md` runs one, removes it on approval, and moves the
+folder to `sources/<slug>/` in the plan's directory. `/ship` step 1 proposes the page (update, new, or log-only), step 8 writes both
+files, and step 9 commits them. `modules.human_docs` in `config.json` gates the ship step and
+the installer's scaffold. Quickfixes do not write here; a page's "As of" line shows its age.
 
 ## Harness invocation
 

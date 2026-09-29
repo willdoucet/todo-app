@@ -29,6 +29,7 @@ Project rules for every AI coding harness working in this repository. Claude Cod
 | [WORKFLOW.md](./.agents/WORKFLOW.md) | How work moves: intake, tiers, the feature pipeline, epics, state, documentation gates |
 
 Plans live in `.agents/plans/`, workflow state in `.agents/state/`, and the idea vault in `{{VAULT_PATH}}/` (see its README for the task format).
+Plain-English pages for people live in `docs/human/` (see its README).
 
 ## Development Commands
 

@@ -97,6 +97,7 @@ its metadata, the roadmap entry in epic mode, and lessons.
 | Roadmap phase | `Phase 4.2` or its title | Read the phase entry in `IMPLEMENTATION_PLAN.md`; its text is the seed brief. `plan_mode: feature`. If the phase entry links an epic and the name given is a row of its milestone table, this is the milestone form. |
 | Epic milestone | `$PLANS_DIR/epics/<slug>/<file>.md#M3` | Read the milestone via `epic-get`. Child plan with `parent_epic` and `milestone`. `plan_mode: feature`. |
 | Free text | "let families share a calendar" | Seed brief is the text. `plan_mode: feature`. Registry key is `plan:$SAFE_BRANCH` once the branch exists. |
+| Brief | `docs/human/briefs/<slug>.md` | Checked before the note forms; never passed to `parse-task`. Read `references/brief-intake.md`. `plan_mode: feature`. Registry key `plan:$SAFE_BRANCH`. |
 
 **Note ref.** Parse, give the task a stable id if it lacks one, validate the vault:
 
@@ -462,7 +463,7 @@ Deliver the signal reflection: one paragraph that quotes the user's own words ba
 Show, don't tell. "You didn't say 'small businesses', you said 'Sarah, the ops manager at a
 50-person logistics company.'" Never "you showed great specificity." In Startup mode the
 assignment is mandatory: one concrete real-world action, not "go build it." In Builder mode,
-concrete build steps.
+concrete build steps. A brief is removed now, per `references/brief-intake.md`.
 
 If the intake was a note ref or note path, record the promotion under the task so the note
 points at the plan (the helper keeps `notes::` lines):
@@ -479,7 +480,7 @@ points at the plan (the helper keeps `notes::` lines):
   failed (say what did not sync). Add `--set reason="..." --set reason_by=office-hours`.
 - **NEEDS_CONTEXT**: the user left questions unanswered and the design is incomplete.
 - **ABANDONED**: the user stopped. If anything was registered, run `abandon "$REGISTRY_KEY"
-  --reason "..."`.
+  --reason "..."`. A brief is restored per `references/brief-intake.md`.
 
 On DONE or DONE_WITH_CONCERNS run the sync block from `_shared/obsidian-sync.md` with
 `STATUS_VALUE` `plan-approved` and no `REVIEW_VALUE`, against `_PLAN_FILE` and

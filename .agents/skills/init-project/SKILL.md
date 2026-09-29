@@ -154,7 +154,7 @@ cfg["default_branch"] = "<branch>"
 cfg["layout"] = {"backend_dir": "<backend_dir>", "frontend_dir": "<frontend_dir>"}
 cfg["doc_map"]["rules"] = [ ... ]                     # paths rewritten to the chosen layout
 cfg["design_watched_files"] = [ ... ]
-cfg["modules"] = {"learning": False, "design_sync": False, "learning_summaries": False}
+cfg["modules"] = {"learning": False, "design_sync": False, "learning_summaries": False, "human_docs": True}
 with open(path, "w", encoding="utf-8") as fh:
     json.dump(cfg, fh, indent=2, sort_keys=True, ensure_ascii=False)
     fh.write("\n")
@@ -165,7 +165,8 @@ eval "$("$BIN/ctx")"                                   # config still loads
 
 Modules are one question each: `learning` (the optional learning module), `design_sync` (only
 when the project has a design tool to sync with), `learning_summaries` (only when `learning` is
-on). Recommend off unless the interview surfaced a reason.
+on), `human_docs` (on unless the project wants no committed human docs). Recommend off, except
+`human_docs`, unless the interview surfaced a reason.
 
 #### N4. Generate the docs
 

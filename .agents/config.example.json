@@ -80,6 +80,7 @@
       ".claude/**",
       ".grok/**",
       ".cursor/**",
+      "docs/human/**",
       "AGENTS.md",
       "CLAUDE.md",
       "README.md",
@@ -97,6 +98,7 @@
   "modules": {
     "learning": false,
     "design_sync": false,
-    "learning_summaries": false
+    "learning_summaries": false,
+    "human_docs": true
   }
 }
