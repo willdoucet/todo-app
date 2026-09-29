@@ -437,6 +437,9 @@ Health checks, non-root containers, writable paths, graceful shutdown, CI parity
 
 ### Operations
 - A shell snippet in a skill body holds no bare positional (`$0`, `$1`, `$2`): a harness that substitutes the invocation's arguments rewrites it before the agent reads it, and the result can be valid shell that computes the wrong thing (`awk '{i+=$1; d+=$2}'` arrived as `awk '{i+=re-review; d+=of}'`, printed `0 0`, and the rule that followed skipped a review tier). Write `$(1)`, or avoid field variables.
+- A shell snippet in a skill that reads context variables (`$REPO_ROOT`, `$BASE_BRANCH`, `$BRANCH`) opens with `: "${VAR:?}"` for each: a harness shell call starts fresh, and an empty value can silently turn a lookup into a different one (`BASE_REF` empty made `git cat-file -e ":<path>"` read the index, so ship's human-docs lookup dropped the branch's own entry and would have written a duplicate; framework 1.5.0, found by `/review-implementation` of `human-docs`).
+- A folder the design calls "local until committed" is gitignored, or the workflow's `git add -A` steps (update-docs, review-implementation, ship's record commit) sweep its untracked files into whatever branch ships next.
+- The inverse: a path the workflow moves into a committed location is checked against the repository's own ignore rules (`git check-ignore -v <path>`), because `git add -A` skips an ignored file without a word. todo-app ignores `*.png`, so a brief's companion mockups moved into a plan's `sources/` were left out of the ship commit, and after the move the only copy was an ignored file in one checkout (framework 1.6.1, found by `/final-review` of `human-docs`). A directory rule (`screenshots/`) cannot be undone by a file-level `!` exception.
 
 ## Operator scripts (Python, `infra/`)
 
